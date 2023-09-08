@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _contact_info_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on ContactInfo with the rules defined
 // in the proto definition for this message. If any rules are violated, an
@@ -172,19 +169,19 @@ func (m *ContactInfoValidation) ValidateFields(paths ...string) error {
 		switch name {
 		case "id":
 
-			if utf8.RuneCountInString(m.GetID()) > 64 {
+			if l := utf8.RuneCountInString(m.GetId()); l < 1 || l > 64 {
 				return ContactInfoValidationValidationError{
 					field:  "id",
-					reason: "value length must be at most 64 runes",
+					reason: "value length must be between 1 and 64 runes, inclusive",
 				}
 			}
 
 		case "token":
 
-			if utf8.RuneCountInString(m.GetToken()) > 64 {
+			if l := utf8.RuneCountInString(m.GetToken()); l < 1 || l > 64 {
 				return ContactInfoValidationValidationError{
 					field:  "token",
-					reason: "value length must be at most 64 runes",
+					reason: "value length must be between 1 and 64 runes, inclusive",
 				}
 			}
 

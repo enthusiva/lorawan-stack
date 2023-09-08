@@ -32,9 +32,9 @@ func init() {
 // GoFieldsPaths converts protobuf FieldMask paths to Go fields paths.
 //
 // This implementation does not support separation by ",", but only paths separated by ".".
-func GoFieldsPaths(pb *field_mask.FieldMask, v interface{}) []string {
+func GoFieldsPaths(pb *field_mask.FieldMask, v any) []string {
 	var newFields []string
-	if pb == nil || len(pb.Paths) == 0 {
+	if len(pb.GetPaths()) == 0 {
 		return newFields
 	}
 

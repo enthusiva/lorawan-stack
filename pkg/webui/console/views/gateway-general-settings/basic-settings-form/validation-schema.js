@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +14,17 @@
 
 import Yup from '@ttn-lw/lib/yup'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import { id as gatewayIdRegexp } from '@ttn-lw/lib/regexp'
+import contactSchema from '@ttn-lw/lib/shared-schemas'
 
-import { attributeValidCheck, attributeTooShortCheck } from '@console/lib/attributes'
-import { id as gatewayIdRegexp, address as addressRegexp } from '@console/lib/regexp'
+import {
+  attributeValidCheck,
+  attributeTooShortCheck,
+  attributeKeyTooLongCheck,
+  attributeValueTooLongCheck,
+  attributesCountCheck,
+} from '@console/lib/attributes'
+import { addressWithOptionalScheme as addressWithOptionalSchemeRegexp } from '@console/lib/regexp'
 
 const validationSchema = Yup.object().shape({
   ids: Yup.object().shape({
@@ -35,30 +43,50 @@ const validationSchema = Yup.object().shape({
     .max(50, Yup.passValues(sharedMessages.validateTooLong)),
   description: Yup.string().max(2000, Yup.passValues(sharedMessages.validateTooLong)),
   gateway_server_address: Yup.string().matches(
-    addressRegexp,
+    addressWithOptionalSchemeRegexp,
     Yup.passValues(sharedMessages.validateAddressFormat),
   ),
   require_authenticated_connection: Yup.boolean().default(false),
   // The API allows 2048 bytes. But since we convert to Base64 we need an additional 33% (at max) capacity. So 66% of 2048 = 1351,68 and hence this is set to 1350.
-  lbs_lns_secret: Yup.object().shape({
-    value: Yup.string().max(1350, Yup.passValues(sharedMessages.validateTooLong)),
+  lbs_lns_secret: Yup.lazy(secret => {
+    if (!secret) {
+      return Yup.object().strip()
+    }
+
+    return Yup.object({
+      value: Yup.string().max(1350, Yup.passValues(sharedMessages.validateTooLong)),
+    })
   }),
   location_public: Yup.boolean().default(false),
   status_public: Yup.boolean().default(false),
   update_location_from_status: Yup.boolean().default(false),
   auto_update: Yup.boolean().default(false),
-  attributes: Yup.array()
-    .max(10, Yup.passValues(sharedMessages.attributesValidateTooMany))
+  disable_packet_broker_forwarding: Yup.boolean().default(false),
+  attributes: Yup.object()
+    .nullable()
     .test(
-      'has no empty string values',
-      sharedMessages.attributesValidateRequired,
-      attributeValidCheck,
+      'has no more than 10 keys',
+      sharedMessages.attributesValidateTooMany,
+      attributesCountCheck,
     )
+    .test('has no null values', sharedMessages.attributesValidateRequired, attributeValidCheck)
     .test(
       'has key length longer than 2',
       sharedMessages.attributeKeyValidateTooShort,
       attributeTooShortCheck,
+    )
+    .test(
+      'has key length less than 36',
+      sharedMessages.attributeKeyValidateTooLong,
+      attributeKeyTooLongCheck,
+    )
+    .test(
+      'has value length less than 200',
+      sharedMessages.attributeValueValidateTooLong,
+      attributeValueTooLongCheck,
     ),
 })
+
+validationSchema.concat(contactSchema)
 
 export default validationSchema

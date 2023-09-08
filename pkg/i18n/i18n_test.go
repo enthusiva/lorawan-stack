@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/i18n"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestI18N(t *testing.T) {
@@ -69,7 +69,7 @@ func TestI18N(t *testing.T) {
 func Example() {
 	i18n.Define("welcome_message", "Welcome, {name}!")
 
-	fmt.Println(i18n.Format("welcome_message", "en", map[string]interface{}{"name": "Alice"}))
+	fmt.Println(i18n.Format("welcome_message", "en", map[string]any{"name": "Alice"}))
 
 	// Output:
 	// Welcome, Alice!

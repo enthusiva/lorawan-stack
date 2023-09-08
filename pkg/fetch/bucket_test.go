@@ -15,11 +15,9 @@
 package fetch_test
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	. "go.thethings.network/lorawan-stack/v3/pkg/fetch"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -30,19 +28,13 @@ func TestBucket(t *testing.T) {
 	a := assertions.New(t)
 	ctx := test.Context()
 
-	tmpDir, err := ioutil.TempDir("", "FetchTestBucket")
-	if err != nil {
-		t.Fatalf("Failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
 	conf := config.BlobConfig{Provider: "local"}
-	conf.Local.Directory = tmpDir
+	conf.Local.Directory = t.TempDir()
 
 	filename := "file"
 	content := []byte("Hello world")
 
-	bucket, err := conf.Bucket(ctx, "bucket")
+	bucket, err := conf.Bucket(ctx, "bucket", test.HTTPClientProvider)
 	a.So(err, should.BeNil)
 
 	err = bucket.WriteAll(ctx, filename, content, nil)

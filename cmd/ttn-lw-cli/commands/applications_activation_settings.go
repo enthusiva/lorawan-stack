@@ -18,7 +18,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -28,8 +27,7 @@ import (
 )
 
 var (
-	selectApplicationActivationSettingsFlags = util.FieldMaskFlags(&ttnpb.ApplicationActivationSettings{})
-	setApplicationActivationSettingsFlags    = util.FieldFlags(&ttnpb.ApplicationActivationSettings{})
+	selectApplicationActivationSettingsFlags = util.NormalizedFlagSet()
 
 	selectAllApplicationActivationSettingsFlags = util.SelectAllFlagSet("application activation settings")
 )
@@ -45,7 +43,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationActivationSettingsFlags)
 			if len(paths) == 0 {
@@ -61,8 +59,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationActivationSettingRegistryClient(js).Get(ctx, &ttnpb.GetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: *appID,
-				FieldMask:              types.FieldMask{Paths: paths},
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -78,23 +76,22 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setApplicationActivationSettingsFlags)
 
 			var aas ttnpb.ApplicationActivationSettings
-			if err := util.SetFields(&aas, setApplicationActivationSettingsFlags); err != nil {
+			paths, err := aas.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
-
 			js, err := api.Dial(ctx, config.JoinServerGRPCAddress)
 			if err != nil {
 				return err
 			}
 			res, err := ttnpb.NewApplicationActivationSettingRegistryClient(js).Set(ctx, &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers:        *appID,
-				ApplicationActivationSettings: aas,
-				FieldMask:                     types.FieldMask{Paths: paths},
+				ApplicationIds: appID,
+				Settings:       &aas,
+				FieldMask:      ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -110,7 +107,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
@@ -118,7 +115,7 @@ var (
 				return err
 			}
 			_, err = ttnpb.NewApplicationActivationSettingRegistryClient(as).Delete(ctx, &ttnpb.DeleteApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: *appID,
+				ApplicationIds: appID,
 			})
 			return err
 		},
@@ -126,12 +123,13 @@ var (
 )
 
 func init() {
+	ttnpb.AddSelectFlagsForApplicationActivationSettings(selectApplicationActivationSettingsFlags, "", false)
 	applicationActivationSettingsGetCommand.Flags().AddFlagSet(applicationIDFlags())
 	applicationActivationSettingsGetCommand.Flags().AddFlagSet(selectApplicationActivationSettingsFlags)
 	applicationActivationSettingsGetCommand.Flags().AddFlagSet(selectAllApplicationActivationSettingsFlags)
 	applicationActivationSettingsCommand.AddCommand(applicationActivationSettingsGetCommand)
 	applicationActivationSettingsSetCommand.Flags().AddFlagSet(applicationIDFlags())
-	applicationActivationSettingsSetCommand.Flags().AddFlagSet(setApplicationActivationSettingsFlags)
+	ttnpb.AddSetFlagsForApplicationActivationSettings(applicationActivationSettingsSetCommand.Flags(), "", false)
 	applicationActivationSettingsCommand.AddCommand(applicationActivationSettingsSetCommand)
 	applicationActivationSettingsDeleteCommand.Flags().AddFlagSet(applicationIDFlags())
 	applicationActivationSettingsCommand.AddCommand(applicationActivationSettingsDeleteCommand)

@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
-import { connect } from 'react-redux'
-import bind from 'autobind-decorator'
+import React, { useCallback } from 'react'
+import { useSelector } from 'react-redux'
+import { defineMessages } from 'react-intl'
+import { createSelector } from 'reselect'
 
 import Button from '@ttn-lw/components/button'
 import SafeInspector from '@ttn-lw/components/safe-inspector'
+import Status from '@ttn-lw/components/status'
+import DocTooltip from '@ttn-lw/components/tooltip/doc'
+import Icon from '@ttn-lw/components/icon'
 
 import FetchTable from '@ttn-lw/containers/fetch-table'
 
 import Message from '@ttn-lw/lib/components/message'
-import DateTime from '@ttn-lw/lib/components/date-time'
-import withRequest from '@ttn-lw/lib/components/with-request'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
+import RequireRequest from '@ttn-lw/lib/components/require-request'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import LastSeen from '@console/components/last-seen'
 
+import Require from '@console/lib/components/require'
+
+import { selectNsConfig, selectJsConfig } from '@ttn-lw/lib/selectors/env'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
 import {
   checkFromState,
@@ -36,23 +42,23 @@ import {
   mayViewApplicationDevices,
 } from '@console/lib/feature-checks'
 
-import {
-  getDeviceTemplateFormats,
-  getDeviceTemplateFormatsError,
-  getDeviceTemplateFormatsFetching,
-} from '@console/store/actions/device-template-formats'
+import { getDeviceTemplateFormats } from '@console/store/actions/device-template-formats'
 import { getDevicesList } from '@console/store/actions/devices'
 
 import { selectSelectedApplicationId } from '@console/store/selectors/applications'
 import { selectDeviceTemplateFormats } from '@console/store/selectors/device-template-formats'
 import {
-  selectDevices,
   selectDevicesTotalCount,
-  selectDevicesFetching,
-  selectDevicesError,
+  isOtherClusterDevice,
+  selectDevicesWithLastSeen,
 } from '@console/store/selectors/devices'
 
 import style from './devices-table.styl'
+
+const m = defineMessages({
+  otherClusterTooltip:
+    'This end device is registered on a different cluster (`{host}`). To access this device, use the Console of the cluster that this end device was registered on.',
+})
 
 const headers = [
   {
@@ -89,96 +95,116 @@ const headers = [
       ),
   },
   {
-    name: 'created_at',
-    displayName: sharedMessages.created,
+    name: 'status',
+    displayName: sharedMessages.lastSeen,
     sortable: true,
-    width: 12,
-    render: datetime => <DateTime.Relative value={datetime} />,
+    sortKey: 'last_seen_at',
+    width: 14,
+    render: status => {
+      if (status.otherCluster) {
+        const host = status.host
+        return (
+          <DocTooltip
+            docPath="/getting-started/cloud-hosted"
+            content={<Message content={m.otherClusterTooltip} values={{ host }} convertBackticks />}
+            placement="top-end"
+          >
+            <Status status="unknown" label={sharedMessages.otherCluster}>
+              <Icon icon="help_outline" textPaddedLeft small nudgeUp className="tc-subtle-gray" />
+            </Status>
+          </DocTooltip>
+        )
+      } else if (status._lastSeen) {
+        return <LastSeen lastSeen={status._lastSeen} short />
+      }
+
+      return <Status status="mediocre" label={sharedMessages.never} />
+    },
   },
 ]
 
-@connect(
-  state => {
-    return {
-      appId: selectSelectedApplicationId(state),
-      deviceTemplateFormats: selectDeviceTemplateFormats(state),
-      mayCreateDevices: checkFromState(mayCreateOrEditApplicationDevices, state),
-      error: getDeviceTemplateFormatsError(state),
-      fetching: getDeviceTemplateFormatsFetching(state),
-    }
-  },
-  { getDeviceTemplateFormats },
+const DevicesTable = () => (
+  <Require featureCheck={mayViewApplicationDevices}>
+    <RequireRequest requestAction={getDeviceTemplateFormats()}>
+      <DevicesTableInner />
+    </RequireRequest>
+  </Require>
 )
-@withFeatureRequirement(mayViewApplicationDevices)
-@withRequest(({ getDeviceTemplateFormats }) => getDeviceTemplateFormats())
-class DevicesTable extends React.Component {
-  static propTypes = {
-    appId: PropTypes.string.isRequired,
-    devicePathPrefix: PropTypes.string,
-    deviceTemplateFormats: PropTypes.shape({}).isRequired,
-    error: PropTypes.error,
-    fetching: PropTypes.bool,
-    mayCreateDevices: PropTypes.bool.isRequired,
-    totalCount: PropTypes.number,
-  }
 
-  static defaultProps = {
-    devicePathPrefix: undefined,
-    totalCount: 0,
-    error: undefined,
-    fetching: false,
-  }
+const DevicesTableInner = () => {
+  const nsEnabled = selectNsConfig().enabled
+  const jsEnabled = selectJsConfig().enabled
+  const mayCreate = useSelector(state => checkFromState(mayCreateOrEditApplicationDevices, state))
+  const appId = useSelector(selectSelectedApplicationId)
+  const deviceTemplateFormats = useSelector(selectDeviceTemplateFormats)
+  const mayCreateDevices = mayCreate && (nsEnabled || jsEnabled)
+  const mayImportDevices = mayCreateDevices
 
-  constructor(props) {
-    super(props)
+  const getItemsAction = useCallback(
+    filters =>
+      getDevicesList(appId, filters, [
+        'name',
+        'application_server_address',
+        'network_server_address',
+        'join_server_address',
+        'last_seen_at',
+      ]),
+    [appId],
+  )
 
-    this.getDevicesList = filters => getDevicesList(props.appId, filters, ['name'])
-  }
+  const selectDecoratedDevices = createSelector(selectDevicesWithLastSeen, devices =>
+    devices.map(device => ({
+      ...device,
+      status: {
+        otherCluster: isOtherClusterDevice(device),
+        host:
+          device.application_server_address ||
+          device.network_server_address ||
+          device.join_server_address,
+        _lastSeen: device.last_seen_at,
+      },
+      _meta: {
+        clickable: !isOtherClusterDevice(device),
+      },
+    })),
+  )
 
-  @bind
-  baseDataSelector(state) {
-    const { mayCreateDevices } = this.props
-    return {
-      devices: selectDevices(state),
-      totalCount: selectDevicesTotalCount(state),
-      fetching: selectDevicesFetching(state),
-      error: selectDevicesError(state),
+  const baseDataSelector = createSelector(
+    selectDecoratedDevices,
+    selectDevicesTotalCount,
+    (devices, totalCount) => ({
+      devices,
+      totalCount,
       mayAdd: mayCreateDevices,
-    }
+    }),
+  )
+
+  const importButton = mayImportDevices && (
+    <Button.Link
+      message={sharedMessages.importDevices}
+      icon="import_devices"
+      to={`/applications/${appId}/devices/import`}
+    />
+  )
+
+  if (!deviceTemplateFormats) {
+    return <GenericNotFound />
   }
 
-  get importButton() {
-    const { mayCreateDevices, appId } = this.props
-
-    return (
-      mayCreateDevices && (
-        <Button.Link
-          message={sharedMessages.importDevices}
-          icon="import_devices"
-          to={`/applications/${appId}/devices/import`}
-          secondary
-        />
-      )
-    )
-  }
-
-  render() {
-    const { devicePathPrefix } = this.props
-    return (
-      <FetchTable
-        entity="devices"
-        headers={headers}
-        addMessage={sharedMessages.addDevice}
-        actionItems={this.importButton}
-        tableTitle={<Message content={sharedMessages.devices} />}
-        getItemsAction={this.getDevicesList}
-        itemPathPrefix={devicePathPrefix}
-        baseDataSelector={this.baseDataSelector}
-        searchable
-        {...this.props}
-      />
-    )
-  }
+  return (
+    <FetchTable
+      entity="devices"
+      defaultOrder="-created_at"
+      headers={headers}
+      addMessage={sharedMessages.registerEndDevice}
+      actionItems={importButton}
+      tableTitle={<Message content={sharedMessages.devices} />}
+      getItemsAction={getItemsAction}
+      baseDataSelector={baseDataSelector}
+      itemPathPrefix={`/applications/${appId}/devices/`}
+      searchable
+    />
+  )
 }
 
 export default DevicesTable

@@ -1,0 +1,52 @@
+name: Create release branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      patch_version:
+        description: Patch version (integer)
+        required: true
+      commit_hash:
+        description: Commit hash to branch from (most likely the changelog cutoff commit)
+        required: true
+
+env:
+  NODE_ENV: production
+  RELEASE_VERSION: "${{ format('{0}.{1}', github.ref_name, github.event.inputs.patch_version) }}"
+
+jobs:
+  create_release:
+    name: Create release branch
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check branch
+        run: echo "${{ github.ref_name }}" | grep -Pq '^v3\.\d+$'
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+          ref: ${{ github.event.inputs.commit_hash }}
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - name: Update version information
+        run: echo "${RELEASE_VERSION}" | tools/bin/mage version:files
+      - name: Update submodules
+        id: update_submodules
+        run: |
+          git submodule update --init --remote
+      - name: Prepare release branch
+        run: |
+          git config user.name "The Things Bot"
+          git config user.email "github@thethingsindustries.com"
+          git checkout -b "release/${RELEASE_VERSION}"
+          git add .
+          git commit -m "all: Bump to version ${RELEASE_VERSION#v}"
+          git push --set-upstream origin "release/${RELEASE_VERSION}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

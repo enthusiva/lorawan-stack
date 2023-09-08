@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,14 @@ import bind from 'autobind-decorator'
 import MaskedInput from 'react-text-mask'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
+import { warn } from '@ttn-lw/lib/log'
 
 import style from './input.styl'
 
 const PLACEHOLDER_CHAR = '·'
 
 const hex = /[0-9a-f]/i
+const voidChars = RegExp(`[ ${PLACEHOLDER_CHAR}]`, 'g')
 
 const masks = {}
 const mask = (min, max, showPerChar = false) => {
@@ -50,13 +52,9 @@ const mask = (min, max, showPerChar = false) => {
   return r
 }
 
-const upper = str => {
-  return str.toUpperCase()
-}
+const upper = str => str.toUpperCase()
 
-const clean = str => {
-  return str.replace(new RegExp(`[ ${PLACEHOLDER_CHAR}]`, 'g'), '')
-}
+const clean = str => (typeof str === 'string' ? str.replace(voidChars, '') : str)
 
 export default class ByteInput extends React.Component {
   static propTypes = {
@@ -65,6 +63,7 @@ export default class ByteInput extends React.Component {
     min: PropTypes.number,
     onBlur: PropTypes.func,
     onChange: PropTypes.func.isRequired,
+    onFocus: PropTypes.func,
     placeholder: PropTypes.message,
     showPerChar: PropTypes.bool,
     unbounded: PropTypes.bool,
@@ -78,6 +77,7 @@ export default class ByteInput extends React.Component {
     placeholder: undefined,
     showPerChar: false,
     onBlur: () => null,
+    onFocus: () => null,
     unbounded: false,
   }
 
@@ -103,12 +103,18 @@ export default class ByteInput extends React.Component {
       ...rest
     } = this.props
 
-    const valueLength = clean(value).length || 0
-    const calculatedMax = max || Math.max(Math.floor(valueLength / 2) + 1, 1)
+    // Instead of calculating the max width dynamically, which leads to various issues
+    // with pasting, it's better to use a high max value for unbounded inputs instead.
+    const calculatedMax = max || 4096
+
+    if (!unbounded && typeof max !== 'number') {
+      warn(
+        'Byte input has been setup without `max` prop. Always use a max prop unless using `unbounded`',
+      )
+    }
 
     return (
       <MaskedInput
-        ref={this.input}
         key="input"
         className={classnames(className, style.byte)}
         value={value}
@@ -125,44 +131,34 @@ export default class ByteInput extends React.Component {
         showMask={!placeholder && !unbounded}
         guide={!unbounded}
         {...rest}
+        type="text"
       />
     )
   }
 
-  focus() {
-    if (this.input.current && this.input.current.inputElement) {
-      const { inputElement } = this.input.current
-
-      let i = inputElement.value.indexOf(PLACEHOLDER_CHAR)
-      if (i === -1) {
-        i = inputElement.value.length
-      }
-
-      setTimeout(() => {
-        inputElement.focus()
-        inputElement.setSelectionRange(i, i)
-      }, 0)
-    }
-  }
-
   @bind
   onChange(evt) {
-    const { max, showPerChar } = this.props
-    const { data } = evt.nativeEvent
+    const { value: oldValue, unbounded } = this.props
+    const data = evt?.nativeEvent?.data
 
-    let value = clean(evt.target.value)
-    const normalizedMax = showPerChar ? Math.ceil(max / 2) : max
+    // Due to the way that react-text-mask works, it is not possible to
+    // store the cleaned value, since it would create ambiguity between
+    // values like `AA` and `AA `. This causes backspaces to not work
+    // if it targets the space character, since the deleted space would
+    // be re-added right away. Hence, unbounded inputs need to remove
+    // the space paddings manually.
+    let value = unbounded ? evt.target.value : clean(evt.target.value)
 
-    // Check if the value already has length equal to `max`.
-    const isValueMaxLength = value.length === normalizedMax * 2
-    // Check if the cursor is placed after the last placeholder chararcter.
-    const isCursorAfterMask = evt.target.selectionStart === normalizedMax * 3 - 1
-
-    if (!isValueMaxLength && isCursorAfterMask && data !== null) {
-      const hexMatch = data.match(hex)
-      if (hexMatch !== null) {
-        value += hexMatch[0]
-      }
+    // Make sure values entered at the end of the input (with placeholders)
+    // are added as expected. `selectionStart` cannot be used due to
+    // inconsistent behavior on Android phones.
+    if (
+      evt.target.value.endsWith(PLACEHOLDER_CHAR) &&
+      data &&
+      hex.test(data) &&
+      oldValue === value
+    ) {
+      value += data
     }
 
     this.props.onChange({
@@ -197,32 +193,33 @@ export default class ByteInput extends React.Component {
 
   @bind
   onPaste(evt) {
-    const { min, showPerChar, unbounded } = this.props
-    if (unbounded) {
-      evt.preventDefault()
-      this.input.current.inputElement.value = evt.clipboardData.getData('text/plain')
-      mask(min, evt.clipboardData.getData('text/plain').length, showPerChar)
-      this.onChange(evt)
+    // Ignore empty pastes.
+    if (evt?.clipboardData?.getData('text/plain')?.length === 0) {
+      return
+    }
+    const { unbounded } = this.props
+    const val = evt.target.value
+    const cleanedSelection = clean(
+      val.substr(
+        evt.target.selectionStart,
+        Math.max(1, evt.target.selectionEnd - evt.target.selectionStart),
+      ),
+    )
+
+    // To avoid the masked input from cutting off characters when the cursor
+    // is placed in the mask placeholders, the placeholder chars are removed before
+    // the paste is applied, unless the user made a selection to paste into.
+    // This will ensure a consistent pasting experience.
+    if (!unbounded && cleanedSelection === '') {
+      evt.target.value = val.replace(voidChars, '')
     }
   }
 
   @bind
   onCut(evt) {
-    const input = evt.target
-    const value = input.value.substr(
-      input.selectionStart,
-      input.selectionEnd - input.selectionStart,
-    )
-    evt.clipboardData.setData('text/plain', clean(value))
     evt.preventDefault()
-
-    // Emit the cut value.
-    const cut = input.value.substr(0, input.selectionStart) + input.value.substr(input.selectionEnd)
-    evt.target.value = cut
-    this.onChange({
-      target: {
-        value: cut,
-      },
-    })
+    // Recreate cut action by deleting and reusing copy handler.
+    document.execCommand('copy')
+    document.execCommand('delete')
   }
 }

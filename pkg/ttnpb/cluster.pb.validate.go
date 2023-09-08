@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _cluster_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on PeerInfo with the rules defined in
 // the proto definition for this message. If any rules are violated, an error
@@ -51,9 +48,9 @@ func (m *PeerInfo) ValidateFields(paths ...string) error {
 		_ = subs
 		switch name {
 		case "grpc_port":
-			// no validation rules for GRPCPort
+			// no validation rules for GrpcPort
 		case "tls":
-			// no validation rules for TLS
+			// no validation rules for Tls
 		case "roles":
 
 		case "tags":

@@ -15,7 +15,6 @@
 package udp
 
 import (
-	"bytes"
 	"context"
 	"net"
 	"sync"
@@ -29,6 +28,11 @@ import (
 type Firewall interface {
 	Filter(packet encoding.Packet) error
 }
+
+type noopFirewall struct{}
+
+// Filter implements Firewall.
+func (noopFirewall) Filter(encoding.Packet) error { return nil }
 
 type addrTime struct {
 	net.IP
@@ -78,7 +82,7 @@ func (f *memoryFirewall) Filter(packet encoding.Packet) error {
 	val, ok := f.m.Load(eui)
 	if ok {
 		a := val.(addrTime)
-		if !bytes.Equal(a.IP, packet.GatewayAddr.IP) && a.lastSeen.Add(f.addrChangeBlock).After(now) {
+		if !a.IP.Equal(packet.GatewayAddr.IP) && a.lastSeen.Add(f.addrChangeBlock).After(now) {
 			return errAlreadyConnected.WithAttributes(
 				"connected_ip", a.IP.String(),
 				"connecting_ip", packet.GatewayAddr.IP.String(),
@@ -94,7 +98,7 @@ func (f *memoryFirewall) Filter(packet encoding.Packet) error {
 
 func (f *memoryFirewall) gc() {
 	now := time.Now().UTC()
-	f.m.Range(func(k, val interface{}) bool {
+	f.m.Range(func(k, val any) bool {
 		a := val.(addrTime)
 		if a.lastSeen.Add(f.addrChangeBlock).Before(now) {
 			f.m.Delete(k)

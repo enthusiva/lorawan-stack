@@ -47,10 +47,9 @@ pseudo-border($size, $color)
     bottom: 0
     left: 0
     height: $size
-    display: block
-    width: 100%
     background: $color
     content: ''
+    width: 100%
     {block}
 
 pseudo-border-animated($size, $color)
@@ -241,6 +240,17 @@ visually-hidden()
   clip: rect(0 0 0 0)
   overflow: hidden
 
+// SPECIAL STYLINGS
+// ================
+
+area-active()
+  background-image: linear-gradient(179deg, rgba(249,249,249,0.6) 0%, rgba(246,246,246,0.6) 100%)
+  box-shadow: inset 0 0 22px 0 rgba(0,0,0,0.05)
+
+area-hover()
+  background-image: linear-gradient(179deg, rgba(249,249,249,0.3) 0%, rgba(246,246,246,0.3) 100%)
+  box-shadow: inset 0 0 22px 0 rgba(0,0,0,0.01)
+
 
 // RESPONSIVENESS
 // ==============
@@ -301,22 +311,22 @@ input-width-classes()
   width: 100%
 
   &.input-width-xxs
-    max-width: $fiw.xxs
+    max-width: $fiw.xxs !important
 
   &.input-width-xs
-    max-width: $fiw.xs
+    max-width: $fiw.xs !important
 
   &.input-width-s
-    max-width: $fiw.s
+    max-width: $fiw.s !important
 
   &.input-width-m
-    max-width: $fiw.m
+    max-width: $fiw.m !important
 
   &.input-width-l
-    max-width: $fiw.l
+    max-width: $fiw.l !important
 
   &.input-width-full
-    max-width: none
+    max-width: none !important
 
 
 // RESETS
@@ -346,3 +356,19 @@ sidebar-transition($properties)
   transition-timing-function: cubic-bezier(.18,.71,.3,.99)
   transition-duration: 330ms
   transition-property: $properties
+
+// Global classes attached by the sidebar component.
+global-sidebar()
+  :global(.with-sidebar) .main
+    +media-query-min($bp.s)
+      padding-left: $sidebar-width
+    +media-query-between($bp.s, $bp.m)
+      padding-left: $sidebar-width-minimized
+
+  :global(.sidebar-minimized) .main
+    +media-query-min($bp.s)
+      padding-left: $sidebar-width-minimized
+
+  :global(.sidebar-transitioned) .main
+    +media-query-min($bp.s)
+      sidebar-transition(padding-left)

@@ -29,18 +29,16 @@ type PubSub interface {
 // Publisher interface lets you publish events.
 type Publisher interface {
 	// Publish emits an event on the default event pubsub.
-	Publish(evt Event)
+	Publish(evs ...Event)
 }
 
 // Subscriber interface lets you subscribe to events.
 type Subscriber interface {
-	// Subscribe to events that match the name and identifiers.
+	// Subscribe to events that match the names and identifiers.
 	// The subscription continues until the context is canceled.
-	// The name can be a glob in order to catch multiple event types.
-	// If supplying identifiers, then only events matching _any_ of those
-	// identifiers will get sent to the handler.
+	// Events matching _any_ of the names or identifiers will get sent to the handler.
 	// The handler must be non-blocking.
-	Subscribe(ctx context.Context, name string, identifiers []*ttnpb.EntityIdentifiers, hdl Handler) error
+	Subscribe(ctx context.Context, names []string, identifiers []*ttnpb.EntityIdentifiers, hdl Handler) error
 }
 
 // Subscription is the interface for PubSub subscriptions.

@@ -18,12 +18,11 @@ package devicerepository
 import (
 	"context"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/devicerepository/store"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
-	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/hooks"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpclog"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"google.golang.org/grpc"
@@ -33,6 +32,8 @@ import (
 //
 // The Device Repository component exposes the DeviceRepository service.
 type DeviceRepository struct {
+	ttnpb.UnimplementedDeviceRepositoryServer
+
 	*component.Component
 	ctx context.Context
 
@@ -53,8 +54,12 @@ func New(c *component.Component, conf *Config) (*DeviceRepository, error) {
 
 	c.RegisterGRPC(dr)
 
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.DeviceRepository", rpclog.NamespaceHook, rpclog.UnaryNamespaceHook("devicerepository"))
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.DeviceRepository", cluster.HookName, c.ClusterAuthUnaryHook())
+	c.GRPC.RegisterUnaryHook(
+		"/ttn.lorawan.v3.DeviceRepository",
+		rpclog.NamespaceHook,
+		rpclog.UnaryNamespaceHook("devicerepository"),
+	)
+	c.GRPC.RegisterUnaryHook("/ttn.lorawan.v3.DeviceRepository", cluster.HookName, c.ClusterAuthUnaryHook())
 	return dr, nil
 }
 
@@ -64,7 +69,7 @@ func (dr *DeviceRepository) Context() context.Context {
 }
 
 // Roles returns the roles that the Device Repository fulfills.
-func (dr *DeviceRepository) Roles() []ttnpb.ClusterRole {
+func (*DeviceRepository) Roles() []ttnpb.ClusterRole {
 	return []ttnpb.ClusterRole{ttnpb.ClusterRole_DEVICE_REPOSITORY}
 }
 
@@ -75,5 +80,5 @@ func (dr *DeviceRepository) RegisterServices(s *grpc.Server) {
 
 // RegisterHandlers registers gRPC handlers.
 func (dr *DeviceRepository) RegisterHandlers(s *runtime.ServeMux, conn *grpc.ClientConn) {
-	ttnpb.RegisterDeviceRepositoryHandler(dr.Context(), s, conn)
+	ttnpb.RegisterDeviceRepositoryHandler(dr.Context(), s, conn) //nolint:errcheck
 }

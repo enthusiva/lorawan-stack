@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package webmiddleware
+package webmiddleware_test
 
 import (
 	"net/http"
@@ -20,8 +20,9 @@ import (
 	"testing"
 
 	"github.com/gorilla/securecookie"
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	. "go.thethings.network/lorawan-stack/v3/pkg/webmiddleware"
 )
 
 func TestCookies(t *testing.T) {
@@ -69,7 +70,7 @@ func TestCookies(t *testing.T) {
 			if cookie.Name == "cookie-name" {
 				value := make(map[string]string)
 				err := sc.Decode("cookie-name", cookie.Value, &value)
-				a.So(err, should.Equal, nil)
+				a.So(err, should.BeNil)
 				a.So(value["foo"], should.Equal, "bar")
 			}
 		}

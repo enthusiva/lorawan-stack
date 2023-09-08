@@ -17,12 +17,13 @@ package errors_test
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestResembles(t *testing.T) {
+	t.Parallel()
 	a := assertions.New(t)
 
 	a.So(errors.Resemble(nil, nil), should.BeTrue)
@@ -40,11 +41,8 @@ func TestResembles(t *testing.T) {
 	errInvalidArgument := defInvalidArgument.WithAttributes("foo", "bar")
 	grpcErrInvalidArgument := errInvalidArgument.GRPCStatus().Err()
 
-	// Errors and definitions resemble all pointer/non-pointer combinations:
+	// Errors and definitions resemble:
 	a.So(errors.Resemble(errInvalidArgument, defInvalidArgument), should.BeTrue)
-	a.So(errors.Resemble(errInvalidArgument, &defInvalidArgument), should.BeTrue)
-	a.So(errors.Resemble(&errInvalidArgument, defInvalidArgument), should.BeTrue)
-	a.So(errors.Resemble(&errInvalidArgument, &defInvalidArgument), should.BeTrue)
 
 	// Should resemble gRPC error:
 	a.So(errors.Resemble(grpcErrInvalidArgument, defInvalidArgument), should.BeTrue)
@@ -56,6 +54,12 @@ func TestResembles(t *testing.T) {
 
 	defWrapper := errors.Define("wrapper", "something went wrong")
 
-	a.So(errors.Resemble(defWrapper.WithCause(defPermissionDenied), defWrapper), should.BeTrue)
-	a.So(errors.Resemble(defWrapper.WithCause(defPermissionDenied), defWrapper.WithCause(defInvalidArgument)), should.BeTrue)
+	a.So(errors.Resemble(
+		defWrapper.WithCause(defPermissionDenied),
+		defWrapper,
+	), should.BeTrue)
+	a.So(errors.Resemble(
+		defWrapper.WithCause(defPermissionDenied),
+		defWrapper.WithCause(defInvalidArgument),
+	), should.BeTrue)
 }

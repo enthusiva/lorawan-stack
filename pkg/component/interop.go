@@ -16,13 +16,13 @@ package component
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"io/ioutil"
+	"io"
 	stdlog "log"
 	"net"
 	"net/http"
 	"time"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
 	"go.thethings.network/lorawan-stack/v3/pkg/interop"
 )
 
@@ -36,7 +36,7 @@ func (c *Component) serveInterop(lis net.Listener) error {
 		Handler:           c.interop,
 		ReadTimeout:       120 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
-		ErrorLog:          stdlog.New(ioutil.Discard, "", 0),
+		ErrorLog:          stdlog.New(io.Discard, "", 0),
 	}
 	go func() {
 		<-c.Context().Done()
@@ -46,17 +46,11 @@ func (c *Component) serveInterop(lis net.Listener) error {
 }
 
 func (c *Component) interopEndpoints() []Endpoint {
-	certPool := x509.NewCertPool()
-	for _, certs := range c.interop.SenderClientCAs {
-		for _, cert := range certs {
-			certPool.AddCert(cert)
-		}
-	}
 	return []Endpoint{
-		// TODO: Enable TCP endpoint (https://github.com/TheThingsNetwork/lorawan-stack/issues/717)
+		NewTCPEndpoint(c.config.Interop.Listen, "Interop"),
 		NewTLSEndpoint(c.config.Interop.ListenTLS, "Interop",
-			WithTLSClientAuth(tls.RequireAndVerifyClientCert, certPool, nil),
-			WithNextProtos("h2", "http/1.1"),
+			tlsconfig.WithTLSClientAuth(tls.VerifyClientCertIfGiven, c.interop.ClientCAPool(), nil),
+			tlsconfig.WithNextProtos("h2", "http/1.1"),
 		),
 	}
 }

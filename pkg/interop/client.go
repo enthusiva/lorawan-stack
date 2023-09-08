@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,11 +18,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -31,68 +29,20 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/encoding/lorawan"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
+	"go.thethings.network/lorawan-stack/v3/pkg/httpclient"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/specification/macspec"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"google.golang.org/protobuf/types/known/durationpb"
 	yaml "gopkg.in/yaml.v2"
 )
 
-const (
-	// loRaAllianceDomain is the domain of LoRa Alliance.
-	loRaAllianceDomain = "lora-alliance.org"
-
-	// LoRaAllianceJoinEUIDomain is the LoRa Alliance domain used for JoinEUI resolution.
-	LoRaAllianceJoinEUIDomain = "joineuis." + loRaAllianceDomain
-
-	// LoRaAllianceNetIDDomain is the LoRa Alliance domain used for NetID resolution.
-	LoRaAllianceNetIDDomain = "netids." + loRaAllianceDomain
-
-	defaultHTTPSPort = 443
-)
-
-// JoinServerProtocol represents the protocol used for connection to Join Server by interop client.
-type JoinServerProtocol uint8
-
-const (
-	// LoRaWANJoinServerProtocol1_0 represents Join Server protocol defined by LoRaWAN Backend Interfaces 1.0 specification.
-	LoRaWANJoinServerProtocol1_0 JoinServerProtocol = iota
-	// LoRaWANJoinServerProtocol1_1 represents Join Server protocol defined by LoRaWAN Backend Interfaces 1.1 specification.
-	LoRaWANJoinServerProtocol1_1
-)
-
-// BackendInterfacesVersion returns the version of LoRaWAN Backend Interfaces specification version the protocol p is compliant with.
-// BackendInterfacesVersion panics if p is not compliant with LoRaWAN Backend Interfaces specification.
-func (p JoinServerProtocol) BackendInterfacesVersion() string {
-	switch p {
-	case LoRaWANJoinServerProtocol1_0:
-		return "1.0"
-	case LoRaWANJoinServerProtocol1_1:
-		return "1.1"
-	default:
-		panic(fmt.Sprintf("Join Server protocol	`%v` is not compliant with Backend Interfaces specification", p))
-	}
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler.
-func (p *JoinServerProtocol) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var s string
-	if err := unmarshal(&s); err != nil {
-		return err
-	}
-	switch s {
-	case "BI1.1":
-		*p = LoRaWANJoinServerProtocol1_1
-		return nil
-	case "BI1.0":
-		*p = LoRaWANJoinServerProtocol1_0
-		return nil
-	default:
-		return errUnknownProtocol.New()
-	}
-}
+const defaultHTTPSPort = 443
 
 type jsRPCPaths struct {
 	Join    string `yaml:"join"`
@@ -101,10 +51,13 @@ type jsRPCPaths struct {
 	HomeNS  string `yaml:"home-ns"`
 }
 
-func (p jsRPCPaths) join() string    { return p.Join }
-func (p jsRPCPaths) rejoin() string  { return p.Rejoin }
-func (p jsRPCPaths) appSKey() string { return p.AppSKey }
-func (p jsRPCPaths) homeNS() string  { return p.HomeNS }
+func (p jsRPCPaths) join() string {
+	return p.Join
+}
+
+func (p jsRPCPaths) appSKey() string {
+	return p.AppSKey
+}
 
 func serverURL(scheme, fqdn, path string, port uint32) string {
 	if scheme == "" {
@@ -119,7 +72,9 @@ func serverURL(scheme, fqdn, path string, port uint32) string {
 	return fmt.Sprintf("%s://%s:%d%s", scheme, fqdn, port, path)
 }
 
-func newHTTPRequest(url string, pld interface{}, headers map[string]string) (*http.Request, error) {
+func newHTTPRequest(
+	url string, pld any, headers map[string]string, username, password string,
+) (*http.Request, error) {
 	buf := &bytes.Buffer{}
 	if err := json.NewEncoder(buf).Encode(pld); err != nil {
 		return nil, err
@@ -132,31 +87,15 @@ func newHTTPRequest(url string, pld interface{}, headers map[string]string) (*ht
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+	if username != "" {
+		req.SetBasicAuth(username, password)
+	}
 	return req, nil
 }
 
-// JoinServerFQDN constructs Join Server FQDN using specified EUI under domain
-// according to LoRaWAN Backend Interfaces specification.
-// If domain is empty, LoRaAllianceJoinEUIDomain is used.
-func JoinServerFQDN(eui types.EUI64, domain string) string {
-	if domain == "" {
-		domain = LoRaAllianceJoinEUIDomain
-	}
-	return fmt.Sprintf(
-		"%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%01x.%s",
-		eui[7]&0x0f, eui[7]>>4,
-		eui[6]&0x0f, eui[6]>>4,
-		eui[5]&0x0f, eui[5]>>4,
-		eui[4]&0x0f, eui[4]>>4,
-		eui[3]&0x0f, eui[3]>>4,
-		eui[2]&0x0f, eui[2]>>4,
-		eui[1]&0x0f, eui[1]>>4,
-		eui[0]&0x0f, eui[0]>>4,
-		domain,
-	)
-}
-
-func httpExchange(ctx context.Context, httpReq *http.Request, res interface{}, do func(*http.Request) (*http.Response, error)) error {
+func httpExchange(
+	ctx context.Context, httpReq *http.Request, res any, do func(*http.Request) (*http.Response, error),
+) error {
 	logger := log.FromContext(ctx).WithField("url", httpReq.URL)
 
 	logger.Debug("Send interop HTTP request")
@@ -169,12 +108,19 @@ func httpExchange(ctx context.Context, httpReq *http.Request, res interface{}, d
 	logger = logger.WithField("http_code", httpRes.StatusCode)
 	logger.Debug("Receive interop HTTP response")
 
-	b, err := ioutil.ReadAll(httpRes.Body)
+	b, err := io.ReadAll(httpRes.Body)
 	if err != nil {
-		if err == io.EOF && res == nil {
+		if res == nil {
 			return nil
 		}
 		logger.WithError(err).Warn("Failed to read HTTP response body")
+		return errors.FromHTTPStatusCode(httpRes.StatusCode)
+	}
+
+	// LoRaWAN Backend Interfaces messages are only sent with HTTP status code 200, including errors encoded in Result.
+	// Therefore, when the response status code is not 2xx, do not unmarshal the response content.
+	if httpRes.StatusCode < 200 || httpRes.StatusCode >= 300 {
+		logger.Info("Response status code does not indicate success")
 		return errors.FromHTTPStatusCode(httpRes.StatusCode)
 	}
 
@@ -186,45 +132,75 @@ func httpExchange(ctx context.Context, httpReq *http.Request, res interface{}, d
 }
 
 type joinServerHTTPClient struct {
-	Client         http.Client
-	NewRequestFunc func(types.EUI64, func(jsRPCPaths) string, interface{}) (*http.Request, error)
-	Protocol       JoinServerProtocol
+	clientProvider httpclient.Provider
+	clientOpts     []httpclient.Option
+	protocol       ProtocolVersion
+	scheme,
+	dnsSuffix, fqdn string
+	port               uint32
+	paths              jsRPCPaths
+	headers            map[string]string
+	username, password string
+	senderNSID         *types.EUI64
 }
 
-func (cl joinServerHTTPClient) exchange(ctx context.Context, joinEUI types.EUI64, pathFunc func(jsRPCPaths) string, req, res interface{}) error {
-	httpReq, err := cl.NewRequestFunc(joinEUI, pathFunc, req)
+func (cl joinServerHTTPClient) exchange(
+	ctx context.Context, pathFunc func(jsRPCPaths) string, pld, res any,
+) error {
+	client, err := cl.clientProvider.HTTPClient(ctx, cl.clientOpts...)
 	if err != nil {
 		return err
 	}
-	return httpExchange(ctx, httpReq.WithContext(ctx), res, cl.Client.Do)
+	scheme := cl.scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	if scheme != "https" {
+		log.FromContext(ctx).WithField("scheme", scheme).Warn("Use non-https scheme for contacting interop Join Server")
+	}
+	port := cl.port
+	if port == 0 {
+		port = defaultHTTPSPort
+	}
+	req, err := newHTTPRequest(
+		serverURL(scheme, cl.fqdn, pathFunc(cl.paths), port), pld, cl.headers, cl.username, cl.password,
+	)
+	if err != nil {
+		return err
+	}
+	return httpExchange(ctx, req.WithContext(ctx), res, client.Do)
 }
 
 func parseResult(r Result) error {
 	if r.ResultCode == ResultSuccess {
 		return nil
 	}
-
 	err, ok := resultErrors[r.ResultCode]
 	if ok {
-		return err
+		return err.WithAttributes("result_description", r.Description)
 	}
-	return errUnexpectedResult.WithAttributes("code", r.ResultCode)
+	return errUnexpectedResult.WithAttributes(
+		"result_code", r.ResultCode,
+		"result_description", r.Description,
+	)
 }
 
 // GetAppSKey performs AppSKey request according to LoRaWAN Backend Interfaces specification.
-func (cl joinServerHTTPClient) GetAppSKey(ctx context.Context, asID string, req *ttnpb.SessionKeyRequest) (*ttnpb.AppSKeyResponse, error) {
+func (cl joinServerHTTPClient) GetAppSKey(
+	ctx context.Context, asID string, req *ttnpb.SessionKeyRequest,
+) (*ttnpb.AppSKeyResponse, error) {
 	interopAns := &AppSKeyAns{}
-	if err := cl.exchange(ctx, req.JoinEUI, jsRPCPaths.appSKey, &AppSKeyReq{
+	if err := cl.exchange(ctx, jsRPCPaths.appSKey, &AppSKeyReq{
 		AsJsMessageHeader: AsJsMessageHeader{
 			MessageHeader: MessageHeader{
-				ProtocolVersion: cl.Protocol.BackendInterfacesVersion(),
+				ProtocolVersion: cl.protocol,
 				MessageType:     MessageTypeAppSKeyReq,
 			},
 			SenderID:   asID,
-			ReceiverID: EUI64(req.JoinEUI),
+			ReceiverID: EUI64(types.MustEUI64(req.JoinEui).OrZero()),
 		},
-		DevEUI:       EUI64(req.DevEUI),
-		SessionKeyID: Buffer(req.SessionKeyID),
+		DevEUI:       EUI64(types.MustEUI64(req.DevEui).OrZero()),
+		SessionKeyID: Buffer(req.SessionKeyId),
 	}, interopAns); err != nil {
 		return nil, err
 	}
@@ -233,21 +209,41 @@ func (cl joinServerHTTPClient) GetAppSKey(ctx context.Context, asID string, req 
 	}
 
 	return &ttnpb.AppSKeyResponse{
-		AppSKey: ttnpb.KeyEnvelope(interopAns.AppSKey),
+		AppSKey: (*ttnpb.KeyEnvelope)(interopAns.AppSKey),
 	}, nil
 }
 
 var (
-	errGenerateSessionKeyID = errors.Define("generate_session_key_id", "failed to generate session key ID")
+	errMissingNSID          = errors.DefineFailedPrecondition("missing_ns_id", "missing NSID")
+	errNSIDNotSupported     = errors.DefineFailedPrecondition("ns_id_not_supported", "NSID not supported")
+	errNoJoinRequestPayload = errors.DefineInvalidArgument("no_join_request_payload", "no join-request payload")
+	errGenerateSessionKeyID = errors.Define("generate_session_key_id", "generate session key ID")
 
 	generatedSessionKeyIDPrefix = []byte("ttn-lw-interop-generated:")
 )
 
 // HandleJoinRequest performs Join request according to LoRaWAN Backend Interfaces specification.
-func (cl joinServerHTTPClient) HandleJoinRequest(ctx context.Context, netID types.NetID, req *ttnpb.JoinRequest) (*ttnpb.JoinResponse, error) {
+func (cl joinServerHTTPClient) HandleJoinRequest(
+	ctx context.Context, netID types.NetID, nsID *types.EUI64, req *ttnpb.JoinRequest,
+) (*ttnpb.JoinResponse, error) {
+	if cl.senderNSID != nil {
+		nsID = cl.senderNSID
+	}
+	if cl.protocol.RequiresNSID() && nsID == nil {
+		return nil, errMissingNSID.New()
+	}
+	if !cl.protocol.RequiresNSID() {
+		if cl.senderNSID != nil {
+			// This is bad configuration that should fail to avoid unintended behavior.
+			return nil, errNSIDNotSupported.New()
+		}
+		// If the protocol does not require NSID, we can safely set it to nil.
+		nsID = nil
+	}
+
 	pld := req.Payload.GetJoinRequestPayload()
 	if pld == nil {
-		return nil, ErrMalformedMessage.New()
+		return nil, errNoJoinRequestPayload.New()
 	}
 
 	dlSettings, err := lorawan.MarshalDLSettings(req.DownlinkSettings)
@@ -256,28 +252,28 @@ func (cl joinServerHTTPClient) HandleJoinRequest(ctx context.Context, netID type
 	}
 
 	var cfList []byte
-	if req.CFList != nil {
-		cfList, err = lorawan.MarshalCFList(*req.CFList)
+	if req.CfList != nil {
+		cfList, err = lorawan.MarshalCFList(req.CfList)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	interopAns := &JoinAns{}
-	if err := cl.exchange(ctx, pld.JoinEUI, jsRPCPaths.join, &JoinReq{
+	if err := cl.exchange(ctx, jsRPCPaths.join, &JoinReq{
 		NsJsMessageHeader: NsJsMessageHeader{
 			MessageHeader: MessageHeader{
-				ProtocolVersion: cl.Protocol.BackendInterfacesVersion(),
+				ProtocolVersion: cl.protocol,
 				MessageType:     MessageTypeJoinReq,
 			},
 			SenderID:   NetID(netID),
-			ReceiverID: EUI64(pld.JoinEUI),
-			SenderNSID: NetID(netID),
+			SenderNSID: (*EUI64)(nsID),
+			ReceiverID: EUI64(types.MustEUI64(pld.JoinEui).OrZero()),
 		},
-		MACVersion: MACVersion(req.SelectedMACVersion),
+		MACVersion: MACVersion(req.SelectedMacVersion),
 		PHYPayload: Buffer(req.RawPayload),
-		DevEUI:     EUI64(pld.DevEUI),
-		DevAddr:    DevAddr(req.DevAddr),
+		DevEUI:     EUI64(types.MustEUI64(pld.DevEui).OrZero()),
+		DevAddr:    DevAddr(types.MustDevAddr(req.DevAddr).OrZero()),
 		DLSettings: Buffer(dlSettings),
 		RxDelay:    req.RxDelay,
 		CFList:     Buffer(cfList),
@@ -289,14 +285,14 @@ func (cl joinServerHTTPClient) HandleJoinRequest(ctx context.Context, netID type
 	}
 
 	fNwkSIntKey := interopAns.FNwkSIntKey
-	if req.SelectedMACVersion.Compare(ttnpb.MAC_V1_1) <= 0 {
+	if !macspec.UseNwkKey(req.SelectedMacVersion) {
 		fNwkSIntKey = interopAns.NwkSKey
 	}
 
 	sessionKeyID := []byte(interopAns.SessionKeyID)
 	if len(sessionKeyID) == 0 {
 		log.FromContext(ctx).Debug("Interop join-accept does not contain session key ID, generate random ID")
-		id, err := ulid.New(ulid.Timestamp(time.Now()), rand.Reader)
+		id, err := ulid.New(ulid.Now(), rand.Reader)
 		if err != nil {
 			return nil, errGenerateSessionKeyID.New()
 		}
@@ -306,14 +302,14 @@ func (cl joinServerHTTPClient) HandleJoinRequest(ctx context.Context, netID type
 	}
 	return &ttnpb.JoinResponse{
 		RawPayload: interopAns.PHYPayload,
-		SessionKeys: ttnpb.SessionKeys{
-			SessionKeyID: sessionKeyID,
+		SessionKeys: &ttnpb.SessionKeys{
+			SessionKeyId: sessionKeyID,
 			FNwkSIntKey:  (*ttnpb.KeyEnvelope)(fNwkSIntKey),
 			SNwkSIntKey:  (*ttnpb.KeyEnvelope)(interopAns.SNwkSIntKey),
 			NwkSEncKey:   (*ttnpb.KeyEnvelope)(interopAns.NwkSEncKey),
 			AppSKey:      (*ttnpb.KeyEnvelope)(interopAns.AppSKey),
 		},
-		Lifetime: time.Duration(interopAns.Lifetime) * time.Second,
+		Lifetime: durationpb.New(time.Duration(interopAns.Lifetime) * time.Second),
 	}, nil
 }
 
@@ -322,21 +318,10 @@ func GeneratedSessionKeyID(id []byte) bool {
 	return bytes.HasPrefix(id, generatedSessionKeyIDPrefix)
 }
 
-func makeJoinServerHTTPRequestFunc(scheme, dns, fqdn string, port uint32, rpcPaths jsRPCPaths, headers map[string]string) func(types.EUI64, func(jsRPCPaths) string, interface{}) (*http.Request, error) {
-	if port == 0 {
-		port = defaultHTTPSPort
-	}
-	return func(joinEUI types.EUI64, pathFunc func(jsRPCPaths) string, pld interface{}) (*http.Request, error) {
-		fqdn := fqdn // Create a new reference to fqdn to avoid mutating the variable in the outside scope.
-		if fqdn == "" {
-			fqdn = JoinServerFQDN(joinEUI, dns)
-		}
-		return newHTTPRequest(serverURL(scheme, fqdn, pathFunc(rpcPaths), port), pld, headers)
-	}
-}
-
 type joinServerClient interface {
-	HandleJoinRequest(ctx context.Context, netID types.NetID, req *ttnpb.JoinRequest) (*ttnpb.JoinResponse, error)
+	HandleJoinRequest(
+		ctx context.Context, netID types.NetID, nsID *types.EUI64, req *ttnpb.JoinRequest,
+	) (*ttnpb.JoinResponse, error)
 	GetAppSKey(ctx context.Context, asID string, req *ttnpb.SessionKeyRequest) (*ttnpb.AppSKeyResponse, error)
 }
 
@@ -345,26 +330,36 @@ type prefixJoinServerClient struct {
 	prefix types.EUI64Prefix
 }
 
+// Client is an interop client.
 type Client struct {
 	joinServers []prefixJoinServerClient // Sorted by JoinEUI prefix range length.
 }
 
-var errUnknownProtocol = errors.DefineInvalidArgument("unknown_protocol", "unknown protocol")
+var (
+	errUnknownConfig         = errors.DefineNotFound("unknown_config", "configuration is unknown")
+	errDNSLookupNotSupported = errors.DefineFailedPrecondition("dns_lookup_not_supported", "DNS lookup is not supported")
+)
 
-var errUnknownConfig = errors.DefineNotFound("unknown_config", "configuration is unknown")
+// ClientComponent provides an interface to the component for the interop client.
+type ClientComponent interface {
+	httpclient.Provider
+	KeyService() crypto.KeyService
+}
+
+// ComponentSelector is a component selector.
+type ComponentSelector string
+
+// Component selectors.
+const (
+	SelectorNetworkServer     ComponentSelector = "ns"
+	SelectorApplicationServer ComponentSelector = "as"
+)
 
 // NewClient return new interop client.
-// fallbackTLS is optional.
-func NewClient(ctx context.Context, conf config.InteropClient) (*Client, error) {
-	var fallbackTLS *tls.Config
-	tlsConf, err := conf.GetFallbackTLSConfig(ctx)
-	if err != nil {
-		log.FromContext(ctx).WithError(err).Warn("Could not get fallback TLS config for interoperability")
-	} else {
-		fallbackTLS = tlsConf
-	}
-
-	fetcher, err := conf.Fetcher(ctx)
+func NewClient(
+	ctx context.Context, conf config.InteropClient, c ClientComponent, selector ComponentSelector,
+) (*Client, error) {
+	fetcher, err := conf.Fetcher(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -378,8 +373,9 @@ func NewClient(ctx context.Context, conf config.InteropClient) (*Client, error) 
 
 	var yamlConf struct {
 		JoinServers []struct {
-			File     string              `yaml:"file"`
-			JoinEUIs []types.EUI64Prefix `yaml:"join-euis"`
+			File       string              `yaml:"file"`
+			Components []ComponentSelector `yaml:"components"`
+			JoinEUIs   []types.EUI64Prefix `yaml:"join-euis"`
 		} `yaml:"join-servers"`
 	}
 	if err := yaml.UnmarshalStrict(confFileBytes, &yamlConf); err != nil {
@@ -387,61 +383,83 @@ func NewClient(ctx context.Context, conf config.InteropClient) (*Client, error) 
 	}
 
 	type ComponentConfig struct {
-		DNS     string            `yaml:"dns"`
-		FQDN    string            `yaml:"fqdn"`
-		Port    uint32            `yaml:"port"`
-		Headers map[string]string `yaml:"headers"`
-		TLS     tlsConfig         `yaml:"tls"`
+		DNSSuffix string            `yaml:"dns"`
+		Scheme    string            `yaml:"scheme"`
+		FQDN      string            `yaml:"fqdn"`
+		Port      uint32            `yaml:"port"`
+		Headers   map[string]string `yaml:"headers"`
+		BasicAuth struct {
+			Username string `yaml:"username"`
+			Password string `yaml:"password"`
+		} `yaml:"basic-auth"`
+		TLS tlsConfig `yaml:"tls"`
 	}
 
 	jss := make([]prefixJoinServerClient, 0, len(yamlConf.JoinServers))
-	for _, jsConf := range yamlConf.JoinServers {
-		jsConfEls := strings.Split(filepath.ToSlash(jsConf.File), "/")
+	for _, jsEntry := range yamlConf.JoinServers {
+		// Skip Join Servers with unmatching component selector.
+		if len(jsEntry.Components) > 0 {
+			var found bool
+			for _, c := range jsEntry.Components {
+				if c == selector {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
 
-		fetcher := fetch.WithBasePath(fetcher, jsConfEls[:len(jsConfEls)-1]...)
-		jsFileBytes, err := fetcher.File(jsConfEls[len(jsConfEls)-1])
+		fileParts := strings.Split(filepath.ToSlash(jsEntry.File), "/")
+		fetcher := fetch.WithBasePath(fetcher, fileParts[:len(fileParts)-1]...)
+		jsFileBytes, err := fetcher.File(fileParts[len(fileParts)-1])
 		if err != nil {
 			return nil, err
 		}
 
-		var yamlJSConf struct {
+		var jsConf struct {
 			ComponentConfig `yaml:",inline"`
-			Paths           jsRPCPaths         `yaml:"paths"`
-			Protocol        JoinServerProtocol `yaml:"protocol"`
+			Paths           jsRPCPaths      `yaml:"paths"`
+			Protocol        ProtocolVersion `yaml:"protocol"`
+			SenderNSID      *types.EUI64    `yaml:"sender-ns-id,omitempty"`
 		}
-		if err := yaml.UnmarshalStrict(jsFileBytes, &yamlJSConf); err != nil {
+		if err := yaml.UnmarshalStrict(jsFileBytes, &jsConf); err != nil {
 			return nil, err
 		}
 
 		var js joinServerClient
-		switch yamlJSConf.Protocol {
-		case LoRaWANJoinServerProtocol1_0, LoRaWANJoinServerProtocol1_1:
-			tlsConf := fallbackTLS
-			if !yamlJSConf.TLS.IsZero() {
-				tlsConf, err = yamlJSConf.TLS.TLSConfig(fetcher)
+		switch jsConf.Protocol {
+		case ProtocolV1_0, ProtocolV1_1:
+			var opts []httpclient.Option
+			if !jsConf.TLS.IsZero() {
+				tlsConf, err := jsConf.TLS.TLSConfig(fetcher, c.KeyService())
 				if err != nil {
 					return nil, err
 				}
+				opts = append(opts, httpclient.WithTLSConfig(tlsConf))
 			}
-
-			tr := http.DefaultTransport.(*http.Transport).Clone()
-			if transport, ok := conf.HTTPClient.Transport.(*http.Transport); ok {
-				tr = transport.Clone()
+			if jsConf.DNSSuffix != "" || jsConf.FQDN == "" {
+				return nil, errDNSLookupNotSupported.New()
 			}
-			if tlsConf != nil {
-				tr.TLSClientConfig = tlsConf
-			}
-			client := *conf.HTTPClient
-			client.Transport = tr
 			js = &joinServerHTTPClient{
-				Client:         client,
-				NewRequestFunc: makeJoinServerHTTPRequestFunc("https", yamlJSConf.DNS, yamlJSConf.FQDN, yamlJSConf.Port, yamlJSConf.Paths, yamlJSConf.Headers),
-				Protocol:       yamlJSConf.Protocol,
+				clientProvider: c,
+				clientOpts:     opts,
+				protocol:       jsConf.Protocol,
+				senderNSID:     jsConf.SenderNSID,
+				scheme:         jsConf.Scheme,
+				dnsSuffix:      jsConf.DNSSuffix,
+				fqdn:           jsConf.FQDN,
+				port:           jsConf.Port,
+				paths:          jsConf.Paths,
+				headers:        jsConf.Headers,
+				username:       jsConf.BasicAuth.Username,
+				password:       jsConf.BasicAuth.Password,
 			}
 		default:
 			return nil, errUnknownProtocol.New()
 		}
-		for _, pre := range jsConf.JoinEUIs {
+		for _, pre := range jsEntry.JoinEUIs {
 			jss = append(jss, prefixJoinServerClient{
 				joinServerClient: js,
 				prefix:           pre,
@@ -460,34 +478,79 @@ func NewClient(ctx context.Context, conf config.InteropClient) (*Client, error) 
 	}, nil
 }
 
-func (cl Client) joinServer(joinEUI types.EUI64) (joinServerClient, bool) {
-	// NOTE: joinServers slice is sorted by prefix length and the range start decreasing, hence the first match is the most specific one.
+// matchingJoinServerClients returns the Join Server clients that match the JoinEUI.
+// If there are multiple Join Servers with a /64 prefix, all of them are returned.
+func (cl Client) matchingJoinServerClients(joinEUI types.EUI64) (res []joinServerClient) {
+	// NOTE: joinServers slice is sorted by prefix length and the range start decreasing,
+	// hence the first matches are the most specific ones.
 	for _, js := range cl.joinServers {
-		if js.prefix.Matches(joinEUI) {
-			return js.joinServerClient, true
+		if js.prefix.Matches(joinEUI) && (len(res) == 0 || js.prefix.Length == 64) {
+			res = append(res, js.joinServerClient)
 		}
 	}
-	return nil, false
+	return
+}
+
+// joinServerRace returns the first successful response from the given Join Servers, or the first error if all fail.
+func joinServerRace[T any](
+	ctx context.Context, fn func(joinServerClient) (T, error), jss []joinServerClient,
+) (T, error) {
+	res := make(chan struct {
+		resp T
+		err  error
+	}, len(jss))
+	for _, js := range jss {
+		go func(js joinServerClient) {
+			response, err := fn(js)
+			res <- struct {
+				resp T
+				err  error
+			}{resp: response, err: err}
+		}(js)
+	}
+	var firstErr error
+	for range jss {
+		select {
+		case <-ctx.Done():
+			return *new(T), ctx.Err()
+		case r := <-res:
+			if r.err == nil {
+				return r.resp, nil
+			}
+			if firstErr == nil {
+				firstErr = r.err
+			}
+		}
+	}
+	return *new(T), firstErr
 }
 
 // GetAppSKey performs AppSKey request to Join Server associated with req.JoinEUI.
-func (cl Client) GetAppSKey(ctx context.Context, asID string, req *ttnpb.SessionKeyRequest) (*ttnpb.AppSKeyResponse, error) {
-	js, ok := cl.joinServer(req.JoinEUI)
-	if !ok {
+func (cl Client) GetAppSKey(
+	ctx context.Context, asID string, req *ttnpb.SessionKeyRequest,
+) (*ttnpb.AppSKeyResponse, error) {
+	jss := cl.matchingJoinServerClients(types.MustEUI64(req.JoinEui).OrZero())
+	if len(jss) == 0 {
 		return nil, errNotRegistered.New()
 	}
-	return js.GetAppSKey(ctx, asID, req)
+	return joinServerRace(ctx, func(js joinServerClient) (*ttnpb.AppSKeyResponse, error) {
+		return js.GetAppSKey(ctx, asID, req)
+	}, jss)
 }
 
 // HandleJoinRequest performs Join request to Join Server associated with req.JoinEUI.
-func (cl Client) HandleJoinRequest(ctx context.Context, netID types.NetID, req *ttnpb.JoinRequest) (*ttnpb.JoinResponse, error) {
+func (cl Client) HandleJoinRequest(
+	ctx context.Context, netID types.NetID, nsID *types.EUI64, req *ttnpb.JoinRequest,
+) (*ttnpb.JoinResponse, error) {
 	pld := req.Payload.GetJoinRequestPayload()
 	if pld == nil {
-		return nil, ErrMalformedMessage.New()
+		return nil, errNoJoinRequestPayload.New()
 	}
-	js, ok := cl.joinServer(pld.JoinEUI)
-	if !ok {
+	jss := cl.matchingJoinServerClients(types.MustEUI64(pld.JoinEui).OrZero())
+	if len(jss) == 0 {
 		return nil, errNotRegistered.New()
 	}
-	return js.HandleJoinRequest(ctx, netID, req)
+	return joinServerRace(ctx, func(js joinServerClient) (*ttnpb.JoinResponse, error) {
+		return js.HandleJoinRequest(ctx, netID, nsID, req)
+	}, jss)
 }

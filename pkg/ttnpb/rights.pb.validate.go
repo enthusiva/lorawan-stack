@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _rights_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on Rights with the rules defined in
 // the proto definition for this message. If any rules are violated, an error
@@ -144,7 +141,7 @@ func (m *APIKey) ValidateFields(paths ...string) error {
 		_ = subs
 		switch name {
 		case "id":
-			// no validation rules for ID
+			// no validation rules for Id
 		case "key":
 			// no validation rules for Key
 		case "name":
@@ -172,7 +169,7 @@ func (m *APIKey) ValidateFields(paths ...string) error {
 
 		case "created_at":
 
-			if v, ok := interface{}(&m.CreatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetCreatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return APIKeyValidationError{
 						field:  "created_at",
@@ -184,7 +181,7 @@ func (m *APIKey) ValidateFields(paths ...string) error {
 
 		case "updated_at":
 
-			if v, ok := interface{}(&m.UpdatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetUpdatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return APIKeyValidationError{
 						field:  "updated_at",
@@ -192,6 +189,29 @@ func (m *APIKey) ValidateFields(paths ...string) error {
 						cause:  err,
 					}
 				}
+			}
+
+		case "expires_at":
+
+			if t := m.GetExpiresAt(); t != nil {
+				ts, err := t.AsTime(), t.CheckValid()
+				if err != nil {
+					return APIKeyValidationError{
+						field:  "expires_at",
+						reason: "value is not a valid timestamp",
+						cause:  err,
+					}
+				}
+
+				now := time.Now()
+
+				if ts.Sub(now) <= 0 {
+					return APIKeyValidationError{
+						field:  "expires_at",
+						reason: "value must be greater than now",
+					}
+				}
+
 			}
 
 		default:
@@ -275,7 +295,7 @@ func (m *APIKeys) ValidateFields(paths ...string) error {
 		switch name {
 		case "api_keys":
 
-			for idx, item := range m.GetAPIKeys() {
+			for idx, item := range m.GetApiKeys() {
 				_, _ = idx, item
 
 				if v, ok := interface{}(item).(interface{ ValidateFields(...string) error }); ok {
@@ -371,7 +391,14 @@ func (m *Collaborator) ValidateFields(paths ...string) error {
 		switch name {
 		case "ids":
 
-			if v, ok := interface{}(&m.OrganizationOrUserIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetIds() == nil {
+				return CollaboratorValidationError{
+					field:  "ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CollaboratorValidationError{
 						field:  "ids",
@@ -476,7 +503,7 @@ func (m *GetCollaboratorResponse) ValidateFields(paths ...string) error {
 		switch name {
 		case "ids":
 
-			if v, ok := interface{}(&m.OrganizationOrUserIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetCollaboratorResponseValidationError{
 						field:  "ids",

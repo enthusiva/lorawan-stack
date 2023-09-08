@@ -19,7 +19,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	. "go.thethings.network/lorawan-stack/v3/pkg/devicetemplates"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -48,6 +48,6 @@ func (c *mockConverter) Format() *ttnpb.EndDeviceTemplateFormat {
 	return &c.EndDeviceTemplateFormat
 }
 
-func (c *mockConverter) Convert(context.Context, io.Reader, chan<- *ttnpb.EndDeviceTemplate) error {
+func (*mockConverter) Convert(context.Context, io.Reader, func(*ttnpb.EndDeviceTemplate) error) error {
 	return nil
 }

@@ -28,7 +28,7 @@ const headers = [
   {
     name: 'devices',
     displayName: 'Devices',
-    centered: true,
+    align: 'center',
   },
   {
     name: 'lastActivity',
@@ -98,11 +98,7 @@ export default {
   },
   paginatedExample: {
     headers,
-    rows: rows
-      .concat(rows)
-      .concat(rows)
-      .concat(rows)
-      .concat(rows),
+    rows: rows.concat(rows).concat(rows).concat(rows).concat(rows),
   },
   clickableRowsExample: {
     headers,
@@ -118,19 +114,19 @@ export default {
       {
         name: 'options',
         displayName: 'Options',
-        centered: true,
+        align: 'center',
       },
     ],
-    rows: rows.map(r => {
-      return Object.assign({}, r, {
+    rows: rows.map(r =>
+      Object.assign({}, r, {
         options: (
           <div>
             <Button icon="settings" />
             <Button danger icon="delete" />
           </div>
         ),
-      })
-    }),
+      }),
+    ),
   },
   sortableExample: {
     headers: headers.map(header => {

@@ -15,13 +15,13 @@
 package commands
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	stdio "io"
 	"os"
 	"strings"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -32,10 +32,6 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
 
-var (
-	endDeviceTemplateFlattenPaths = []string{"end_device.provisioning_data"}
-)
-
 func templateFormatIDFlags() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 	flagSet.String("format-id", "", "")
@@ -43,10 +39,22 @@ func templateFormatIDFlags() *pflag.FlagSet {
 }
 
 var (
-	errNoTemplateFormatID             = errors.DefineInvalidArgument("no_template_format_id", "no template format ID set")
-	errEndDeviceMappingNotFound       = errors.DefineNotFound("mapped_end_device_not_found", "end device mapping not found")
-	errNoEndDeviceTemplateJoinEUI     = errors.DefineInvalidArgument("no_end_device_template_join_eui", "no end device template JoinEUI set")
-	errNoEndDeviceTemplateStartDevEUI = errors.DefineInvalidArgument("no_end_device_template_start_dev_eui", "no end device template start DevEUI set")
+	errNoTemplateFormatID = errors.DefineInvalidArgument(
+		"no_template_format_id",
+		"no template format ID set",
+	)
+	errEndDeviceMappingNotFound = errors.DefineNotFound(
+		"mapped_end_device_not_found",
+		"end device mapping not found",
+	)
+	errNoEndDeviceTemplateJoinEUI = errors.DefineInvalidArgument(
+		"no_end_device_template_join_eui",
+		"no end device template JoinEUI set",
+	)
+	errNoEndDeviceTemplateStartDevEUI = errors.DefineInvalidArgument(
+		"no_end_device_template_start_dev_eui",
+		"no end device template start DevEUI set",
+	)
 )
 
 func getTemplateFormatID(flagSet *pflag.FlagSet, args []string) string {
@@ -77,25 +85,26 @@ var (
 		PersistentPreRunE: preRun(),
 		RunE: asBulk(func(cmd *cobra.Command, args []string) error {
 			forwardDeprecatedDeviceFlags(cmd.Flags())
-			paths := util.UpdateFieldMask(cmd.Flags(), setEndDeviceFlags, attributesFlags())
+			paths := util.UpdateFieldMask(cmd.Flags(), setEndDeviceFlags)
 
 			var res ttnpb.EndDeviceTemplate
 			if inputDecoder != nil {
-				_, err := inputDecoder.Decode(&res)
+				err := inputDecoder.Decode(&res)
 				if err != nil {
 					return err
 				}
-				paths = append(paths, res.FieldMask.Paths...)
+				paths = append(paths, res.FieldMask.GetPaths()...)
 			}
 
 			if mappingKey, _ := cmd.Flags().GetString("mapping-key"); mappingKey != "" {
 				res.MappingKey = mappingKey
 			}
-			if err := util.SetFields(&res.EndDevice, setEndDeviceFlags); err != nil {
+			_, err := res.EndDevice.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			res.EndDevice.Attributes = mergeAttributes(res.EndDevice.Attributes, cmd.Flags())
-			res.FieldMask.Paths = ttnpb.BottomLevelFields(paths)
+			res.FieldMask = ttnpb.FieldMask(ttnpb.BottomLevelFields(paths)...)
 
 			return io.Write(os.Stdout, config.OutputFormat, &res)
 		}),
@@ -143,19 +152,19 @@ This command takes end devices from stdin.`,
 			}
 
 			var input ttnpb.EndDevice
-			decodedPaths, err := inputDecoder.Decode(&input)
+			err := inputDecoder.Decode(&input)
 			if err != nil {
 				return err
 			}
-			decodedPaths = ttnpb.FlattenPaths(decodedPaths, endDeviceFlattenPaths)
+			decodedPaths := ttnpb.NonZeroFields(&input, ttnpb.EndDeviceFieldPathsNestedWithoutWrappers...)
+			decodedPaths = ttnpb.BottomLevelFields(decodedPaths)
 			decodedPaths = ttnpb.ExcludeFields(decodedPaths, excludePaths...)
 			paths = append(paths, decodedPaths...)
 
 			mappingKey, _ := cmd.Flags().GetString("mapping-key")
 			res := &ttnpb.EndDeviceTemplate{
-				FieldMask: pbtypes.FieldMask{
-					Paths: paths,
-				},
+				EndDevice:  &ttnpb.EndDevice{},
+				FieldMask:  ttnpb.FieldMask(paths...),
 				MappingKey: mappingKey,
 			}
 			res.EndDevice.SetFields(&input, paths...)
@@ -179,14 +188,15 @@ This command takes end device templates from stdin.`,
 			forwardDeprecatedDeviceFlags(cmd.Flags())
 
 			var input ttnpb.EndDeviceTemplate
-			_, err := inputDecoder.Decode(&input)
+			err := inputDecoder.Decode(&input)
 			if err != nil {
 				return err
 			}
 
 			var device ttnpb.EndDevice
-			device.SetFields(&input.EndDevice, input.FieldMask.Paths...)
-			if err := util.SetFields(&device, setEndDeviceFlags); err != nil {
+			device.SetFields(input.EndDevice, input.FieldMask.GetPaths()...)
+			_, err = device.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 
@@ -224,47 +234,51 @@ This command takes end device templates from stdin.`,
 				startDevEUIHex = args[1]
 			}
 			if joinEUIHex == "" {
-				return errNoEndDeviceTemplateJoinEUI
+				return errNoEndDeviceTemplateJoinEUI.New()
 			}
 			if startDevEUIHex == "" {
-				return errNoEndDeviceTemplateStartDevEUI
+				return errNoEndDeviceTemplateStartDevEUI.New()
 			}
 
 			var joinEUI types.EUI64
 			if err := joinEUI.UnmarshalText([]byte(joinEUIHex)); err != nil {
-				return err
+				return errInvalidJoinEUI.WithCause(err)
 			}
 			var startDevEUI types.EUI64
 			if err := startDevEUI.UnmarshalText([]byte(startDevEUIHex)); err != nil {
-				return err
+				return errInvalidDevEUI.WithCause(err)
 			}
 			devEUIInt := binary.BigEndian.Uint64(startDevEUI[:])
 
 			count, _ := cmd.Flags().GetInt("count")
 			for {
 				var template ttnpb.EndDeviceTemplate
-				if _, err := inputDecoder.Decode(&template); err != nil {
-					if err == stdio.EOF {
+				if err := inputDecoder.Decode(&template); err != nil {
+					if errors.Is(err, stdio.EOF) {
 						return nil
 					}
 					return err
 				}
 
 				for i := 0; i < count; i++ {
-					res := template
+					res := ttnpb.Clone(&template)
 
 					var devEUI types.EUI64
 					binary.BigEndian.PutUint64(devEUI[:], devEUIInt)
 					devEUIInt++
 
-					res.EndDevice.DeviceID = fmt.Sprintf("eui-%s", strings.ToLower(devEUI.String()))
-					res.EndDevice.JoinEUI = &joinEUI
-					res.EndDevice.DevEUI = &devEUI
-					res.FieldMask.Paths = ttnpb.BottomLevelFields(append(res.FieldMask.Paths,
-						"ids.device_id",
-						"ids.join_eui",
-						"ids.dev_eui",
-					))
+					res.EndDevice.Ids = &ttnpb.EndDeviceIdentifiers{
+						DeviceId: fmt.Sprintf("eui-%s", strings.ToLower(devEUI.String())),
+						JoinEui:  joinEUI.Bytes(),
+						DevEui:   devEUI.Bytes(),
+					}
+					res.FieldMask = ttnpb.FieldMask(
+						ttnpb.BottomLevelFields(append(res.FieldMask.GetPaths(),
+							"ids.device_id",
+							"ids.join_eui",
+							"ids.dev_eui",
+						))...,
+					)
 
 					if err := io.Write(os.Stdout, config.OutputFormat, &res); err != nil {
 						return err
@@ -296,9 +310,10 @@ This command takes end device templates from stdin.`,
 		Short:             "Convert data to an end device template (EXPERIMENTAL)",
 		PersistentPreRunE: preRun(),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = optionalAuth()
 			formatID := getTemplateFormatID(cmd.Flags(), args)
 			if formatID == "" {
-				return errNoTemplateFormatID
+				return errNoTemplateFormatID.New()
 			}
 			data, err := getDataBytes("", cmd.Flags())
 			if err != nil {
@@ -309,17 +324,23 @@ This command takes end device templates from stdin.`,
 			if err != nil {
 				return err
 			}
-			stream, err := ttnpb.NewEndDeviceTemplateConverterClient(dtc).Convert(ctx, &ttnpb.ConvertEndDeviceTemplateRequest{
-				FormatID: formatID,
-				Data:     data,
-			})
+
+			req := &ttnpb.ConvertEndDeviceTemplateRequest{
+				FormatId:            formatID,
+				Data:                data,
+				EndDeviceVersionIds: &ttnpb.EndDeviceVersionIdentifiers{},
+			}
+			if _, err = req.EndDeviceVersionIds.SetFromFlags(cmd.Flags(), "end-device-version-ids"); err != nil {
+				return err
+			}
+			stream, err := ttnpb.NewEndDeviceTemplateConverterClient(dtc).Convert(ctx, req)
 			if err != nil {
 				return err
 			}
 
 			for {
 				dev, err := stream.Recv()
-				if err == stdio.EOF {
+				if errors.Is(err, stdio.EOF) {
 					return nil
 				}
 				if err != nil {
@@ -367,20 +388,20 @@ command to assign EUIs to map to end device templates.`,
 					return err
 				}
 			}
-			var input []ttnpb.EndDeviceTemplate
+			var input []*ttnpb.EndDeviceTemplate
 			for {
 				var entry ttnpb.EndDeviceTemplate
-				_, err := inputDecoder.Decode(&entry)
+				err := inputDecoder.Decode(&entry)
 				if err != nil {
-					if err == stdio.EOF {
+					if errors.Is(err, stdio.EOF) {
 						break
 					}
 					return err
 				}
-				input = append(input, entry)
+				input = append(input, &entry)
 			}
 
-			var mapping []ttnpb.EndDeviceTemplate
+			var mapping []*ttnpb.EndDeviceTemplate
 			reader, err := getDataReader("mapping", cmd.Flags())
 			if err != nil {
 				return err
@@ -391,13 +412,13 @@ command to assign EUIs to map to end device templates.`,
 			}
 			for {
 				var entry ttnpb.EndDeviceTemplate
-				if _, err := mappingDecoder.Decode(&entry); err != nil {
-					if err == stdio.EOF {
+				if err := mappingDecoder.Decode(&entry); err != nil {
+					if errors.Is(err, stdio.EOF) {
 						break
 					}
 					return err
 				}
-				mapping = append(mapping, entry)
+				mapping = append(mapping, &entry)
 			}
 
 			for _, inputEntry := range input {
@@ -405,27 +426,34 @@ command to assign EUIs to map to end device templates.`,
 				for _, e := range mapping {
 					switch {
 					case e.MappingKey != "" && e.MappingKey == inputEntry.MappingKey:
-					case e.EndDevice.ApplicationID != "" && e.EndDevice.ApplicationID == inputEntry.EndDevice.ApplicationID &&
-						e.EndDevice.DeviceID != "" && e.EndDevice.DeviceID == inputEntry.EndDevice.DeviceID:
-					case e.EndDevice.DevEUI != nil && inputEntry.EndDevice.DevEUI != nil && e.EndDevice.DevEUI.Equal(*inputEntry.EndDevice.DevEUI):
-					case e.EndDevice.EndDeviceIdentifiers.IsZero():
+					case e.EndDevice.Ids != nil && inputEntry.EndDevice.Ids != nil &&
+						e.EndDevice.Ids.ApplicationIds != nil && inputEntry.EndDevice.Ids.ApplicationIds != nil &&
+						e.EndDevice.Ids.ApplicationIds.ApplicationId == inputEntry.EndDevice.Ids.ApplicationIds.ApplicationId &&
+						e.EndDevice.Ids.DeviceId != "" && e.EndDevice.Ids.DeviceId == inputEntry.EndDevice.Ids.DeviceId:
+					case e.EndDevice.Ids != nil && e.EndDevice.Ids.DevEui != nil &&
+						inputEntry.EndDevice.Ids != nil && inputEntry.EndDevice.Ids.DevEui != nil &&
+						bytes.Equal(e.EndDevice.Ids.DevEui, inputEntry.EndDevice.Ids.DevEui):
+					case e.EndDevice.Ids.IsZero():
 					default:
 						continue
 					}
-					mappedEntry = &e
+					mappedEntry = ttnpb.Clone(e)
 					break
 				}
 				if mappedEntry == nil {
 					if fail, _ := cmd.Flags().GetBool("fail-not-found"); fail {
-						return errEndDeviceMappingNotFound
+						return errEndDeviceMappingNotFound.New()
 					}
 					continue
 				}
 
 				var res ttnpb.EndDeviceTemplate
-				res.EndDevice.SetFields(&inputEntry.EndDevice, inputEntry.FieldMask.Paths...)
-				res.EndDevice.SetFields(&mappedEntry.EndDevice, mappedEntry.FieldMask.Paths...)
-				res.FieldMask.Paths = ttnpb.BottomLevelFields(append(inputEntry.FieldMask.Paths, mappedEntry.FieldMask.Paths...))
+				res.EndDevice.SetFields(inputEntry.EndDevice, inputEntry.FieldMask.GetPaths()...)
+				res.EndDevice.SetFields(mappedEntry.EndDevice, mappedEntry.FieldMask.GetPaths()...)
+				res.FieldMask = ttnpb.FieldMask(
+					ttnpb.BottomLevelFields(
+						append(inputEntry.FieldMask.GetPaths(), mappedEntry.FieldMask.GetPaths()...),
+					)...)
 
 				if err := io.Write(os.Stdout, config.OutputFormat, &res); err != nil {
 					return err
@@ -437,7 +465,6 @@ command to assign EUIs to map to end device templates.`,
 )
 
 func init() {
-	endDeviceTemplatesExtendCommand.Flags().AddFlagSet(attributesFlags())
 	endDeviceTemplatesExtendCommand.Flags().String("mapping-key", "", "")
 	endDeviceTemplatesCommand.AddCommand(endDeviceTemplatesExtendCommand)
 	endDeviceTemplatesCreateCommand.Flags().AddFlagSet(selectEndDeviceIDFlags())
@@ -451,6 +478,11 @@ func init() {
 	endDeviceTemplatesCommand.AddCommand(endDeviceTemplatesListFormats)
 	endDeviceTemplatesFromDataCommand.Flags().AddFlagSet(templateFormatIDFlags())
 	endDeviceTemplatesFromDataCommand.Flags().AddFlagSet(dataFlags("", ""))
+	ttnpb.AddSetFlagsForEndDeviceVersionIdentifiers(
+		endDeviceTemplatesFromDataCommand.Flags(),
+		"end-device-version-ids",
+		false,
+	)
 	endDeviceTemplatesCommand.AddCommand(endDeviceTemplatesFromDataCommand)
 	endDeviceTemplatesMapCommand.Flags().AddFlagSet(dataFlags("input", "input file"))
 	endDeviceTemplatesMapCommand.Flags().AddFlagSet(dataFlags("mapping", "mapping file"))

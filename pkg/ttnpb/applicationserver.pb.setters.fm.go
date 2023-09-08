@@ -2,11 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *ApplicationLink) SetFields(src *ApplicationLink, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -36,16 +32,6 @@ func (dst *ApplicationLink) SetFields(src *ApplicationLink, paths ...string) err
 					dst.DefaultFormatters = nil
 				}
 			}
-		case "tls":
-			if len(subs) > 0 {
-				return fmt.Errorf("'tls' has no subfields, but %s were specified", subs)
-			}
-			if src != nil {
-				dst.TLS = src.TLS
-			} else {
-				var zero bool
-				dst.TLS = zero
-			}
 		case "skip_payload_crypto":
 			if len(subs) > 0 {
 				return fmt.Errorf("'skip_payload_crypto' has no subfields, but %s were specified", subs)
@@ -69,19 +55,26 @@ func (dst *GetApplicationLinkRequest) SetFields(src *GetApplicationLinkRequest, 
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "field_mask":
@@ -91,8 +84,7 @@ func (dst *GetApplicationLinkRequest) SetFields(src *GetApplicationLinkRequest, 
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -108,37 +100,51 @@ func (dst *SetApplicationLinkRequest) SetFields(src *SetApplicationLinkRequest, 
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "link":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationLink
-				if src != nil {
-					newSrc = &src.ApplicationLink
+				if (src == nil || src.Link == nil) && dst.Link == nil {
+					continue
 				}
-				newDst = &dst.ApplicationLink
+				if src != nil {
+					newSrc = src.Link
+				}
+				if dst.Link != nil {
+					newDst = dst.Link
+				} else {
+					newDst = &ApplicationLink{}
+					dst.Link = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationLink = src.ApplicationLink
+					dst.Link = src.Link
 				} else {
-					var zero ApplicationLink
-					dst.ApplicationLink = zero
+					dst.Link = nil
 				}
 			}
 		case "field_mask":
@@ -148,8 +154,7 @@ func (dst *SetApplicationLinkRequest) SetFields(src *SetApplicationLinkRequest, 
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -233,26 +238,51 @@ func (dst *AsConfiguration) SetFields(src *AsConfiguration, paths ...string) err
 		case "pubsub":
 			if len(subs) > 0 {
 				var newDst, newSrc *AsConfiguration_PubSub
-				if (src == nil || src.PubSub == nil) && dst.PubSub == nil {
+				if (src == nil || src.Pubsub == nil) && dst.Pubsub == nil {
 					continue
 				}
 				if src != nil {
-					newSrc = src.PubSub
+					newSrc = src.Pubsub
 				}
-				if dst.PubSub != nil {
-					newDst = dst.PubSub
+				if dst.Pubsub != nil {
+					newDst = dst.Pubsub
 				} else {
 					newDst = &AsConfiguration_PubSub{}
-					dst.PubSub = newDst
+					dst.Pubsub = newDst
 				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.PubSub = src.PubSub
+					dst.Pubsub = src.Pubsub
 				} else {
-					dst.PubSub = nil
+					dst.Pubsub = nil
+				}
+			}
+		case "webhooks":
+			if len(subs) > 0 {
+				var newDst, newSrc *AsConfiguration_Webhooks
+				if (src == nil || src.Webhooks == nil) && dst.Webhooks == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.Webhooks
+				}
+				if dst.Webhooks != nil {
+					newDst = dst.Webhooks
+				} else {
+					newDst = &AsConfiguration_Webhooks{}
+					dst.Webhooks = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.Webhooks = src.Webhooks
+				} else {
+					dst.Webhooks = nil
 				}
 			}
 
@@ -266,9 +296,6 @@ func (dst *AsConfiguration) SetFields(src *AsConfiguration, paths ...string) err
 func (dst *GetAsConfigurationRequest) SetFields(src *GetAsConfigurationRequest, paths ...string) error {
 	if len(paths) != 0 {
 		return fmt.Errorf("message GetAsConfigurationRequest has no fields, but paths %s were specified", paths)
-	}
-	if src != nil {
-		*dst = *src
 	}
 	return nil
 }
@@ -414,8 +441,7 @@ func (dst *EncodeDownlinkRequest) SetFields(src *EncodeDownlinkRequest, paths ..
 			if src != nil {
 				dst.Formatter = src.Formatter
 			} else {
-				var zero PayloadFormatter
-				dst.Formatter = zero
+				dst.Formatter = 0
 			}
 		case "parameter":
 			if len(subs) > 0 {
@@ -556,8 +582,7 @@ func (dst *DecodeUplinkRequest) SetFields(src *DecodeUplinkRequest, paths ...str
 			if src != nil {
 				dst.Formatter = src.Formatter
 			} else {
-				var zero PayloadFormatter
-				dst.Formatter = zero
+				dst.Formatter = 0
 			}
 		case "parameter":
 			if len(subs) > 0 {
@@ -698,8 +723,7 @@ func (dst *DecodeDownlinkRequest) SetFields(src *DecodeDownlinkRequest, paths ..
 			if src != nil {
 				dst.Formatter = src.Formatter
 			} else {
-				var zero PayloadFormatter
-				dst.Formatter = zero
+				dst.Formatter = 0
 			}
 		case "parameter":
 			if len(subs) > 0 {
@@ -791,6 +815,36 @@ func (dst *AsConfiguration_PubSub) SetFields(src *AsConfiguration_PubSub, paths 
 	return nil
 }
 
+func (dst *AsConfiguration_Webhooks) SetFields(src *AsConfiguration_Webhooks, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "unhealthy_attempts_threshold":
+			if len(subs) > 0 {
+				return fmt.Errorf("'unhealthy_attempts_threshold' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.UnhealthyAttemptsThreshold = src.UnhealthyAttemptsThreshold
+			} else {
+				var zero int64
+				dst.UnhealthyAttemptsThreshold = zero
+			}
+		case "unhealthy_retry_interval":
+			if len(subs) > 0 {
+				return fmt.Errorf("'unhealthy_retry_interval' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.UnhealthyRetryInterval = src.UnhealthyRetryInterval
+			} else {
+				dst.UnhealthyRetryInterval = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
 func (dst *AsConfiguration_PubSub_Providers) SetFields(src *AsConfiguration_PubSub_Providers, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
@@ -799,30 +853,18 @@ func (dst *AsConfiguration_PubSub_Providers) SetFields(src *AsConfiguration_PubS
 				return fmt.Errorf("'mqtt' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.MQTT = src.MQTT
+				dst.Mqtt = src.Mqtt
 			} else {
-				var zero AsConfiguration_PubSub_Providers_Status
-				dst.MQTT = zero
+				dst.Mqtt = 0
 			}
 		case "nats":
 			if len(subs) > 0 {
 				return fmt.Errorf("'nats' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.NATS = src.NATS
+				dst.Nats = src.Nats
 			} else {
-				var zero AsConfiguration_PubSub_Providers_Status
-				dst.NATS = zero
-			}
-		case "aws_iot":
-			if len(subs) > 0 {
-				return fmt.Errorf("'aws_iot' has no subfields, but %s were specified", subs)
-			}
-			if src != nil {
-				dst.AWSIoT = src.AWSIoT
-			} else {
-				var zero AsConfiguration_PubSub_Providers_Status
-				dst.AWSIoT = zero
+				dst.Nats = 0
 			}
 
 		default:

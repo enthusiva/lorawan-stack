@@ -17,11 +17,12 @@ package networkserver
 
 import (
 	"context"
-	"crypto/tls"
+	"crypto/rand"
 	"fmt"
+	"os"
 	"sync"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
@@ -31,20 +32,29 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/random"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/hooks"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpclog"
+	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpctracer"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/tracing/tracer"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"go.thethings.network/lorawan-stack/v3/pkg/workerpool"
 	"google.golang.org/grpc"
 )
 
 const (
 	// recentDownlinkCount is the maximum amount of recent downlinks stored per device.
-	recentDownlinkCount = 20
+	recentDownlinkCount = 5
 
 	// fOptsCapacity is the maximum length of FOpts in bytes.
 	fOptsCapacity = 15
 
-	// infrastructureDelay represents a time interval Network Server uses as a buffer to account for infrastructure delay.
+	// infrastructureDelay represents a time interval that the Network Server uses as a buffer to account for infrastructure delay.
 	infrastructureDelay = time.Second
+
+	// absoluteTimeSchedulingDelay represents a time interval that the Network Server uses as a buffer to account for the transmission
+	// time while scheduling absolute time downlinks, since absolute time scheduling considers the absolute time to be the timestamp
+	// for the arrival, not start, of the transmission.
+	absoluteTimeSchedulingDelay = 5 * time.Second
 
 	// peeringScheduleDelay is the schedule delay used for scheduling downlink via peering.
 	// The schedule delay is used to estimate the transmission time, which is used as the minimum time for a subsequent transmission.
@@ -52,9 +62,6 @@ const (
 	// When scheduling downlink to a cluster Gateway Server, the schedule delay is reported by the Gateway Server and is accurate.
 	// When scheduling downlink via peering, the schedule delay is unknown, and should be sufficiently high to avoid conflicts.
 	peeringScheduleDelay = infrastructureDelay + 4*time.Second
-
-	// networkInitiatedDownlinkInterval is the minimum time.Duration passed before a network-initiated(e.g. Class B or C) downlink following an arbitrary downlink.
-	networkInitiatedDownlinkInterval = time.Second
 )
 
 // windowDurationFunc is a function, which is used by Network Server to determine the duration of deduplication and cooldown windows.
@@ -66,15 +73,37 @@ func makeWindowDurationFunc(d time.Duration) windowDurationFunc {
 }
 
 // newDevAddrFunc is a function, which is used by Network Server to derive new DevAddrs.
-type newDevAddrFunc func(ctx context.Context, dev *ttnpb.EndDevice) types.DevAddr
+type newDevAddrFunc func(ctx context.Context) types.DevAddr
 
 // makeNewDevAddrFunc returns a newDevAddrFunc, which derives DevAddrs using specified prefixes.
 func makeNewDevAddrFunc(ps ...types.DevAddrPrefix) newDevAddrFunc {
-	return func(ctx context.Context, dev *ttnpb.EndDevice) types.DevAddr {
+	weights := make([]int64, len(ps))
+	totalWeight := int64(0)
+	for i, p := range ps {
+		weights[i] = int64(1 << (32 - p.Length))
+		totalWeight += weights[i]
+	}
+	return func(ctx context.Context) types.DevAddr {
 		var devAddr types.DevAddr
-		random.Read(devAddr[:])
-		p := ps[random.Intn(len(ps))]
-		return devAddr.WithPrefix(p)
+		_, _ = rand.Read(devAddr[:])
+		r := random.Int63n(totalWeight)
+		for i, weight := range weights {
+			r -= weight
+			if r < 0 {
+				return devAddr.WithPrefix(ps[i])
+			}
+		}
+		panic("unreachable")
+	}
+}
+
+// devAddrPrefixesFunc is a function, which is used by the Network Server to list it's DevAddrPrefixes.
+type devAddrPrefixesFunc func(ctx context.Context) []types.DevAddrPrefix
+
+// makeDevAddrPrefixesFunc returns a devAddrPrefixesFunc, which always returns ps.
+func makeDevAddrPrefixesFunc(ps ...types.DevAddrPrefix) devAddrPrefixesFunc {
+	return func(ctx context.Context) []types.DevAddrPrefix {
+		return ps
 	}
 }
 
@@ -92,20 +121,30 @@ type DownlinkPriorities struct {
 
 // InteropClient is a client, which Network Server can use for interoperability.
 type InteropClient interface {
-	HandleJoinRequest(context.Context, types.NetID, *ttnpb.JoinRequest) (*ttnpb.JoinResponse, error)
+	HandleJoinRequest(
+		ctx context.Context, netID types.NetID, nsID *types.EUI64, req *ttnpb.JoinRequest,
+	) (*ttnpb.JoinResponse, error)
 }
 
 // NetworkServer implements the Network Server component.
 //
 // The Network Server exposes the GsNs, AsNs, DeviceRegistry and ApplicationDownlinkQueue services.
 type NetworkServer struct {
+	ttnpb.UnimplementedAsNsServer
+	ttnpb.UnimplementedGsNsServer
+	ttnpb.UnimplementedNsEndDeviceRegistryServer
+	ttnpb.UnimplementedNsServer
+
 	*component.Component
 	ctx context.Context
 
-	devices DeviceRegistry
+	devices      DeviceRegistry
+	batchDevices *nsEndDeviceBatchRegistry
 
-	netID      types.NetID
-	newDevAddr newDevAddrFunc
+	netID           types.NetID
+	clusterID       string
+	newDevAddr      newDevAddrFunc
+	devAddrPrefixes devAddrPrefixesFunc
 
 	applicationServers *sync.Map // string -> *applicationUpStream
 	applicationUplinks ApplicationUplinkQueue
@@ -116,14 +155,19 @@ type NetworkServer struct {
 	deduplicationWindow windowDurationFunc
 	collectionWindow    windowDurationFunc
 
-	defaultMACSettings ttnpb.MACSettings
+	defaultMACSettings *ttnpb.MACSettings
 
 	interopClient InteropClient
+	interopNSID   *types.EUI64
 
 	uplinkDeduplicator UplinkDeduplicator
 
 	deviceKEKLabel        string
 	downlinkQueueCapacity int
+
+	scheduledDownlinkMatcher ScheduledDownlinkMatcher
+
+	uplinkSubmissionPool workerpool.WorkerPool[[]*ttnpb.ApplicationUp]
 }
 
 // Option configures the NetworkServer.
@@ -132,22 +176,26 @@ type Option func(ns *NetworkServer)
 var (
 	DefaultOptions []Option
 
-	processTaskBackoff = &component.TaskBackoffConfig{
-		Jitter:       component.DefaultTaskBackoffConfig.Jitter,
-		IntervalFunc: component.MakeTaskBackoffIntervalFunc(true, component.DefaultTaskBackoffResetDuration, component.DefaultTaskBackoffIntervals[:]...),
+	processTaskBackoff = &task.BackoffConfig{
+		Jitter:       task.DefaultBackoffConfig.Jitter,
+		IntervalFunc: task.MakeBackoffIntervalFunc(true, task.DefaultBackoffResetDuration, task.DefaultBackoffIntervals[:]...),
 	}
 )
 
 const (
-	applicationUplinkProcessTaskName = "process_application_uplink"
-	downlinkProcessTaskName          = "process_downlink"
+	applicationUplinkProcessTaskName  = "process_application_uplink"
+	downlinkProcessTaskName           = "process_downlink"
+	applicationUplinkDispatchTaskName = "dispatch_application_uplink"
+	downlinkDispatchTaskName          = "dispatch_downlink"
 
 	maxInt = int(^uint(0) >> 1)
 )
 
 // New returns new NetworkServer.
 func New(c *component.Component, conf *Config, opts ...Option) (*NetworkServer, error) {
-	ctx := log.NewContextWithField(c.Context(), "namespace", "networkserver")
+	ctx := tracer.NewContextWithTracer(c.Context(), tracerNamespace)
+
+	ctx = log.NewContextWithField(ctx, "namespace", logNamespace)
 
 	switch {
 	case conf.DeduplicationWindow == 0:
@@ -156,10 +204,16 @@ func New(c *component.Component, conf *Config, opts ...Option) (*NetworkServer, 
 		return nil, errInvalidConfiguration.WithCause(errors.New("CooldownWindow must be greater than 0"))
 	case conf.Devices == nil:
 		panic(errInvalidConfiguration.WithCause(errors.New("Devices is not specified")))
-	case conf.DownlinkTasks == nil:
-		panic(errInvalidConfiguration.WithCause(errors.New("DownlinkTasks is not specified")))
+	case conf.DownlinkTaskQueue.NumConsumers == 0:
+		return nil, errInvalidConfiguration.WithCause(errors.New("DownlinkTaskQueue.NumConsumers must be greater than 0"))
+	case conf.ApplicationUplinkQueue.NumConsumers == 0:
+		return nil, errInvalidConfiguration.WithCause(errors.New("ApplicationUplinkQueue.NumConsumers must be greater than 0"))
+	case conf.DownlinkTaskQueue.Queue == nil:
+		panic(errInvalidConfiguration.WithCause(errors.New("DownlinkTaskQueue is not specified")))
 	case conf.UplinkDeduplicator == nil:
 		panic(errInvalidConfiguration.WithCause(errors.New("UplinkDeduplicator is not specified")))
+	case conf.ScheduledDownlinkMatcher == nil:
+		panic(errInvalidConfiguration.WithCause(errors.New("ScheduledDownlinkMatcher is not specified")))
 	case conf.DownlinkQueueCapacity < 0:
 		return nil, errInvalidConfiguration.WithCause(errors.New("Downlink queue capacity must be greater than or equal to 0"))
 	case conf.DownlinkQueueCapacity > maxInt/2:
@@ -186,42 +240,52 @@ func New(c *component.Component, conf *Config, opts ...Option) (*NetworkServer, 
 
 	var interopCl InteropClient
 	if !conf.Interop.IsZero() {
-		interopConf := conf.Interop
-		interopConf.GetFallbackTLSConfig = func(ctx context.Context) (*tls.Config, error) {
-			return c.GetTLSClientConfig(ctx)
-		}
+		interopConf := conf.Interop.InteropClient
 		interopConf.BlobConfig = c.GetBaseConfig(ctx).Blob
-		if interopConf.HTTPClient == nil {
-			httpClient, err := c.HTTPClient(ctx)
-			if err != nil {
-				return nil, err
-			}
-			interopConf.HTTPClient = httpClient
-		}
 
-		interopCl, err = interop.NewClient(ctx, interopConf)
+		interopCl, err = interop.NewClient(ctx, interopConf, c, interop.SelectorNetworkServer)
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	defaultMACSettings, err := conf.DefaultMACSettings.Parse()
+	if err != nil {
+		return nil, err
+	}
+
 	ns := &NetworkServer{
-		Component:             c,
-		ctx:                   ctx,
-		netID:                 conf.NetID,
-		newDevAddr:            makeNewDevAddrFunc(devAddrPrefixes...),
-		applicationServers:    &sync.Map{},
-		applicationUplinks:    conf.ApplicationUplinkQueue.Queue,
-		deduplicationWindow:   makeWindowDurationFunc(conf.DeduplicationWindow),
-		collectionWindow:      makeWindowDurationFunc(conf.DeduplicationWindow + conf.CooldownWindow),
-		devices:               wrapEndDeviceRegistryWithReplacedFields(conf.Devices, replacedEndDeviceFields...),
-		downlinkTasks:         conf.DownlinkTasks,
-		downlinkPriorities:    downlinkPriorities,
-		defaultMACSettings:    conf.DefaultMACSettings.Parse(),
-		interopClient:         interopCl,
-		uplinkDeduplicator:    conf.UplinkDeduplicator,
-		deviceKEKLabel:        conf.DeviceKEKLabel,
-		downlinkQueueCapacity: conf.DownlinkQueueCapacity,
+		Component:                c,
+		ctx:                      ctx,
+		netID:                    conf.NetID,
+		clusterID:                conf.ClusterID,
+		newDevAddr:               makeNewDevAddrFunc(devAddrPrefixes...),
+		devAddrPrefixes:          makeDevAddrPrefixesFunc(devAddrPrefixes...),
+		applicationServers:       &sync.Map{},
+		applicationUplinks:       conf.ApplicationUplinkQueue.Queue,
+		deduplicationWindow:      makeWindowDurationFunc(conf.DeduplicationWindow),
+		collectionWindow:         makeWindowDurationFunc(conf.DeduplicationWindow + conf.CooldownWindow),
+		devices:                  wrapEndDeviceRegistryWithReplacedFields(conf.Devices, replacedEndDeviceFields...),
+		downlinkTasks:            conf.DownlinkTaskQueue.Queue,
+		downlinkPriorities:       downlinkPriorities,
+		defaultMACSettings:       defaultMACSettings,
+		interopClient:            interopCl,
+		interopNSID:              conf.Interop.ID,
+		uplinkDeduplicator:       conf.UplinkDeduplicator,
+		deviceKEKLabel:           conf.DeviceKEKLabel,
+		downlinkQueueCapacity:    conf.DownlinkQueueCapacity,
+		scheduledDownlinkMatcher: conf.ScheduledDownlinkMatcher,
+	}
+	ns.uplinkSubmissionPool = workerpool.NewWorkerPool(workerpool.Config[[]*ttnpb.ApplicationUp]{
+		Component:  c,
+		Context:    ctx,
+		Name:       "uplink_submission",
+		Handler:    ns.handleUplinkSubmission,
+		QueueSize:  int(conf.ApplicationUplinkQueue.FastBufferSize),
+		MaxWorkers: int(conf.ApplicationUplinkQueue.FastNumConsumers),
+	})
+	ns.batchDevices = &nsEndDeviceBatchRegistry{
+		NS: ns,
 	}
 	ctx = ns.Context()
 
@@ -232,24 +296,70 @@ func New(c *component.Component, conf *Config, opts ...Option) (*NetworkServer, 
 		opt(ns)
 	}
 
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.GsNs", rpclog.NamespaceHook, rpclog.UnaryNamespaceHook("networkserver"))
-	hooks.RegisterStreamHook("/ttn.lorawan.v3.AsNs", rpclog.NamespaceHook, rpclog.StreamNamespaceHook("networkserver"))
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.AsNs", rpclog.NamespaceHook, rpclog.UnaryNamespaceHook("networkserver"))
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.Ns", rpclog.NamespaceHook, rpclog.UnaryNamespaceHook("networkserver"))
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.GsNs", cluster.HookName, c.ClusterAuthUnaryHook())
-	hooks.RegisterStreamHook("/ttn.lorawan.v3.AsNs", cluster.HookName, c.ClusterAuthStreamHook())
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.AsNs", cluster.HookName, c.ClusterAuthUnaryHook())
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.Ns", cluster.HookName, c.ClusterAuthUnaryHook())
-
-	for id, f := range map[string]func(context.Context) error{
-		applicationUplinkProcessTaskName: ns.processApplicationUplinkTask,
-		downlinkProcessTaskName:          ns.processDownlinkTask,
+	for _, hook := range []struct {
+		name       string
+		middleware hooks.UnaryHandlerMiddleware
+	}{
+		{rpctracer.TracerHook, rpctracer.UnaryTracerHook(tracerNamespace)},
+		{rpclog.NamespaceHook, rpclog.UnaryNamespaceHook(logNamespace)},
 	} {
-		ns.RegisterTask(&component.TaskConfig{
+		for _, filter := range []string{
+			"/ttn.lorawan.v3.GsNs",
+			"/ttn.lorawan.v3.AsNs",
+			"/ttn.lorawan.v3.NsEndDeviceRegistry",
+			"/ttn.lorawan.v3.NsEndDeviceBatchRegistry",
+			"/ttn.lorawan.v3.Ns",
+		} {
+			c.GRPC.RegisterUnaryHook(filter, hook.name, hook.middleware)
+		}
+	}
+	c.GRPC.RegisterUnaryHook("/ttn.lorawan.v3.GsNs", cluster.HookName, c.ClusterAuthUnaryHook())
+	c.GRPC.RegisterUnaryHook("/ttn.lorawan.v3.AsNs", cluster.HookName, c.ClusterAuthUnaryHook())
+	c.GRPC.RegisterUnaryHook("/ttn.lorawan.v3.Ns", cluster.HookName, c.ClusterAuthUnaryHook())
+
+	c.GRPC.RegisterStreamHook("/ttn.lorawan.v3.AsNs", rpctracer.TracerHook, rpctracer.StreamTracerHook(tracerNamespace))
+	c.GRPC.RegisterStreamHook("/ttn.lorawan.v3.AsNs", rpclog.NamespaceHook, rpclog.StreamNamespaceHook(logNamespace))
+	c.GRPC.RegisterStreamHook("/ttn.lorawan.v3.AsNs", cluster.HookName, c.ClusterAuthStreamHook())
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+	consumerIDPrefix := fmt.Sprintf("%s:%d", hostname, os.Getpid())
+	for id, dispatcher := range map[string]interface {
+		Dispatch(context.Context, string) error
+	}{
+		downlinkDispatchTaskName:          ns.downlinkTasks,
+		applicationUplinkDispatchTaskName: ns.applicationUplinks,
+	} {
+		dispatcher := dispatcher
+		ns.RegisterTask(&task.Config{
 			Context: ctx,
 			ID:      id,
-			Func:    f,
-			Restart: component.TaskRestartAlways,
+			Func: func(ctx context.Context) error {
+				return dispatcher.Dispatch(ctx, consumerIDPrefix)
+			},
+			Restart: task.RestartAlways,
+			Backoff: processTaskBackoff,
+		})
+	}
+	for i := uint64(0); i < conf.ApplicationUplinkQueue.NumConsumers; i++ {
+		consumerID := fmt.Sprintf("%s:%d", consumerIDPrefix, i)
+		ns.RegisterTask(&task.Config{
+			Context: ctx,
+			ID:      fmt.Sprintf("%s_%d", applicationUplinkProcessTaskName, i),
+			Func:    ns.createProcessApplicationUplinkTask(consumerID),
+			Restart: task.RestartAlways,
+			Backoff: processTaskBackoff,
+		})
+	}
+	for i := uint64(0); i < conf.DownlinkTaskQueue.NumConsumers; i++ {
+		consumerID := fmt.Sprintf("%s:%d", consumerIDPrefix, i)
+		ns.RegisterTask(&task.Config{
+			Context: ctx,
+			ID:      fmt.Sprintf("%s_%d", downlinkProcessTaskName, i),
+			Func:    ns.createProcessDownlinkTask(consumerID),
+			Restart: task.RestartAlways,
 			Backoff: processTaskBackoff,
 		})
 	}
@@ -267,12 +377,14 @@ func (ns *NetworkServer) RegisterServices(s *grpc.Server) {
 	ttnpb.RegisterGsNsServer(s, ns)
 	ttnpb.RegisterAsNsServer(s, ns)
 	ttnpb.RegisterNsEndDeviceRegistryServer(s, ns)
+	ttnpb.RegisterNsEndDeviceBatchRegistryServer(s, ns.batchDevices)
 	ttnpb.RegisterNsServer(s, ns)
 }
 
 // RegisterHandlers registers gRPC handlers.
 func (ns *NetworkServer) RegisterHandlers(s *runtime.ServeMux, conn *grpc.ClientConn) {
 	ttnpb.RegisterNsEndDeviceRegistryHandler(ns.Context(), s, conn)
+	ttnpb.RegisterNsEndDeviceBatchRegistryHandler(ns.Context(), s, conn) // nolint:errcheck
 	ttnpb.RegisterNsHandler(ns.Context(), s, conn)
 }
 

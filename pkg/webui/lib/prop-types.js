@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ import originalPropTypes from 'prop-types'
 
 import ONLINE_STATUS from '@ttn-lw/constants/online-status'
 import { components } from '@ttn-lw/constants/components'
+import { ORGANIZATION, USER, APPLICATION, GATEWAY, CLIENT } from '@console/constants/entities'
 
 const PropTypes = { ...originalPropTypes }
 
@@ -71,6 +72,25 @@ PropTypes.inputWidth = PropTypes.oneOf(['xxs', 'xs', 's', 'm', 'l', 'full'])
 PropTypes.onlineStatus = PropTypes.oneOf(Object.values(ONLINE_STATUS))
 
 // Entities and entity-related prop-types.
+//
+PropTypes.entityLocation = PropTypes.shape({
+  latitude: PropTypes.number,
+  longitude: PropTypes.number,
+  altitude: PropTypes.number,
+  source: PropTypes.string,
+})
+
+PropTypes.entityLocations = PropTypes.shape({
+  user: PropTypes.entityLocation,
+  'frm-payload': PropTypes.entityLocation,
+  'lora-cloud-device-management-v1-gnss': PropTypes.entityLocation,
+  'lora-cloud-device-management-v1-wifi': PropTypes.entityLocation,
+  'lora-cloud-device-management-v1-unknown': PropTypes.entityLocation,
+  'lora-cloud-geolocation-v3-gnss': PropTypes.entityLocation,
+  'lora-cloud-geolocation-v3-rssi': PropTypes.entityLocation,
+  'lora-cloud-geolocation-v3-tdoa': PropTypes.entityLocation,
+  'lora-cloud-geolocation-v3-rssitdoacombined': PropTypes.entityLocation,
+})
 
 PropTypes.event = PropTypes.shape({
   name: PropTypes.string.isRequired,
@@ -80,8 +100,29 @@ PropTypes.event = PropTypes.shape({
 })
 PropTypes.events = PropTypes.arrayOf(PropTypes.event)
 
+PropTypes.eventFilter = PropTypes.shape({
+  id: PropTypes.string,
+  filter: PropTypes.arrayOf(PropTypes.string),
+  filterRegExp: PropTypes.arrayOf(PropTypes.string),
+})
+PropTypes.eventFilters = PropTypes.arrayOf(PropTypes.eventFilter)
+
+PropTypes.location = PropTypes.shape({
+  hash: PropTypes.string,
+  key: PropTypes.string,
+  pathname: PropTypes.string.isRequired,
+  search: PropTypes.string,
+  state: PropTypes.shape({
+    info: PropTypes.message,
+  }),
+})
+
 PropTypes.gateway = PropTypes.shape({
-  antennas: PropTypes.Array,
+  antennas: PropTypes.arrayOf(
+    PropTypes.shape({
+      location: PropTypes.entityLocation,
+    }),
+  ),
   ids: PropTypes.shape({
     gateway_id: PropTypes.string,
   }).isRequired,
@@ -95,7 +136,8 @@ PropTypes.gateway = PropTypes.shape({
 })
 
 PropTypes.gatewayStats = PropTypes.shape({
-  connected_at: PropTypes.string.isRequired,
+  connected_at: PropTypes.string,
+  disconnected_at: PropTypes.string,
   last_uplink_received_at: PropTypes.string,
   protocol: PropTypes.string,
   uplink_count: PropTypes.string,
@@ -150,7 +192,7 @@ PropTypes.user = PropTypes.shape({
 
 PropTypes.profilePicture = PropTypes.shape({
   sizes: PropTypes.shape({
-    '0': PropTypes.string,
+    0: PropTypes.string,
   }),
 })
 
@@ -193,13 +235,7 @@ PropTypes.device = PropTypes.shape({
   created_at: PropTypes.string,
   updated_at: PropTypes.string,
   description: PropTypes.string,
-  locations: PropTypes.shape({
-    // User is an object containing latitude and longitude property of number.
-    user: PropTypes.shape({
-      latitude: PropTypes.number,
-      longitude: PropTypes.number,
-    }),
-  }),
+  locations: PropTypes.entityLocations,
   lorawan_phy_version: PropTypes.string,
   lorawan_version: PropTypes.string,
   supports_join: PropTypes.bool,
@@ -214,8 +250,8 @@ PropTypes.deviceTemplate = PropTypes.shape({
     lorawan_phy_version: PropTypes.string.isRequired,
   }),
   field_mask: PropTypes.shape({
-    paths: PropTypes.arrayOf(PropTypes.string).isRequired,
-  }).isRequired,
+    paths: PropTypes.arrayOf(PropTypes.string),
+  }),
 })
 
 PropTypes.organization = PropTypes.shape({
@@ -233,19 +269,23 @@ PropTypes.match = PropTypes.shape({
   url: PropTypes.string.isRequired,
 })
 
-PropTypes.location = PropTypes.shape({
-  hash: PropTypes.string,
-  key: PropTypes.string,
-  pathname: PropTypes.string.isRequired,
-  search: PropTypes.string,
-  state: PropTypes.shape({
-    info: PropTypes.message,
-  }),
+PropTypes.marker = PropTypes.shape({
+  position: PropTypes.shape({
+    latitude: PropTypes.number,
+    longitude: PropTypes.number,
+  }).isRequired,
+  accuracy: PropTypes.number,
+  children: PropTypes.node,
 })
+
+PropTypes.markers = PropTypes.arrayOf(PropTypes.marker)
 
 PropTypes.history = PropTypes.shape({
   listen: PropTypes.func,
 })
+
+PropTypes.right = PropTypes.string
+PropTypes.rights = PropTypes.arrayOf(PropTypes.right)
 
 PropTypes.collaborator = PropTypes.shape({
   rights: PropTypes.rights,
@@ -255,9 +295,6 @@ PropTypes.apiKey = PropTypes.shape({
   id: PropTypes.string.isRequired,
   rights: PropTypes.rights,
 })
-
-PropTypes.right = PropTypes.string
-PropTypes.rights = PropTypes.arrayOf(PropTypes.right)
 
 PropTypes.component = PropTypes.oneOf(components)
 PropTypes.components = PropTypes.arrayOf(PropTypes.component)
@@ -295,5 +332,22 @@ PropTypes.passwordRequirements = PropTypes.shape({
 })
 
 PropTypes.euiPrefixes = PropTypes.arrayOf(PropTypes.euiPrefix)
+
+PropTypes.routingPolicy = PropTypes.shape({
+  uplink: PropTypes.shape({
+    application_data: PropTypes.bool,
+    join_request: PropTypes.bool,
+    localization: PropTypes.bool,
+    mac_data: PropTypes.bool,
+    signal_quality: PropTypes.bool,
+  }),
+  downlink: PropTypes.shape({
+    application_data: PropTypes.bool,
+    join_accept: PropTypes.bool,
+    mac_data: PropTypes.bool,
+  }),
+})
+
+PropTypes.entity = PropTypes.oneOf([APPLICATION, GATEWAY, ORGANIZATION, USER, CLIENT])
 
 export default PropTypes

@@ -28,9 +28,9 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.opencensus.io/plugin/ocgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/fillcontext"
@@ -44,6 +44,7 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpclog"
 	sentrymiddleware "go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/sentry"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/validator"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/tracing"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip" // Register gzip compression.
@@ -113,6 +114,7 @@ func WithLogIgnoreMethods(methods []string) Option {
 	}
 }
 
+// WithRateLimiter configures a rate limiter on the server.
 func WithRateLimiter(limiter ratelimit.Interface) Option {
 	return func(o *options) {
 		o.limiter = limiter
@@ -133,14 +135,14 @@ func New(ctx context.Context, opts ...Option) *Server {
 	for _, opt := range opts {
 		opt(options)
 	}
-	server := &Server{ctx: ctx}
+	server := &Server{ctx: ctx, Hooks: &hooks.Hooks{}}
 	ctxtagsOpts := []grpc_ctxtags.Option{
 		grpc_ctxtags.WithFieldExtractor(grpc_ctxtags.CodeGenRequestFieldExtractor),
 	}
 	var proxyHeaders rpcmiddleware.ProxyHeaders
 	proxyHeaders.ParseAndAddTrusted(options.trustedProxies...)
 	recoveryOpts := []grpc_recovery.Option{
-		grpc_recovery.WithRecoveryHandler(func(p interface{}) (err error) {
+		grpc_recovery.WithRecoveryHandler(func(p any) (err error) {
 			fmt.Fprintln(os.Stderr, p)
 			os.Stderr.Write(debug.Stack())
 			if pErr, ok := p.(error); ok {
@@ -157,17 +159,17 @@ func New(ctx context.Context, opts ...Option) *Server {
 		grpc_ctxtags.StreamServerInterceptor(ctxtagsOpts...),
 		rpcmiddleware.RequestIDStreamServerInterceptor(),
 		proxyHeaders.StreamServerInterceptor(),
-		grpc_opentracing.StreamServerInterceptor(),
+		otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tracing.FromContext(ctx))),
 		events.StreamServerInterceptor,
 		rpclog.StreamServerInterceptor(ctx, rpclog.WithIgnoreMethods(options.logIgnoreMethods)),
 		metrics.StreamServerInterceptor,
 		errors.StreamServerInterceptor(),
 		// NOTE: All middleware that works with lorawan-stack/pkg/errors errors must be placed below.
-		ratelimit.StreamServerInterceptor(options.limiter),
 		sentrymiddleware.StreamServerInterceptor(),
 		grpc_recovery.StreamServerInterceptor(recoveryOpts...),
 		validator.StreamServerInterceptor(),
-		hooks.StreamServerInterceptor(),
+		ratelimit.StreamServerInterceptor(options.limiter),
+		server.Hooks.StreamServerInterceptor(),
 	}
 
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
@@ -175,22 +177,24 @@ func New(ctx context.Context, opts ...Option) *Server {
 		grpc_ctxtags.UnaryServerInterceptor(ctxtagsOpts...),
 		rpcmiddleware.RequestIDUnaryServerInterceptor(),
 		proxyHeaders.UnaryServerInterceptor(),
-		grpc_opentracing.UnaryServerInterceptor(),
+		otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(tracing.FromContext(ctx))),
 		events.UnaryServerInterceptor,
 		rpclog.UnaryServerInterceptor(ctx, rpclog.WithIgnoreMethods(options.logIgnoreMethods)),
 		metrics.UnaryServerInterceptor,
 		errors.UnaryServerInterceptor(),
 		// NOTE: All middleware that works with lorawan-stack/pkg/errors errors must be placed below.
-		ratelimit.UnaryServerInterceptor(options.limiter),
 		sentrymiddleware.UnaryServerInterceptor(),
 		grpc_recovery.UnaryServerInterceptor(recoveryOpts...),
 		validator.UnaryServerInterceptor(),
-		hooks.UnaryServerInterceptor(),
+		ratelimit.UnaryServerInterceptor(options.limiter),
+		server.Hooks.UnaryServerInterceptor(),
 	}
 
 	baseOptions := []grpc.ServerOption{
 		grpc.StatsHandler(rpcmiddleware.StatsHandlers{new(ocgrpc.ServerHandler), metrics.StatsHandler}),
 		grpc.MaxConcurrentStreams(math.MaxUint16),
+		grpc.MaxRecvMsgSize(1024 * 1024 * 16),
+		grpc.MaxSendMsgSize(1024 * 1024 * 16),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             1 * time.Minute,
 			PermitWithoutStream: true,
@@ -212,7 +216,7 @@ func New(ctx context.Context, opts ...Option) *Server {
 	server.ServeMux = runtime.NewServeMux(
 		runtime.WithMarshalerOption("*", jsonpb.TTN()),
 		runtime.WithMarshalerOption("text/event-stream", jsonpb.TTNEventStream()),
-		runtime.WithProtoErrorHandler(runtime.DefaultHTTPProtoErrorHandler),
+		runtime.WithErrorHandler(runtime.DefaultHTTPErrorHandler),
 		runtime.WithMetadata(func(ctx context.Context, req *http.Request) metadata.MD {
 			md := rpcmetadata.MD{
 				Host: req.Host,
@@ -260,17 +264,23 @@ func New(ctx context.Context, opts ...Option) *Server {
 	return server
 }
 
-// Registerer allows components to register their services to the gRPC server and the HTTP gateway
-type Registerer interface {
-	Roles() []ttnpb.ClusterRole
+// ServiceRegisterer allows components to register their services to the gRPC server and the HTTP gateway.
+type ServiceRegisterer interface {
 	RegisterServices(s *grpc.Server)
 	RegisterHandlers(s *runtime.ServeMux, conn *grpc.ClientConn)
+}
+
+// Registerer extends ServiceRegisterer with the cluster roles fulfilled by the component.
+type Registerer interface {
+	Roles() []ttnpb.ClusterRole
+	ServiceRegisterer
 }
 
 // Server wraps the gRPC server
 type Server struct {
 	ctx context.Context
 	*grpc.Server
+	*hooks.Hooks
 	*runtime.ServeMux
 }
 

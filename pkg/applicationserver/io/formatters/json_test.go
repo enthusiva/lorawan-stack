@@ -18,11 +18,11 @@ import (
 	"strconv"
 	"testing"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/formatters"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestJSONUpstream(t *testing.T) {
@@ -34,22 +34,22 @@ func TestJSONUpstream(t *testing.T) {
 	}{
 		{
 			Message: &ttnpb.ApplicationUp{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-						ApplicationID: "foo-app",
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{
+						ApplicationId: "foo-app",
 					},
-					DeviceID: "foo-device",
+					DeviceId: "foo-device",
 				},
 				Up: &ttnpb.ApplicationUp_UplinkMessage{
 					UplinkMessage: &ttnpb.ApplicationUplink{
-						SessionKeyID: []byte{0x11, 0x22, 0x33, 0x44},
+						SessionKeyId: []byte{0x11, 0x22, 0x33, 0x44},
 						FPort:        42,
 						FCnt:         42,
-						FRMPayload:   []byte{0x1, 0x2, 0x3},
-						DecodedPayload: &pbtypes.Struct{
-							Fields: map[string]*pbtypes.Value{
+						FrmPayload:   []byte{0x1, 0x2, 0x3},
+						DecodedPayload: &structpb.Struct{
+							Fields: map[string]*structpb.Value{
 								"test_key": {
-									Kind: &pbtypes.Value_NumberValue{
+									Kind: &structpb.Value_NumberValue{
 										NumberValue: 42,
 									},
 								},
@@ -58,24 +58,24 @@ func TestJSONUpstream(t *testing.T) {
 					},
 				},
 			},
-			Result: `{"end_device_ids":{"device_id":"foo-device","application_ids":{"application_id":"foo-app"}},"uplink_message":{"session_key_id":"ESIzRA==","f_port":42,"f_cnt":42,"frm_payload":"AQID","decoded_payload":{"test_key":42},"settings":{"data_rate":{}},"received_at":"0001-01-01T00:00:00Z"}}`,
+			Result: `{"end_device_ids":{"device_id":"foo-device","application_ids":{"application_id":"foo-app"}},"uplink_message":{"session_key_id":"ESIzRA==","f_port":42,"f_cnt":42,"frm_payload":"AQID","decoded_payload":{"test_key":42}}}`,
 		},
 		{
 			Message: &ttnpb.ApplicationUp{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-						ApplicationID: "foo-app",
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{
+						ApplicationId: "foo-app",
 					},
-					DeviceID: "foo-device",
+					DeviceId: "foo-device",
 				},
 				Up: &ttnpb.ApplicationUp_JoinAccept{
 					JoinAccept: &ttnpb.ApplicationJoinAccept{
-						SessionKeyID:   []byte{0x11, 0x22, 0x33, 0x44},
+						SessionKeyId:   []byte{0x11, 0x22, 0x33, 0x44},
 						PendingSession: false,
 					},
 				},
 			},
-			Result: `{"end_device_ids":{"device_id":"foo-device","application_ids":{"application_id":"foo-app"}},"join_accept":{"session_key_id":"ESIzRA==","received_at":"0001-01-01T00:00:00Z"}}`,
+			Result: `{"end_device_ids":{"device_id":"foo-device","application_ids":{"application_id":"foo-app"}},"join_accept":{"session_key_id":"ESIzRA=="}}`,
 		},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -110,12 +110,12 @@ func TestJSONDownstream(t *testing.T) {
 					Downlinks: []*ttnpb.ApplicationDownlink{
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x1, 0x1, 0x1},
+							FrmPayload: []byte{0x1, 0x1, 0x1},
 							Confirmed:  true,
 						},
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x2, 0x2, 0x2},
+							FrmPayload: []byte{0x2, 0x2, 0x2},
 							Confirmed:  true,
 						},
 					},
@@ -148,21 +148,21 @@ func TestJSONDownstream(t *testing.T) {
 			{
 				Input: []byte(`{"end_device_ids":{"application_ids":{"application_id":"foo-app"},"device_id":"foo-device"},"downlinks":[{"f_port":42,"frm_payload":"AQEB","confirmed":true},{"f_port":42,"frm_payload":"AgIC","confirmed":true}]}}`),
 				Request: &ttnpb.DownlinkQueueRequest{
-					EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-						ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-							ApplicationID: "foo-app",
+					EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{
+							ApplicationId: "foo-app",
 						},
-						DeviceID: "foo-device",
+						DeviceId: "foo-device",
 					},
 					Downlinks: []*ttnpb.ApplicationDownlink{
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x1, 0x1, 0x1},
+							FrmPayload: []byte{0x1, 0x1, 0x1},
 							Confirmed:  true,
 						},
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x2, 0x2, 0x2},
+							FrmPayload: []byte{0x2, 0x2, 0x2},
 							Confirmed:  true,
 						},
 					},

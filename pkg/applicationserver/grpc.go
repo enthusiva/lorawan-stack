@@ -17,22 +17,26 @@ package applicationserver
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/gogo/protobuf/types"
 	clusterauth "go.thethings.network/lorawan-stack/v3/pkg/auth/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/warning"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func removeDeprecatedPaths(ctx context.Context, paths []string) []string {
-	validPaths := make([]string, 0, len(paths))
+func removeDeprecatedPaths(ctx context.Context, fieldMask *fieldmaskpb.FieldMask) *fieldmaskpb.FieldMask {
+	validPaths := make([]string, 0, len(fieldMask.GetPaths()))
 nextPath:
-	for _, path := range paths {
+	for _, path := range fieldMask.GetPaths() {
 		for _, deprecated := range []string{
 			"api_key",
 			"network_server_address",
+			"tls",
 		} {
 			if path == deprecated {
 				warning.Add(ctx, fmt.Sprintf("field %v is deprecated", deprecated))
@@ -41,12 +45,12 @@ nextPath:
 			validPaths = append(validPaths, path)
 		}
 	}
-	return validPaths
+	return ttnpb.FieldMask(validPaths...)
 }
 
 // getLink calls the underlying link registry in order to retrieve the link.
 // If the link is not found, an empty link is returned instead.
-func (as *ApplicationServer) getLink(ctx context.Context, ids ttnpb.ApplicationIdentifiers, paths []string) (*ttnpb.ApplicationLink, error) {
+func (as *ApplicationServer) getLink(ctx context.Context, ids *ttnpb.ApplicationIdentifiers, paths []string) (*ttnpb.ApplicationLink, error) {
 	link, err := as.linkRegistry.Get(ctx, ids, paths)
 	if err != nil && errors.IsNotFound(err) {
 		return &ttnpb.ApplicationLink{}, nil
@@ -58,33 +62,50 @@ func (as *ApplicationServer) getLink(ctx context.Context, ids ttnpb.ApplicationI
 
 // GetLink implements ttnpb.AsServer.
 func (as *ApplicationServer) GetLink(ctx context.Context, req *ttnpb.GetApplicationLinkRequest) (*ttnpb.ApplicationLink, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC); err != nil {
+	if err := rights.RequireApplication(ctx, req.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC); err != nil {
 		return nil, err
 	}
-	req.FieldMask.Paths = removeDeprecatedPaths(ctx, req.FieldMask.Paths)
-	return as.linkRegistry.Get(ctx, req.ApplicationIdentifiers, req.FieldMask.Paths)
+	req.FieldMask = removeDeprecatedPaths(ctx, req.FieldMask)
+	return as.linkRegistry.Get(ctx, req.ApplicationIds, req.FieldMask.GetPaths())
 }
 
 // SetLink implements ttnpb.AsServer.
 func (as *ApplicationServer) SetLink(ctx context.Context, req *ttnpb.SetApplicationLinkRequest) (*ttnpb.ApplicationLink, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC); err != nil {
+	if ttnpb.HasAnyField(req.FieldMask.GetPaths(), "default_formatters.up_formatter_parameter") {
+		if size := len(req.Link.GetDefaultFormatters().GetUpFormatterParameter()); size > as.config.Formatters.MaxParameterLength {
+			return nil, errInvalidFieldValue.WithAttributes("field", "default_formatters.up_formatter_parameter").WithCause(
+				errFormatterScriptTooLarge.WithAttributes("size", size, "max_size", as.config.Formatters.MaxParameterLength),
+			)
+		}
+	}
+	if ttnpb.HasAnyField(req.FieldMask.GetPaths(), "default_formatters.down_formatter_parameter") {
+		if size := len(req.Link.GetDefaultFormatters().GetDownFormatterParameter()); size > as.config.Formatters.MaxParameterLength {
+			return nil, errInvalidFieldValue.WithAttributes("field", "default_formatters.down_formatter_parameter").WithCause(
+				errFormatterScriptTooLarge.WithAttributes("size", size, "max_size", as.config.Formatters.MaxParameterLength),
+			)
+		}
+	}
+	if err := rights.RequireApplication(ctx, req.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC); err != nil {
 		return nil, err
 	}
-	req.FieldMask.Paths = removeDeprecatedPaths(ctx, req.FieldMask.Paths)
-	return as.linkRegistry.Set(ctx, req.ApplicationIdentifiers, ttnpb.ApplicationLinkFieldPathsTopLevel,
+	req.FieldMask = removeDeprecatedPaths(ctx, req.FieldMask)
+	return as.linkRegistry.Set(ctx, req.ApplicationIds, ttnpb.ApplicationLinkFieldPathsTopLevel,
 		func(*ttnpb.ApplicationLink) (*ttnpb.ApplicationLink, []string, error) {
-			return &req.ApplicationLink, req.FieldMask.Paths, nil
+			return req.Link, req.FieldMask.GetPaths(), nil
 		},
 	)
 }
 
 // DeleteLink implements ttnpb.AsServer.
-func (as *ApplicationServer) DeleteLink(ctx context.Context, ids *ttnpb.ApplicationIdentifiers) (*types.Empty, error) {
-	if err := rights.RequireApplication(ctx, *ids, ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC); err != nil {
+func (as *ApplicationServer) DeleteLink(ctx context.Context, ids *ttnpb.ApplicationIdentifiers) (*emptypb.Empty, error) {
+	if err := rights.RequireApplication(ctx, ids, ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC); err != nil {
 		return nil, err
 	}
-	_, err := as.linkRegistry.Set(ctx, *ids, nil, func(link *ttnpb.ApplicationLink) (*ttnpb.ApplicationLink, []string, error) { return nil, nil, nil })
+	_, err := as.linkRegistry.Set(ctx, ids, nil, func(link *ttnpb.ApplicationLink) (*ttnpb.ApplicationLink, []string, error) { return nil, nil, nil })
 	if err != nil {
+		return nil, err
+	}
+	if err := as.appPkgRegistry.ClearDefaultAssociations(ctx, ids); err != nil {
 		return nil, err
 	}
 	return ttnpb.Empty, nil
@@ -109,19 +130,20 @@ func (as *ApplicationServer) GetConfiguration(ctx context.Context, _ *ttnpb.GetA
 }
 
 // HandleUplink implements ttnpb.NsAsServer.
-func (as *ApplicationServer) HandleUplink(ctx context.Context, req *ttnpb.NsAsHandleUplinkRequest) (*types.Empty, error) {
+func (as *ApplicationServer) HandleUplink(ctx context.Context, req *ttnpb.NsAsHandleUplinkRequest) (*emptypb.Empty, error) {
+	now := time.Now()
 	if err := clusterauth.Authorized(ctx); err != nil {
 		return nil, err
 	}
-	link, err := as.getLink(ctx, req.ApplicationUps[0].ApplicationIdentifiers, []string{
+	link, err := as.getLink(ctx, req.ApplicationUps[0].EndDeviceIds.ApplicationIds, []string{
 		"default_formatters",
 		"skip_payload_crypto",
 	})
 	if err != nil {
 		return nil, err
 	}
-	// TODO: Merge downlink queue invalidations (https://github.com/TheThingsNetwork/lorawan-stack/issues/1523)
 	for _, up := range req.ApplicationUps {
+		up.ReceivedAt = timestamppb.New(now)
 		if err := as.processUp(ctx, up, link); err != nil {
 			return nil, err
 		}

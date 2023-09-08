@@ -18,31 +18,31 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"runtime/trace"
 	"strings"
-	"time"
 
 	ulid "github.com/oklog/ulid/v2"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/picture"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
-	"go.thethings.network/lorawan-stack/v3/pkg/util/randutil"
 )
 
-const maxProfilePictureStoredDimensions = 1024
-const maxEndDevicePictureStoredDimensions = 1024
+const (
+	maxProfilePictureStoredDimensions   = 1024
+	maxEndDevicePictureStoredDimensions = 1024
+)
 
-var profilePictureDimensions = []int{64, 128, 256, 512}
-var endDevicePictureDimensions = []int{64, 128, 256, 512}
+var (
+	profilePictureDimensions   = []int{64, 128, 256, 512}
+	endDevicePictureDimensions = []int{64, 128, 256, 512}
+)
 
-var pictureRand = randutil.NewLockedRand(rand.NewSource(time.Now().UnixNano()))
-
-func fillGravatar(ctx context.Context, usr *ttnpb.User) (err error) {
+func fillGravatar(ctx context.Context, usr *ttnpb.User) {
 	if usr == nil || usr.ProfilePicture != nil || usr.PrimaryEmailAddress == "" {
-		return nil
+		return
 	}
 	hash := md5.Sum([]byte(strings.ToLower(strings.TrimSpace(usr.PrimaryEmailAddress))))
 	usr.ProfilePicture = &ttnpb.Picture{
@@ -51,7 +51,6 @@ func fillGravatar(ctx context.Context, usr *ttnpb.User) (err error) {
 	for _, size := range profilePictureDimensions {
 		usr.ProfilePicture.Sizes[uint32(size)] = fmt.Sprintf("https://www.gravatar.com/avatar/%x?s=%d&d=404", hash, size)
 	}
-	return nil
 }
 
 var errProfilePictureUploadDisabled = errors.DefineFailedPrecondition(
@@ -94,20 +93,17 @@ func (is *IdentityServer) processUserProfilePicture(ctx context.Context, usr *tt
 	}
 
 	// Store picture to bucket.
-	bucket, err := is.Component.GetBaseConfig(ctx).Blob.Bucket(ctx, config.ProfilePicture.Bucket)
+	bucket, err := is.Component.GetBaseConfig(ctx).Blob.Bucket(ctx, config.ProfilePicture.Bucket, is)
 	if err != nil {
 		return err
 	}
-	id := fmt.Sprintf("%s.%s", unique.ID(ctx, usr.UserIdentifiers), ulid.MustNew(ulid.Now(), pictureRand).String())
+	id := fmt.Sprintf("%s.%s", unique.ID(ctx, usr.GetIds()), ulid.MustNew(ulid.Now(), rand.Reader).String())
 
 	region := trace.StartRegion(ctx, "store profile picture")
 	usr.ProfilePicture, err = picture.Store(ctx, bucket, id, usr.ProfilePicture, profilePictureDimensions...)
 	region.End()
-	if err != nil {
-		return err
-	}
 
-	return
+	return err
 }
 
 var errEndDevicePictureUploadDisabled = errors.DefineFailedPrecondition(
@@ -150,18 +146,15 @@ func (is *IdentityServer) processEndDevicePicture(ctx context.Context, dev *ttnp
 	}
 
 	// Store picture to bucket.
-	bucket, err := is.Component.GetBaseConfig(ctx).Blob.Bucket(ctx, config.EndDevicePicture.Bucket)
+	bucket, err := is.Component.GetBaseConfig(ctx).Blob.Bucket(ctx, config.EndDevicePicture.Bucket, is)
 	if err != nil {
 		return err
 	}
-	id := fmt.Sprintf("%s.%s", unique.ID(ctx, dev.EndDeviceIdentifiers), ulid.MustNew(ulid.Now(), pictureRand).String())
+	id := fmt.Sprintf("%s.%s", unique.ID(ctx, dev.Ids), ulid.MustNew(ulid.Now(), rand.Reader).String())
 
 	region := trace.StartRegion(ctx, "store end device picture")
 	dev.Picture, err = picture.Store(ctx, bucket, id, dev.Picture, endDevicePictureDimensions...)
 	region.End()
-	if err != nil {
-		return err
-	}
 
-	return
+	return err
 }

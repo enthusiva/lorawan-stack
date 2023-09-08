@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-
-	go_thethings_network_lorawan_stack_v3_pkg_types "go.thethings.network/lorawan-stack/v3/pkg/types"
-)
+import fmt "fmt"
 
 func (dst *JoinRequest) SetFields(src *JoinRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -53,36 +48,41 @@ func (dst *JoinRequest) SetFields(src *JoinRequest, paths ...string) error {
 			if src != nil {
 				dst.DevAddr = src.DevAddr
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.DevAddr
-				dst.DevAddr = zero
+				dst.DevAddr = nil
 			}
 		case "selected_mac_version":
 			if len(subs) > 0 {
 				return fmt.Errorf("'selected_mac_version' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SelectedMACVersion = src.SelectedMACVersion
+				dst.SelectedMacVersion = src.SelectedMacVersion
 			} else {
-				var zero MACVersion
-				dst.SelectedMACVersion = zero
+				dst.SelectedMacVersion = 0
 			}
 		case "net_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'net_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.NetID = src.NetID
+				dst.NetId = src.NetId
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.NetID
-				dst.NetID = zero
+				dst.NetId = nil
 			}
 		case "downlink_settings":
 			if len(subs) > 0 {
 				var newDst, newSrc *DLSettings
-				if src != nil {
-					newSrc = &src.DownlinkSettings
+				if (src == nil || src.DownlinkSettings == nil) && dst.DownlinkSettings == nil {
+					continue
 				}
-				newDst = &dst.DownlinkSettings
+				if src != nil {
+					newSrc = src.DownlinkSettings
+				}
+				if dst.DownlinkSettings != nil {
+					newDst = dst.DownlinkSettings
+				} else {
+					newDst = &DLSettings{}
+					dst.DownlinkSettings = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -90,8 +90,7 @@ func (dst *JoinRequest) SetFields(src *JoinRequest, paths ...string) error {
 				if src != nil {
 					dst.DownlinkSettings = src.DownlinkSettings
 				} else {
-					var zero DLSettings
-					dst.DownlinkSettings = zero
+					dst.DownlinkSettings = nil
 				}
 			}
 		case "rx_delay":
@@ -101,32 +100,31 @@ func (dst *JoinRequest) SetFields(src *JoinRequest, paths ...string) error {
 			if src != nil {
 				dst.RxDelay = src.RxDelay
 			} else {
-				var zero RxDelay
-				dst.RxDelay = zero
+				dst.RxDelay = 0
 			}
 		case "cf_list":
 			if len(subs) > 0 {
 				var newDst, newSrc *CFList
-				if (src == nil || src.CFList == nil) && dst.CFList == nil {
+				if (src == nil || src.CfList == nil) && dst.CfList == nil {
 					continue
 				}
 				if src != nil {
-					newSrc = src.CFList
+					newSrc = src.CfList
 				}
-				if dst.CFList != nil {
-					newDst = dst.CFList
+				if dst.CfList != nil {
+					newDst = dst.CfList
 				} else {
 					newDst = &CFList{}
-					dst.CFList = newDst
+					dst.CfList = newDst
 				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.CFList = src.CFList
+					dst.CfList = src.CfList
 				} else {
-					dst.CFList = nil
+					dst.CfList = nil
 				}
 			}
 		case "correlation_ids":
@@ -134,9 +132,9 @@ func (dst *JoinRequest) SetFields(src *JoinRequest, paths ...string) error {
 				return fmt.Errorf("'correlation_ids' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.CorrelationIDs = src.CorrelationIDs
+				dst.CorrelationIds = src.CorrelationIds
 			} else {
-				dst.CorrelationIDs = nil
+				dst.CorrelationIds = nil
 			}
 		case "consumed_airtime":
 			if len(subs) > 0 {
@@ -170,10 +168,18 @@ func (dst *JoinResponse) SetFields(src *JoinResponse, paths ...string) error {
 		case "session_keys":
 			if len(subs) > 0 {
 				var newDst, newSrc *SessionKeys
-				if src != nil {
-					newSrc = &src.SessionKeys
+				if (src == nil || src.SessionKeys == nil) && dst.SessionKeys == nil {
+					continue
 				}
-				newDst = &dst.SessionKeys
+				if src != nil {
+					newSrc = src.SessionKeys
+				}
+				if dst.SessionKeys != nil {
+					newDst = dst.SessionKeys
+				} else {
+					newDst = &SessionKeys{}
+					dst.SessionKeys = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -181,8 +187,7 @@ func (dst *JoinResponse) SetFields(src *JoinResponse, paths ...string) error {
 				if src != nil {
 					dst.SessionKeys = src.SessionKeys
 				} else {
-					var zero SessionKeys
-					dst.SessionKeys = zero
+					dst.SessionKeys = nil
 				}
 			}
 		case "lifetime":
@@ -192,17 +197,16 @@ func (dst *JoinResponse) SetFields(src *JoinResponse, paths ...string) error {
 			if src != nil {
 				dst.Lifetime = src.Lifetime
 			} else {
-				var zero time.Duration
-				dst.Lifetime = zero
+				dst.Lifetime = nil
 			}
 		case "correlation_ids":
 			if len(subs) > 0 {
 				return fmt.Errorf("'correlation_ids' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.CorrelationIDs = src.CorrelationIDs
+				dst.CorrelationIds = src.CorrelationIds
 			} else {
-				dst.CorrelationIDs = nil
+				dst.CorrelationIds = nil
 			}
 
 		default:

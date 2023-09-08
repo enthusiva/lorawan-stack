@@ -15,7 +15,9 @@
 package oauthclient
 
 import (
-	echo "github.com/labstack/echo/v4"
+	"context"
+	"net/http"
+
 	"golang.org/x/oauth2"
 )
 
@@ -23,13 +25,13 @@ import (
 type Option func(*OAuthClient)
 
 // OAuth2ConfigProvider provides an OAuth2 client config based on the context.
-type OAuth2ConfigProvider func(echo.Context) (*oauth2.Config, error)
+type OAuth2ConfigProvider func(context.Context) (*oauth2.Config, error)
 
 // WithOAuth2ConfigProvider overrides the default OAuth2 configuration provider.
 func WithOAuth2ConfigProvider(provider OAuth2ConfigProvider) Option {
 	return func(o *OAuthClient) {
 		o.config.customProvider = true
-		o.oauth = provider
+		o.oauthConfig = provider
 	}
 }
 
@@ -41,7 +43,7 @@ func WithNextKey(key string) Option {
 }
 
 // Callback occurs after the OAuth2 token exchange has been performed successfully.
-type Callback func(echo.Context, *oauth2.Token, string) error
+type Callback func(http.ResponseWriter, *http.Request, *oauth2.Token, string) error
 
 // WithCallback adds a callback to be executed at the end of the OAuth2
 // token exchange.
@@ -53,7 +55,7 @@ func WithCallback(cb Callback) Option {
 
 // OAuth2AuthCodeURLOptionsProvider provides OAuth2 authorization URL options
 // based on the context.
-type OAuth2AuthCodeURLOptionsProvider func(echo.Context) ([]oauth2.AuthCodeOption, error)
+type OAuth2AuthCodeURLOptionsProvider func(context.Context) ([]oauth2.AuthCodeOption, error)
 
 // WithAuthCodeURLOptions changes the OAuth2 authorization URL options provided to the
 // oauth2 package.

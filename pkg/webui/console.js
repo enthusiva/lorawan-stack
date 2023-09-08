@@ -21,28 +21,43 @@ import * as Sentry from '@sentry/browser'
 import sentryConfig from '@ttn-lw/constants/sentry'
 
 import { BreadcrumbsProvider } from '@ttn-lw/components/breadcrumbs/context'
+import Header from '@ttn-lw/components/header'
 
 import { EnvProvider } from '@ttn-lw/lib/components/env'
+import { ErrorView } from '@ttn-lw/lib/components/error-view'
+import { FullViewError } from '@ttn-lw/lib/components/full-view-error'
 import Init from '@ttn-lw/lib/components/init'
 import WithLocale from '@ttn-lw/lib/components/with-locale'
 
+import Logo from '@console/containers/logo'
+
+import App from '@console/views/app'
+
 import env from '@ttn-lw/lib/env'
-import { selectApplicationRootPath } from '@ttn-lw/lib/selectors/env'
+import { selectApplicationRootPath, selectSentryDsnConfig } from '@ttn-lw/lib/selectors/env'
 
 import createStore from './console/store'
 
 const appRoot = selectApplicationRootPath()
-const history = createBrowserHistory({ basename: `${appRoot}/` })
-// Initialize sentry before creating store.
-if (env.sentryDsn) Sentry.init(sentryConfig)
-const store = createStore(history)
 
+// Initialize sentry before creating store.
+if (selectSentryDsnConfig) {
+  Sentry.init(sentryConfig)
+}
+
+const history = createBrowserHistory({ basename: `${appRoot}/` })
+const store = createStore(history)
 const rootElement = document.getElementById('app')
 
-const render = () => {
-  const App = require('./console/views/app').default
+// Error renderer for the outermost error boundary.
+// Do not use any components that depend on context
+// e.g. Intl, Router, Redux store.
+const errorRender = error => (
+  <FullViewError error={error} header={<Header logo={<Logo safe />} />} safe />
+)
 
-  DOM.render(
+DOM.render(
+  <ErrorView errorRender={errorRender}>
     <EnvProvider env={env}>
       <Provider store={store}>
         <WithLocale>
@@ -53,15 +68,7 @@ const render = () => {
           </Init>
         </WithLocale>
       </Provider>
-    </EnvProvider>,
-    rootElement,
-  )
-}
-
-if (module.hot) {
-  module.hot.accept('./console/views/app', () => {
-    setTimeout(render)
-  })
-}
-
-render()
+    </EnvProvider>
+  </ErrorView>,
+  rootElement,
+)

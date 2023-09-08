@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,15 +13,16 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
-import { Switch, Route } from 'react-router'
+import { Routes, Route, useParams } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import ErrorView from '@ttn-lw/lib/components/error-view'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import SubViewError from '@console/views/sub-view-error'
 import OrganizationApiKeysList from '@console/views/organization-api-keys-list'
@@ -29,36 +30,41 @@ import OrganizationApiKeyAdd from '@console/views/organization-api-key-add'
 import OrganizationApiKeyEdit from '@console/views/organization-api-key-edit'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
+import { apiKeyPath as apiKeyPathRegexp } from '@console/lib/regexp'
 import { mayViewOrEditOrganizationApiKeys } from '@console/lib/feature-checks'
 
-import { selectSelectedOrganizationId } from '@console/store/selectors/organizations'
+const OrganizationApiKeys = () => {
+  const { orgId } = useParams()
 
-@connect(state => ({ orgId: selectSelectedOrganizationId(state) }))
-@withFeatureRequirement(mayViewOrEditOrganizationApiKeys, {
-  redirect: ({ orgId }) => `/organizations/${orgId}`,
-})
-@withBreadcrumb('org.single.api-keys', ({ orgId }) => (
-  <Breadcrumb path={`/organizations/${orgId}/api-keys`} content={sharedMessages.apiKeys} />
-))
-class OrganizationApiKeys extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+  useBreadcrumbs(
+    'org.single.api-keys',
+    <Breadcrumb path={`/organizations/${orgId}/api-keys`} content={sharedMessages.apiKeys} />,
+  )
 
-  render() {
-    const { match } = this.props
-    return (
-      <ErrorView ErrorComponent={SubViewError}>
-        <Switch>
-          <Route exact path={`${match.path}`} component={OrganizationApiKeysList} />
-          <Route exact path={`${match.path}/add`} component={OrganizationApiKeyAdd} />
-          <Route path={`${match.path}/:apiKeyId`} component={OrganizationApiKeyEdit} />
-        </Switch>
+  return (
+    <Require
+      featureCheck={mayViewOrEditOrganizationApiKeys}
+      otherwise={{ redirect: `/organizations/${orgId}` }}
+    >
+      <ErrorView errorRender={SubViewError}>
+        <Routes>
+          <Route index Component={OrganizationApiKeysList} />
+          <Route path="add" Component={OrganizationApiKeyAdd} />
+          <Route
+            path=":apiKeyId"
+            element={
+              <ValidateRouteParam
+                check={{ apiKeyId: apiKeyPathRegexp }}
+                Component={OrganizationApiKeyEdit}
+              />
+            }
+          />
+          <Route path="*" element={<GenericNotFound />} />
+        </Routes>
       </ErrorView>
-    )
-  }
+    </Require>
+  )
 }
 
 export default OrganizationApiKeys

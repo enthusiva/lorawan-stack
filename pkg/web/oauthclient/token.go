@@ -15,35 +15,26 @@
 package oauthclient
 
 import (
-	"encoding/json"
+	"context"
 	stderrors "errors"
 	"net/http"
 	"time"
 
-	echo "github.com/labstack/echo/v4"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/webhandlers"
 	"golang.org/x/oauth2"
 )
 
 var errRefresh = errors.DefinePermissionDenied("refresh", "token refresh refused")
 
-func (oc *OAuthClient) freshToken(c echo.Context) (*oauth2.Token, error) {
-	value, err := oc.getAuthCookie(c)
+// Token returns the OAuth 2.0 token.
+// If the given token is about to expire, this method refreshes the token and returns the new token.
+func (oc *OAuthClient) Token(ctx context.Context, token *oauth2.Token) (*oauth2.Token, error) {
+	conf, err := oc.oauthConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	token := &oauth2.Token{
-		AccessToken:  value.AccessToken,
-		RefreshToken: value.RefreshToken,
-		Expiry:       time.Now(),
-	}
-
-	ctx, err := oc.withHTTPClient(c.Request().Context())
-	if err != nil {
-		return nil, err
-	}
-	conf, err := oc.oauth(c)
+	ctx, err = oc.withHTTPClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -52,41 +43,54 @@ func (oc *OAuthClient) freshToken(c echo.Context) (*oauth2.Token, error) {
 		var retrieveError *oauth2.RetrieveError
 		if stderrors.As(err, &retrieveError) {
 			var ttnErr errors.Error
-			if decErr := json.Unmarshal(retrieveError.Body, &ttnErr); decErr == nil {
-				return nil, errRefresh.WithCause(ttnErr)
+			if decErr := ttnErr.UnmarshalJSON(retrieveError.Body); decErr == nil {
+				return nil, errRefresh.WithCause(&ttnErr)
 			}
 		}
 		return nil, errRefresh.WithCause(err)
 	}
-
-	if freshToken.AccessToken != token.AccessToken {
-		err = oc.setAuthCookie(c, authCookie{
-			AccessToken:  freshToken.AccessToken,
-			RefreshToken: freshToken.RefreshToken,
-			Expiry:       freshToken.Expiry,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return freshToken, nil
 }
 
 // HandleToken is a handler that returns a valid OAuth token.
 // It reads the token from the authorization cookie and refreshes it if needed.
-// If the cookie is not there, it returns a 401 Unauthorized error.
-func (oc *OAuthClient) HandleToken(c echo.Context) error {
-	token, err := oc.freshToken(c)
+// If the authorization cookie is not there, it returns a 401 Unauthorized error.
+func (oc *OAuthClient) HandleToken(w http.ResponseWriter, r *http.Request) {
+	value, err := oc.getAuthCookie(w, r)
 	if err != nil {
-		return err
+		webhandlers.Error(w, r, err)
+		return
 	}
 
-	return c.JSON(http.StatusOK, struct {
+	currentToken := &oauth2.Token{
+		AccessToken:  value.AccessToken,
+		RefreshToken: value.RefreshToken,
+		Expiry:       time.Now(),
+	}
+
+	freshToken, err := oc.Token(r.Context(), currentToken)
+	if err != nil {
+		webhandlers.Error(w, r, err)
+		return
+	}
+
+	if freshToken != currentToken {
+		err = oc.setAuthCookie(w, r, authCookie{
+			AccessToken:  freshToken.AccessToken,
+			RefreshToken: freshToken.RefreshToken,
+			Expiry:       freshToken.Expiry,
+		})
+		if err != nil {
+			webhandlers.Error(w, r, err)
+			return
+		}
+	}
+
+	webhandlers.JSON(w, r, struct {
 		AccessToken string    `json:"access_token"`
 		Expiry      time.Time `json:"expiry"`
 	}{
-		AccessToken: token.AccessToken,
-		Expiry:      token.Expiry,
+		AccessToken: freshToken.AccessToken,
+		Expiry:      freshToken.Expiry,
 	})
 }

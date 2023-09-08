@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,13 +18,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestPagination(t *testing.T) {
-	a := assertions.New(t)
+	t.Parallel()
 
 	for _, tc := range []struct {
 		limit          uint32
@@ -57,30 +56,31 @@ func TestPagination(t *testing.T) {
 			expectedOffset: 10,
 		},
 	} {
-		t.Run(fmt.Sprintf("limitAndOffsetFromContext, limit:%v, offset:%v", tc.limit, tc.page),
-			func(t *testing.T) {
-				ctx := WithPagination(test.Context(), tc.limit, tc.page, nil)
+		t.Run(fmt.Sprintf("limitAndOffsetFromContext, limit:%v, offset:%v", tc.limit, tc.page), func(t *testing.T) {
+			t.Parallel()
 
-				limit, offset := limitAndOffsetFromContext(ctx)
+			a, ctx := test.New(t)
 
-				a.So(limit, should.Equal, tc.expectedLimit)
-				a.So(offset, should.Equal, tc.expectedOffset)
-			},
-		)
+			limit, offset := LimitAndOffsetFromContext(WithPagination(ctx, tc.limit, tc.page, nil))
+
+			a.So(limit, should.Equal, tc.expectedLimit)
+			a.So(offset, should.Equal, tc.expectedOffset)
+		})
 	}
 
 	t.Run("SetTotalCount", func(t *testing.T) {
+		a, ctx := test.New(t)
+
 		var totalCount uint64
-		ctx := test.Context()
 		total := uint64(10)
 
-		setTotal(ctx, total)
+		SetTotal(ctx, total)
 		a.So(totalCount, should.BeZeroValue)
 
 		ctx = WithPagination(ctx, 5, 1, &totalCount)
 		a.So(totalCount, should.BeZeroValue)
 
-		setTotal(ctx, total)
+		SetTotal(ctx, total)
 		a.So(totalCount, should.Equal, total)
 	})
 }

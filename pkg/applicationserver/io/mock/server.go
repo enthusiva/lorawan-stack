@@ -62,7 +62,7 @@ func (s *server) FillContext(ctx context.Context) context.Context {
 func (s *server) Publish(ctx context.Context, up *ttnpb.ApplicationUp) error {
 	s.subscriptionsMu.RLock()
 	defer s.subscriptionsMu.RUnlock()
-	for _, sub := range s.appSubs[unique.ID(ctx, up.ApplicationIdentifiers)] {
+	for _, sub := range s.appSubs[unique.ID(ctx, up.EndDeviceIds.ApplicationIds)] {
 		if err := sub.Publish(ctx, up); err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func (s *server) Subscribe(ctx context.Context, protocol string, ids *ttnpb.Appl
 }
 
 // DownlinkQueuePush implements io.Server.
-func (s *server) DownlinkQueuePush(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
+func (s *server) DownlinkQueuePush(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
 	s.downlinkQueueMu.Lock()
 	uid := unique.ID(ctx, ids)
 	s.downlinkQueue[uid] = append(s.downlinkQueue[uid], io.CleanDownlinks(items)...)
@@ -108,7 +108,7 @@ func (s *server) DownlinkQueuePush(ctx context.Context, ids ttnpb.EndDeviceIdent
 }
 
 // DownlinkQueueReplace implements io.Server.
-func (s *server) DownlinkQueueReplace(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
+func (s *server) DownlinkQueueReplace(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
 	s.downlinkQueueMu.Lock()
 	s.downlinkQueue[unique.ID(ctx, ids)] = io.CleanDownlinks(items)
 	s.downlinkQueueMu.Unlock()
@@ -116,7 +116,7 @@ func (s *server) DownlinkQueueReplace(ctx context.Context, ids ttnpb.EndDeviceId
 }
 
 // DownlinkQueueList implements io.Server.
-func (s *server) DownlinkQueueList(ctx context.Context, ids ttnpb.EndDeviceIdentifiers) ([]*ttnpb.ApplicationDownlink, error) {
+func (s *server) DownlinkQueueList(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) ([]*ttnpb.ApplicationDownlink, error) {
 	s.downlinkQueueMu.RLock()
 	defer s.downlinkQueueMu.RUnlock()
 	return s.downlinkQueue[unique.ID(ctx, ids)], nil
@@ -134,4 +134,12 @@ func (s *server) Subscriptions() <-chan *io.Subscription {
 
 func (s *server) RateLimiter() ratelimit.Interface {
 	return &ratelimit.NoopRateLimiter{}
+}
+
+func (s *server) RangeUplinks(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string, f func(ctx context.Context, up *ttnpb.ApplicationUplink) bool) error {
+	panic("unimplemented")
+}
+
+func (s *server) GetEndDevice(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string) (*ttnpb.EndDevice, error) {
+	panic("unimplemented")
 }

@@ -22,15 +22,12 @@ import (
 	"testing"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/mohae/deepcopy"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -38,13 +35,14 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestDeviceRegistryGet(t *testing.T) {
 	for _, tc := range []struct {
 		Name           string
 		ContextFunc    func(context.Context) context.Context
-		GetByIDFunc    func(context.Context, ttnpb.ApplicationIdentifiers, string, []string) (*ttnpb.EndDevice, context.Context, error)
+		GetByIDFunc    func(context.Context, *ttnpb.ApplicationIdentifiers, string, []string) (*ttnpb.EndDevice, context.Context, error)
 		KeyVault       map[string][]byte
 		Request        *ttnpb.GetEndDeviceRequest
 		Device         *ttnpb.EndDevice
@@ -54,31 +52,27 @@ func TestDeviceRegistryGet(t *testing.T) {
 		{
 			Name: "No device read rights",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_GATEWAY_SETTINGS_BASIC,
+								ttnpb.Right_RIGHT_GATEWAY_SETTINGS_BASIC,
 							},
 						},
-					},
+					}),
 				})
 			},
-			GetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
+			GetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
 				err := errors.New("GetByIDFunc must not be called")
 				test.MustTFromContext(ctx).Error(err)
 				return nil, ctx, err
 			},
 			Request: &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"frequency_plan_id",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("frequency_plan_id"),
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				if !assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue) {
@@ -92,48 +86,44 @@ func TestDeviceRegistryGet(t *testing.T) {
 		{
 			Name: "no keys",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
 							},
 						},
-					},
+					}),
 				})
 			},
-			GetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
+			GetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
 				a := assertions.New(test.MustTFromContext(ctx))
-				a.So(appID, should.Resemble, ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"})
+				a.So(appID, should.Resemble, &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"})
 				a.So(devID, should.Equal, "test-dev-id")
 				a.So(gets, should.HaveSameElementsDeep, []string{
 					"frequency_plan_id",
 				})
 				return &ttnpb.EndDevice{
-					EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-						DeviceID:               "test-dev-id",
-						ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+					Ids: &ttnpb.EndDeviceIdentifiers{
+						DeviceId:       "test-dev-id",
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 					},
-					FrequencyPlanID: test.EUFrequencyPlanID,
+					FrequencyPlanId: test.EUFrequencyPlanID,
 				}, ctx, nil
 			},
 			Request: &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"frequency_plan_id",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("frequency_plan_id"),
 			},
 			Device: &ttnpb.EndDevice{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				Ids: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FrequencyPlanID: test.EUFrequencyPlanID,
+				FrequencyPlanId: test.EUFrequencyPlanID,
 			},
 			GetByIDCalls: 1,
 		},
@@ -141,21 +131,21 @@ func TestDeviceRegistryGet(t *testing.T) {
 		{
 			Name: "with keys",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-								ttnpb.RIGHT_APPLICATION_LINK,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+								ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
 							},
 						},
-					},
+					}),
 				})
 			},
-			GetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
+			GetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
 				a := assertions.New(test.MustTFromContext(ctx))
-				a.So(appID, should.Resemble, ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"})
+				a.So(appID, should.Resemble, &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"})
 				a.So(devID, should.Equal, "test-dev-id")
 				a.So(gets, should.HaveSameElementsDeep, []string{
 					"frequency_plan_id",
@@ -163,15 +153,15 @@ func TestDeviceRegistryGet(t *testing.T) {
 					"queued_application_downlinks",
 				})
 				return &ttnpb.EndDevice{
-					EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-						DeviceID:               "test-dev-id",
-						ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+					Ids: &ttnpb.EndDeviceIdentifiers{
+						DeviceId:       "test-dev-id",
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 					},
-					FrequencyPlanID: test.EUFrequencyPlanID,
+					FrequencyPlanId: test.EUFrequencyPlanID,
 					Session: &ttnpb.Session{
-						SessionKeys: ttnpb.SessionKeys{
+						Keys: &ttnpb.SessionKeys{
 							FNwkSIntKey: &ttnpb.KeyEnvelope{
-								KEKLabel:     "test",
+								KekLabel:     "test",
 								EncryptedKey: []byte{0x96, 0x77, 0x8b, 0x25, 0xae, 0x6c, 0xa4, 0x35, 0xf9, 0x2b, 0x5b, 0x97, 0xc0, 0x50, 0xae, 0xd2, 0x46, 0x8a, 0xb8, 0xa1, 0x7a, 0xd8, 0x4e, 0x5d},
 							},
 						},
@@ -182,27 +172,22 @@ func TestDeviceRegistryGet(t *testing.T) {
 				"test": {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17},
 			},
 			Request: &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"frequency_plan_id",
-						"session",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("frequency_plan_id", "session"),
 			},
 			Device: &ttnpb.EndDevice{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				Ids: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FrequencyPlanID: test.EUFrequencyPlanID,
+				FrequencyPlanId: test.EUFrequencyPlanID,
 				Session: &ttnpb.Session{
-					SessionKeys: ttnpb.SessionKeys{
+					Keys: &ttnpb.SessionKeys{
 						FNwkSIntKey: &ttnpb.KeyEnvelope{
-							Key: AES128KeyPtr(types.AES128Key{0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}),
+							Key: types.AES128Key{0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}.Bytes(),
 						},
 					},
 				},
@@ -213,33 +198,33 @@ func TestDeviceRegistryGet(t *testing.T) {
 		{
 			Name: "with specific key envelope",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 							},
 						},
-					},
+					}),
 				})
 			},
-			GetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
+			GetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
 				a := assertions.New(test.MustTFromContext(ctx))
-				a.So(appID, should.Resemble, ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"})
+				a.So(appID, should.Resemble, &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"})
 				a.So(devID, should.Equal, "test-dev-id")
 				a.So(gets, should.HaveSameElementsDeep, []string{
 					"pending_session.keys.f_nwk_s_int_key",
 				})
 				return &ttnpb.EndDevice{
-					EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-						DeviceID:               "test-dev-id",
-						ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+					Ids: &ttnpb.EndDeviceIdentifiers{
+						DeviceId:       "test-dev-id",
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 					},
 					PendingSession: &ttnpb.Session{
-						SessionKeys: ttnpb.SessionKeys{
+						Keys: &ttnpb.SessionKeys{
 							FNwkSIntKey: &ttnpb.KeyEnvelope{
-								KEKLabel:     "test",
+								KekLabel:     "test",
 								EncryptedKey: []byte{0x96, 0x77, 0x8b, 0x25, 0xae, 0x6c, 0xa4, 0x35, 0xf9, 0x2b, 0x5b, 0x97, 0xc0, 0x50, 0xae, 0xd2, 0x46, 0x8a, 0xb8, 0xa1, 0x7a, 0xd8, 0x4e, 0x5d},
 							},
 						},
@@ -250,25 +235,21 @@ func TestDeviceRegistryGet(t *testing.T) {
 				"test": {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17},
 			},
 			Request: &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"pending_session.keys.f_nwk_s_int_key",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("pending_session.keys.f_nwk_s_int_key"),
 			},
 			Device: &ttnpb.EndDevice{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				Ids: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
 				PendingSession: &ttnpb.Session{
-					SessionKeys: ttnpb.SessionKeys{
+					Keys: &ttnpb.SessionKeys{
 						FNwkSIntKey: &ttnpb.KeyEnvelope{
-							Key: AES128KeyPtr(types.AES128Key{0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}),
+							Key: types.AES128Key{0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}.Bytes(),
 						},
 					},
 				},
@@ -279,20 +260,20 @@ func TestDeviceRegistryGet(t *testing.T) {
 		{
 			Name: "with specific key",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-								ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 							},
 						},
-					},
+					}),
 				})
 			},
-			GetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
+			GetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
 				a := assertions.New(test.MustTFromContext(ctx))
-				a.So(appID, should.Resemble, ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"})
+				a.So(appID, should.Resemble, &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"})
 				a.So(devID, should.Equal, "test-dev-id")
 				a.So(gets, should.HaveSameElementsDeep, []string{
 					"pending_session.keys.f_nwk_s_int_key.encrypted_key",
@@ -300,14 +281,14 @@ func TestDeviceRegistryGet(t *testing.T) {
 					"pending_session.keys.f_nwk_s_int_key.key",
 				})
 				return &ttnpb.EndDevice{
-					EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-						DeviceID:               "test-dev-id",
-						ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+					Ids: &ttnpb.EndDeviceIdentifiers{
+						DeviceId:       "test-dev-id",
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 					},
 					PendingSession: &ttnpb.Session{
-						SessionKeys: ttnpb.SessionKeys{
+						Keys: &ttnpb.SessionKeys{
 							FNwkSIntKey: &ttnpb.KeyEnvelope{
-								KEKLabel:     "test",
+								KekLabel:     "test",
 								EncryptedKey: []byte{0x96, 0x77, 0x8b, 0x25, 0xae, 0x6c, 0xa4, 0x35, 0xf9, 0x2b, 0x5b, 0x97, 0xc0, 0x50, 0xae, 0xd2, 0x46, 0x8a, 0xb8, 0xa1, 0x7a, 0xd8, 0x4e, 0x5d},
 							},
 						},
@@ -318,25 +299,21 @@ func TestDeviceRegistryGet(t *testing.T) {
 				"test": {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17},
 			},
 			Request: &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"pending_session.keys.f_nwk_s_int_key.key",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("pending_session.keys.f_nwk_s_int_key.key"),
 			},
 			Device: &ttnpb.EndDevice{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID:               "test-dev-id",
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				Ids: &ttnpb.EndDeviceIdentifiers{
+					DeviceId:       "test-dev-id",
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 				},
 				PendingSession: &ttnpb.Session{
-					SessionKeys: ttnpb.SessionKeys{
+					Keys: &ttnpb.SessionKeys{
 						FNwkSIntKey: &ttnpb.KeyEnvelope{
-							Key: AES128KeyPtr(types.AES128Key{0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}),
+							Key: types.AES128Key{0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}.Bytes(),
 						},
 					},
 				},
@@ -364,7 +341,7 @@ func TestDeviceRegistryGet(t *testing.T) {
 						},
 						NetworkServer: Config{
 							Devices: &MockDeviceRegistry{
-								GetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
+								GetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string) (*ttnpb.EndDevice, context.Context, error) {
 									atomic.AddUint64(&getByIDCalls, 1)
 									return tc.GetByIDFunc(ctx, appID, devID, gets)
 								},
@@ -372,6 +349,7 @@ func TestDeviceRegistryGet(t *testing.T) {
 						},
 						TaskStarter: StartTaskExclude(
 							DownlinkProcessTaskName,
+							DownlinkDispatchTaskName,
 						),
 					},
 				)
@@ -382,7 +360,7 @@ func TestDeviceRegistryGet(t *testing.T) {
 					return test.ContextWithTB(ctx, t)
 				})
 
-				req := deepcopy.Copy(tc.Request).(*ttnpb.GetEndDeviceRequest)
+				req := ttnpb.Clone(tc.Request)
 				dev, err := ttnpb.NewNsEndDeviceRegistryClient(ns.LoopbackConn()).Get(ctx, req)
 				if tc.ErrorAssertion != nil && a.So(tc.ErrorAssertion(t, err), should.BeTrue) {
 					a.So(dev, should.BeNil)
@@ -397,28 +375,30 @@ func TestDeviceRegistryGet(t *testing.T) {
 }
 
 func TestDeviceRegistrySet(t *testing.T) {
-	defaultMACSettings := DefaultConfig.DefaultMACSettings.Parse()
+	defaultMACSettings := test.Must(DefaultConfig.DefaultMACSettings.Parse())
 
-	customMACSettings := defaultMACSettings
-	customMACSettings.Rx1Delay = &ttnpb.RxDelayValue{Value: ttnpb.RX_DELAY_2}
+	customMACSettings := test.Must(DefaultConfig.DefaultMACSettings.Parse())
+	customMACSettings.Rx1Delay = &ttnpb.RxDelayValue{Value: ttnpb.RxDelay_RX_DELAY_2}
 	customMACSettings.Rx1DataRateOffset = nil
 
-	customMACSettingsOpt := EndDeviceOptions.WithMACSettings(&customMACSettings)
+	customMACSettingsOpt := EndDeviceOptions.WithMacSettings(customMACSettings)
 
-	multicastClassBMACSettings := defaultMACSettings
+	multicastClassBMACSettings := test.Must(DefaultConfig.DefaultMACSettings.Parse())
 	multicastClassBMACSettings.PingSlotPeriodicity = &ttnpb.PingSlotPeriodValue{
-		Value: ttnpb.PING_EVERY_16S,
+		Value: ttnpb.PingSlotPeriod_PING_EVERY_16S,
 	}
 
-	multicastClassBMACSettingsOpt := EndDeviceOptions.WithMACSettings(&multicastClassBMACSettings)
+	multicastClassBMACSettingsOpt := EndDeviceOptions.WithMacSettings(multicastClassBMACSettings)
 
-	currentMACStateOverrideOpt := func(macState ttnpb.MACState) ttnpb.MACState {
-		macState.CurrentParameters.Rx1Delay = ttnpb.RX_DELAY_3
+	currentMACStateOverrideOpt := func(macState *ttnpb.MACState) *ttnpb.MACState {
+		macState = ttnpb.Clone(macState)
+		macState.CurrentParameters.Rx1Delay = ttnpb.RxDelay_RX_DELAY_3
 		macState.CurrentParameters.Rx1DataRateOffset = ttnpb.DataRateOffset_DATA_RATE_OFFSET_1
 		return macState
 	}
-	desiredMACStateOverrideOpt := func(macState ttnpb.MACState) ttnpb.MACState {
-		macState.DesiredParameters.Rx1Delay = ttnpb.RX_DELAY_4
+	desiredMACStateOverrideOpt := func(macState *ttnpb.MACState) *ttnpb.MACState {
+		macState = ttnpb.Clone(macState)
+		macState.DesiredParameters.Rx1Delay = ttnpb.RxDelay_RX_DELAY_4
 		macState.DesiredParameters.Rx1DataRateOffset = ttnpb.DataRateOffset_DATA_RATE_OFFSET_2
 		return macState
 	}
@@ -431,13 +411,14 @@ func TestDeviceRegistrySet(t *testing.T) {
 		SessionOptions.WithLastNFCntDown(0x24),
 	}
 	activeSessionOptsWithStartedAt := append(activeSessionOpts,
-		SessionOptions.WithStartedAt(time.Unix(0, 42).UTC()),
+		SessionOptions.WithStartedAt(timestamppb.New(time.Unix(0, 42))),
 	)
 
 	activateOpt := EndDeviceOptions.Activate(customMACSettings, false, activeSessionOpts, activeMACStateOpts...)
 
-	macStateWithoutRX1DelayOpt := func(dev ttnpb.EndDevice) ttnpb.EndDevice {
-		dev.MACState.CurrentParameters.Rx1Delay = 0
+	macStateWithoutRX1DelayOpt := func(dev *ttnpb.EndDevice) *ttnpb.EndDevice {
+		dev = ttnpb.Clone(dev)
+		dev.MacState.CurrentParameters.Rx1Delay = 0
 		return dev
 	}
 
@@ -470,7 +451,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"pending_mac_state",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
@@ -489,7 +470,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"pending_session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
@@ -524,7 +505,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
@@ -543,7 +524,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
@@ -570,7 +551,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"session.keys.session_key_id",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
@@ -588,55 +569,55 @@ func TestDeviceRegistrySet(t *testing.T) {
 			// OTAA Create 1.0.3
 			{
 				SetDevice: *MakeOTAASetDeviceRequest([]test.EndDeviceOption{
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					activateOpt,
 				},
 					"mac_state",
 					"session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					activateOpt,
 				),
 				StoredDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.Activate(customMACSettings, true, activeSessionOpts, activeMACStateOpts...),
 				),
 			},
 			{
 				SetDevice: *MakeOTAASetDeviceRequest([]test.EndDeviceOption{
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.SendJoinRequest(customMACSettings, false),
 				},
 					"pending_mac_state",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.SendJoinRequest(customMACSettings, false),
 				),
 				StoredDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.SendJoinRequest(customMACSettings, true),
 				),
 			},
 			{
 				SetDevice: *MakeOTAASetDeviceRequest([]test.EndDeviceOption{
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.SendJoinRequest(customMACSettings, false),
 					EndDeviceOptions.SendJoinAccept(ttnpb.TxSchedulePriority_HIGHEST),
 				},
@@ -644,26 +625,26 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"pending_session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.SendJoinRequest(customMACSettings, false),
 					EndDeviceOptions.SendJoinAccept(ttnpb.TxSchedulePriority_HIGHEST),
 				),
 				StoredDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.SendJoinRequest(customMACSettings, true),
 					EndDeviceOptions.SendJoinAccept(ttnpb.TxSchedulePriority_HIGHEST),
 				),
 			},
 			{
 				SetDevice: *MakeOTAASetDeviceRequest([]test.EndDeviceOption{
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					activateOpt,
 				},
 					"mac_state.current_parameters",
@@ -671,17 +652,17 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.Activate(customMACSettings, false, activeSessionOpts, currentMACStateOverrideOpt),
 				),
 				StoredDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.Activate(customMACSettings, true, activeSessionOpts, currentMACStateOverrideOpt),
 					EndDeviceOptions.WithMACStateOptions(
 						MACStateOptions.WithRecentUplinks(),
@@ -691,8 +672,8 @@ func TestDeviceRegistrySet(t *testing.T) {
 			},
 			{
 				SetDevice: *MakeOTAASetDeviceRequest([]test.EndDeviceOption{
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					activateOpt,
 				},
 					"mac_state.desired_parameters",
@@ -702,17 +683,17 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"session.keys.session_key_id",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.Activate(defaultMACSettings, false, nil, desiredMACStateOverrideOpt),
 				),
 				StoredDevice: MakeOTAAEndDevice(
-					EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-					EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+					EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+					EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 					EndDeviceOptions.Activate(defaultMACSettings, true, nil, desiredMACStateOverrideOpt),
 					EndDeviceOptions.WithMACStateOptions(
 						MACStateOptions.WithRecentUplinks(),
@@ -728,7 +709,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"session",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
 				ReturnedDevice: MakeABPEndDevice(customMACSettings, false, activeSessionOpts, nil),
@@ -737,15 +718,15 @@ func TestDeviceRegistrySet(t *testing.T) {
 
 			// Multicast Create
 			{
-				SetDevice: *MakeMulticastSetDeviceRequest(ttnpb.CLASS_C, defaultMACSettings, activeSessionOpts, nil, nil,
+				SetDevice: *MakeMulticastSetDeviceRequest(ttnpb.Class_CLASS_C, defaultMACSettings, activeSessionOpts, nil, nil,
 					"session.last_n_f_cnt_down",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				},
 
-				ReturnedDevice: MakeMulticastEndDevice(ttnpb.CLASS_C, defaultMACSettings, false, activeSessionOpts, nil),
-				StoredDevice:   MakeMulticastEndDevice(ttnpb.CLASS_C, defaultMACSettings, true, activeSessionOpts, nil),
+				ReturnedDevice: MakeMulticastEndDevice(ttnpb.Class_CLASS_C, defaultMACSettings, false, activeSessionOpts, nil),
+				StoredDevice:   MakeMulticastEndDevice(ttnpb.Class_CLASS_C, defaultMACSettings, true, activeSessionOpts, nil),
 			},
 		},
 
@@ -776,8 +757,8 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"mac_settings",
 				),
 
-				ReturnedDevice: EndDevicePtr(customMACSettingsOpt(*MakeABPEndDevice(defaultMACSettings, false, activeSessionOptsWithStartedAt, nil))),
-				StoredDevice:   EndDevicePtr(customMACSettingsOpt(*MakeABPEndDevice(defaultMACSettings, true, activeSessionOptsWithStartedAt, nil))),
+				ReturnedDevice: customMACSettingsOpt(MakeABPEndDevice(defaultMACSettings, false, activeSessionOptsWithStartedAt, nil)),
+				StoredDevice:   customMACSettingsOpt(MakeABPEndDevice(defaultMACSettings, true, activeSessionOptsWithStartedAt, nil)),
 			},
 
 			{
@@ -787,16 +768,16 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"pending_mac_state",
 				),
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS, // `pending_mac_state` requires key write rights
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS, // `pending_mac_state` requires key write rights
 				},
 
-				ReturnedDevice: EndDevicePtr(macStateWithoutRX1DelayOpt(*MakeABPEndDevice(defaultMACSettings, false, activeSessionOptsWithStartedAt, nil))),
-				StoredDevice:   EndDevicePtr(macStateWithoutRX1DelayOpt(*MakeABPEndDevice(defaultMACSettings, true, activeSessionOptsWithStartedAt, nil))),
+				ReturnedDevice: macStateWithoutRX1DelayOpt(MakeABPEndDevice(defaultMACSettings, false, activeSessionOptsWithStartedAt, nil)),
+				StoredDevice:   macStateWithoutRX1DelayOpt(MakeABPEndDevice(defaultMACSettings, true, activeSessionOptsWithStartedAt, nil)),
 			},
 		},
 
 		// Multicast Update
-		MakeMulticastEndDevice(ttnpb.CLASS_B, defaultMACSettings, true, activeSessionOptsWithStartedAt, nil): {
+		MakeMulticastEndDevice(ttnpb.Class_CLASS_B, defaultMACSettings, true, activeSessionOptsWithStartedAt, nil): {
 			{
 				SetDevice: *makeUpdateDeviceRequest([]test.EndDeviceOption{
 					multicastClassBMACSettingsOpt,
@@ -804,8 +785,8 @@ func TestDeviceRegistrySet(t *testing.T) {
 					"mac_settings",
 				),
 
-				ReturnedDevice: EndDevicePtr(multicastClassBMACSettingsOpt(*MakeMulticastEndDevice(ttnpb.CLASS_B, defaultMACSettings, false, activeSessionOptsWithStartedAt, nil))),
-				StoredDevice:   EndDevicePtr(multicastClassBMACSettingsOpt(*MakeMulticastEndDevice(ttnpb.CLASS_B, defaultMACSettings, true, activeSessionOptsWithStartedAt, nil))),
+				ReturnedDevice: multicastClassBMACSettingsOpt(MakeMulticastEndDevice(ttnpb.Class_CLASS_B, defaultMACSettings, false, activeSessionOptsWithStartedAt, nil)),
+				StoredDevice:   multicastClassBMACSettingsOpt(MakeMulticastEndDevice(ttnpb.Class_CLASS_B, defaultMACSettings, true, activeSessionOptsWithStartedAt, nil)),
 			},
 		},
 	} {
@@ -832,9 +813,9 @@ func TestDeviceRegistrySet(t *testing.T) {
 								return "ABP"
 							}
 						}()),
-						fmt.Sprintf("MAC:%s", dev.LoRaWANVersion.String()),
-						fmt.Sprintf("PHY:%s", dev.LoRaWANPHYVersion.String()),
-						fmt.Sprintf("fp:%s", dev.FrequencyPlanID),
+						fmt.Sprintf("MAC:%s", dev.LorawanVersion.String()),
+						fmt.Sprintf("PHY:%s", dev.LorawanPhyVersion.String()),
+						fmt.Sprintf("fp:%s", dev.FrequencyPlanId),
 						fmt.Sprintf("paths:[%s]", strings.Join(tc.SetDevice.Paths, ",")),
 					}
 				}()...),
@@ -853,19 +834,24 @@ func TestDeviceRegistrySet(t *testing.T) {
 									},
 								},
 								KeyVault: test.DefaultKeyVault,
+								FrequencyPlans: config.FrequencyPlansConfig{
+									ConfigSource: "static",
+									Static:       test.StaticFrequencyPlans,
+								},
 							},
 						},
 						NetworkServer: nsConf,
 						TaskStarter: StartTaskExclude(
 							DownlinkProcessTaskName,
+							DownlinkDispatchTaskName,
 						),
 					})
 					defer stop()
 
-					clock := test.NewMockClock(time.Now().UTC())
+					clock := test.NewMockClock(time.Now())
 					defer SetMockClock(clock)()
 
-					withCreatedAt := test.EndDeviceOptions.WithCreatedAt(clock.Now())
+					withCreatedAt := test.EndDeviceOptions.WithCreatedAt(timestamppb.New(clock.Now()))
 					if createDevice != nil {
 						_, ctx = MustCreateDevice(ctx, env.Devices, createDevice)
 						clock.Add(time.Nanosecond)
@@ -873,21 +859,19 @@ func TestDeviceRegistrySet(t *testing.T) {
 
 					now := clock.Now()
 					withTimestamps := withCreatedAt.Compose(
-						test.EndDeviceOptions.WithUpdatedAt(now),
-						func(dev ttnpb.EndDevice) ttnpb.EndDevice {
-							if dev.Session != nil && dev.Session.StartedAt.IsZero() {
-								dev.Session = CopySession(dev.Session)
-								dev.Session.StartedAt = now
+						test.EndDeviceOptions.WithUpdatedAt(timestamppb.New(now)),
+						func(dev *ttnpb.EndDevice) *ttnpb.EndDevice {
+							dev = ttnpb.Clone(dev)
+							if dev.Session != nil && dev.Session.StartedAt == nil {
+								dev.Session.StartedAt = timestamppb.New(now)
 							}
 							return dev
 						},
 					)
 
 					req := &ttnpb.SetEndDeviceRequest{
-						EndDevice: *tc.SetDevice.EndDevice,
-						FieldMask: pbtypes.FieldMask{
-							Paths: tc.SetDevice.Paths,
-						},
+						EndDevice: tc.SetDevice.EndDevice,
+						FieldMask: ttnpb.FieldMask(tc.SetDevice.Paths...),
 					}
 
 					dev, err, ok := env.AssertSetDevice(ctx, createDevice == nil, req)
@@ -900,7 +884,7 @@ func TestDeviceRegistrySet(t *testing.T) {
 					a.So(dev, should.BeNil)
 					if len(tc.RequiredRights) > 0 {
 						dev, err, ok = env.AssertSetDevice(ctx, createDevice == nil, req,
-							ttnpb.RIGHT_APPLICATION_DEVICES_WRITE,
+							ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
 						)
 						if !a.So(ok, should.BeTrue) || !a.So(err, should.BeError) || !a.So(errors.IsPermissionDenied(err), should.BeTrue) {
 							if err != nil {
@@ -912,9 +896,9 @@ func TestDeviceRegistrySet(t *testing.T) {
 					}
 
 					rights := append([]ttnpb.Right{
-						ttnpb.RIGHT_APPLICATION_DEVICES_WRITE,
+						ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
 					}, tc.RequiredRights...)
-					expectedReturn := test.Must(ttnpb.ApplyEndDeviceFieldMask(nil, EndDevicePtr(withTimestamps(*tc.ReturnedDevice)), ttnpb.AddImplicitEndDeviceGetFields(tc.SetDevice.Paths...)...)).(*ttnpb.EndDevice)
+					expectedReturn := test.Must(ttnpb.ApplyEndDeviceFieldMask(nil, withTimestamps(tc.ReturnedDevice), ttnpb.AddImplicitEndDeviceGetFields(tc.SetDevice.Paths...)...))
 
 					dev, err, ok = env.AssertSetDevice(ctx, createDevice == nil, req, rights...)
 					if !a.So(ok, should.BeTrue) || !a.So(err, should.BeNil) || !a.So(dev, should.NotBeNil) {
@@ -925,26 +909,24 @@ func TestDeviceRegistrySet(t *testing.T) {
 					}
 					a.So(dev, should.Resemble, expectedReturn)
 
-					dev, _, err = env.Devices.GetByID(ctx, tc.SetDevice.ApplicationIdentifiers, tc.SetDevice.DeviceID, ttnpb.EndDeviceFieldPathsTopLevel)
+					dev, _, err = env.Devices.GetByID(ctx, tc.SetDevice.Ids.ApplicationIds, tc.SetDevice.Ids.DeviceId, ttnpb.EndDeviceFieldPathsTopLevel)
 					if !a.So(err, should.BeNil) || !a.So(dev, should.NotBeNil) {
 						if err != nil {
 							t.Errorf("Expected no error, got: %s", test.FormatError(err))
 						}
 						return
 					}
-					a.So(dev, should.Resemble, EndDevicePtr(withTimestamps(*tc.StoredDevice)))
+					a.So(dev, should.Resemble, withTimestamps(tc.StoredDevice))
 
 					now = clock.Add(time.Nanosecond)
 					dev, err, ok = env.AssertSetDevice(ctx, false, &ttnpb.SetEndDeviceRequest{
-						EndDevice: *expectedReturn,
-						FieldMask: pbtypes.FieldMask{
-							Paths: tc.SetDevice.Paths,
-						},
+						EndDevice: expectedReturn,
+						FieldMask: ttnpb.FieldMask(tc.SetDevice.Paths...),
 					}, rights...)
 					if !a.So(ok, should.BeTrue) || !a.So(err, should.BeNil) || !a.So(dev, should.NotBeNil) {
 						return
 					}
-					a.So(dev, should.Resemble, EndDevicePtr(EndDeviceOptions.WithUpdatedAt(now)(*expectedReturn)))
+					a.So(dev, should.Resemble, EndDeviceOptions.WithUpdatedAt(timestamppb.New(now))(expectedReturn))
 				},
 			})
 		}
@@ -957,7 +939,7 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 		SessionOptions.WithLastNFCntDown(0x24),
 		SessionOptions.WithDefaultQueuedApplicationDownlinks(),
 	}
-	macSettings := DefaultConfig.DefaultMACSettings.Parse()
+	macSettings := test.Must(DefaultConfig.DefaultMACSettings.Parse())
 	activateOpt := EndDeviceOptions.Activate(macSettings, true, activeSessionOpts)
 
 	// TODO: Refactor into same structure as Set
@@ -979,8 +961,8 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 		},
 		{
 			CreateDevice: MakeOTAASetDeviceRequest([]test.EndDeviceOption{
-				EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-				EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+				EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+				EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 				activateOpt,
 			},
 				"mac_state",
@@ -996,8 +978,8 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 		},
 		{
 			CreateDevice: MakeABPSetDeviceRequest(macSettings, activeSessionOpts, nil, []test.EndDeviceOption{
-				EndDeviceOptions.WithLoRaWANVersion(ttnpb.MAC_V1_0_3),
-				EndDeviceOptions.WithLoRaWANPHYVersion(ttnpb.PHY_V1_0_3_REV_A),
+				EndDeviceOptions.WithLorawanVersion(ttnpb.MACVersion_MAC_V1_0_3),
+				EndDeviceOptions.WithLorawanPhyVersion(ttnpb.PHYVersion_RP001_V1_0_3_REV_A),
 			}),
 		},
 	} {
@@ -1015,7 +997,7 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					"session.last_f_cnt_up",
 				},
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
 				},
 			},
 			{
@@ -1024,8 +1006,7 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					"session.last_f_cnt_up",
 				},
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-					ttnpb.RIGHT_APPLICATION_LINK,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
 				},
 			},
 			{
@@ -1033,8 +1014,8 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					"session.keys",
 				},
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 				},
 			},
 			{
@@ -1046,9 +1027,9 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					"pending_session",
 				},
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-					ttnpb.RIGHT_APPLICATION_LINK,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
 				},
 			},
 			{
@@ -1063,9 +1044,9 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					"supports_join",
 				},
 				RequiredRights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-					ttnpb.RIGHT_APPLICATION_LINK,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
 				},
 			},
 		} {
@@ -1086,9 +1067,9 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 								return MakeTestCaseName("ABP", "no session")
 							}
 							return fmt.Sprintf(MakeTestCaseName("ABP", "dev_addr:%s", "queue_len:%d", "session_keys:%v"),
-								tc.CreateDevice.Session.DevAddr,
+								types.MustDevAddr(tc.CreateDevice.Session.DevAddr).OrZero(),
 								len(tc.CreateDevice.EndDevice.Session.QueuedApplicationDownlinks),
-								tc.CreateDevice.Session.SessionKeys,
+								tc.CreateDevice.Session.Keys,
 							)
 						}(),
 					)
@@ -1108,11 +1089,16 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 									},
 								},
 								KeyVault: test.DefaultKeyVault,
+								FrequencyPlans: config.FrequencyPlansConfig{
+									ConfigSource: "static",
+									Static:       test.StaticFrequencyPlans,
+								},
 							},
 						},
 						NetworkServer: nsConf,
 						TaskStarter: StartTaskExclude(
 							DownlinkProcessTaskName,
+							DownlinkDispatchTaskName,
 						),
 					})
 					defer stop()
@@ -1121,18 +1107,16 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					defer SetMockClock(clock)()
 
 					req := &ttnpb.ResetAndGetEndDeviceRequest{
-						EndDeviceIdentifiers: *test.MakeEndDeviceIdentifiers(),
-						FieldMask: pbtypes.FieldMask{
-							Paths: conf.Paths,
-						},
+						EndDeviceIds: test.MakeEndDeviceIdentifiers(),
+						FieldMask:    ttnpb.FieldMask(conf.Paths...),
 					}
 
 					var created *ttnpb.EndDevice
 					if tc.CreateDevice != nil {
 						created, ctx = MustCreateDevice(ctx, env.Devices, tc.CreateDevice.EndDevice)
 
-						req.ApplicationIdentifiers = tc.CreateDevice.ApplicationIdentifiers
-						req.DeviceID = tc.CreateDevice.DeviceID
+						req.EndDeviceIds.ApplicationIds = tc.CreateDevice.Ids.ApplicationIds
+						req.EndDeviceIds.DeviceId = tc.CreateDevice.Ids.DeviceId
 
 						clock.Add(time.Nanosecond)
 					}
@@ -1150,7 +1134,7 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 					now := clock.Now().UTC()
 
 					dev, err, ok = env.AssertResetFactoryDefaults(ctx, req, append([]ttnpb.Right{
-						ttnpb.RIGHT_APPLICATION_DEVICES_WRITE,
+						ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
 					}, conf.RequiredRights...)...)
 					if !a.So(ok, should.BeTrue) {
 						return
@@ -1176,8 +1160,14 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 							return
 						}
 
+						fps, err := ns.FrequencyPlansStore(ctx)
+						if !a.So(err, should.BeNil) {
+							t.Fail()
+							return
+						}
 						var newErr error
-						macState, newErr = mac.NewState(created, ns.FrequencyPlans, DefaultConfig.DefaultMACSettings.Parse())
+						defaultMACSettings := test.Must(DefaultConfig.DefaultMACSettings.Parse())
+						macState, newErr = mac.NewState(created, fps, defaultMACSettings)
 						if newErr != nil {
 							a.So(err, should.NotBeNil)
 							a.So(err, should.HaveSameErrorDefinitionAs, newErr)
@@ -1186,8 +1176,8 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 						session = &ttnpb.Session{
 							DevAddr:                    created.Session.DevAddr,
 							QueuedApplicationDownlinks: created.Session.QueuedApplicationDownlinks,
-							SessionKeys:                created.Session.SessionKeys,
-							StartedAt:                  now,
+							Keys:                       created.Session.Keys,
+							StartedAt:                  timestamppb.New(now),
 						}
 					}
 					if !a.So(err, should.BeNil) {
@@ -1195,20 +1185,20 @@ func TestDeviceRegistryResetFactoryDefaults(t *testing.T) {
 						return
 					}
 
-					expected := CopyEndDevice(created)
+					expected := ttnpb.Clone(created)
 					expected.BatteryPercentage = nil
 					expected.DownlinkMargin = 0
 					expected.LastDevStatusReceivedAt = nil
-					expected.MACState = macState
-					expected.PendingMACState = nil
+					expected.MacState = macState
+					expected.PendingMacState = nil
 					expected.PendingSession = nil
 					expected.PowerState = ttnpb.PowerState_POWER_UNKNOWN
 					expected.Session = session
-					expected.UpdatedAt = clock.Now().UTC()
-					if !a.So(dev, should.Resemble, test.Must(ttnpb.ApplyEndDeviceFieldMask(nil, expected, ttnpb.AddImplicitEndDeviceGetFields(conf.Paths...)...)).(*ttnpb.EndDevice)) {
+					expected.UpdatedAt = timestamppb.New(clock.Now())
+					if !a.So(dev, should.Resemble, test.Must(ttnpb.ApplyEndDeviceFieldMask(nil, expected, ttnpb.AddImplicitEndDeviceGetFields(conf.Paths...)...))) {
 						return
 					}
-					updated, _, err := env.Devices.GetByID(ctx, tc.CreateDevice.ApplicationIdentifiers, tc.CreateDevice.DeviceID, ttnpb.EndDeviceFieldPathsTopLevel)
+					updated, _, err := env.Devices.GetByID(ctx, tc.CreateDevice.Ids.ApplicationIds, tc.CreateDevice.Ids.DeviceId, ttnpb.EndDeviceFieldPathsTopLevel)
 					if a.So(err, should.BeNil) {
 						a.So(updated, should.Resemble, expected)
 					}
@@ -1222,7 +1212,7 @@ func TestDeviceRegistryDelete(t *testing.T) {
 	for _, tc := range []struct {
 		Name           string
 		ContextFunc    func(context.Context) context.Context
-		SetByIDFunc    func(context.Context, ttnpb.ApplicationIdentifiers, string, []string, func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error)
+		SetByIDFunc    func(context.Context, *ttnpb.ApplicationIdentifiers, string, []string, func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error)
 		Request        *ttnpb.EndDeviceIdentifiers
 		ErrorAssertion func(*testing.T, error) bool
 		SetByIDCalls   uint64
@@ -1230,24 +1220,24 @@ func TestDeviceRegistryDelete(t *testing.T) {
 		{
 			Name: "No device write rights",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_GATEWAY_SETTINGS_BASIC,
+								ttnpb.Right_RIGHT_GATEWAY_SETTINGS_BASIC,
 							},
 						},
-					},
+					}),
 				})
 			},
-			SetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
+			SetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
 				err := errors.New("SetByIDFunc must not be called")
 				test.MustTFromContext(ctx).Error(err)
 				return nil, ctx, err
 			},
 			Request: &ttnpb.EndDeviceIdentifiers{
-				DeviceID:               "test-dev-id",
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				DeviceId:       "test-dev-id",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				if !assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue) {
@@ -1261,20 +1251,20 @@ func TestDeviceRegistryDelete(t *testing.T) {
 		{
 			Name: "Non-existing device",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_APPLICATION_DEVICES_WRITE,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
 							},
 						},
-					},
+					}),
 				})
 			},
-			SetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
+			SetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
 				t := test.MustTFromContext(ctx)
 				a := assertions.New(t)
-				a.So(appID, should.Resemble, ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"})
+				a.So(appID, should.Resemble, &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"})
 				a.So(devID, should.Equal, "test-dev-id")
 				a.So(gets, should.BeNil)
 
@@ -1287,8 +1277,8 @@ func TestDeviceRegistryDelete(t *testing.T) {
 				return nil, ctx, nil
 			},
 			Request: &ttnpb.EndDeviceIdentifiers{
-				DeviceID:               "test-dev-id",
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				DeviceId:       "test-dev-id",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 			},
 			SetByIDCalls: 1,
 		},
@@ -1296,26 +1286,26 @@ func TestDeviceRegistryDelete(t *testing.T) {
 		{
 			Name: "Existing device",
 			ContextFunc: func(ctx context.Context) context.Context {
-				return rights.NewContext(ctx, rights.Rights{
-					ApplicationRights: map[string]*ttnpb.Rights{
-						unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"}): {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"}): {
 							Rights: []ttnpb.Right{
-								ttnpb.RIGHT_APPLICATION_DEVICES_WRITE,
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
 							},
 						},
-					},
+					}),
 				})
 			},
-			SetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
+			SetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
 				a := assertions.New(test.MustTFromContext(ctx))
-				a.So(appID, should.Resemble, ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"})
+				a.So(appID, should.Resemble, &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"})
 				a.So(devID, should.Equal, "test-dev-id")
 				a.So(gets, should.BeNil)
 
 				dev, sets, err := f(ctx, &ttnpb.EndDevice{
-					EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-						DeviceID:               "test-dev-id",
-						ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+					Ids: &ttnpb.EndDeviceIdentifiers{
+						DeviceId:       "test-dev-id",
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 					},
 				})
 				if !a.So(err, should.BeNil) {
@@ -1326,8 +1316,8 @@ func TestDeviceRegistryDelete(t *testing.T) {
 				return nil, ctx, nil
 			},
 			Request: &ttnpb.EndDeviceIdentifiers{
-				DeviceID:               "test-dev-id",
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "test-app-id"},
+				DeviceId:       "test-dev-id",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app-id"},
 			},
 			SetByIDCalls: 1,
 		},
@@ -1344,7 +1334,7 @@ func TestDeviceRegistryDelete(t *testing.T) {
 					TestConfig{
 						NetworkServer: Config{
 							Devices: &MockDeviceRegistry{
-								SetByIDFunc: func(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
+								SetByIDFunc: func(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(context.Context, *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, context.Context, error) {
 									atomic.AddUint64(&setByIDCalls, 1)
 									return tc.SetByIDFunc(ctx, appID, devID, gets, f)
 								},
@@ -1352,6 +1342,7 @@ func TestDeviceRegistryDelete(t *testing.T) {
 						},
 						TaskStarter: StartTaskExclude(
 							DownlinkProcessTaskName,
+							DownlinkDispatchTaskName,
 						),
 					},
 				)
@@ -1364,7 +1355,7 @@ func TestDeviceRegistryDelete(t *testing.T) {
 					return test.ContextWithTB(ctx, t)
 				})
 
-				req := deepcopy.Copy(tc.Request).(*ttnpb.EndDeviceIdentifiers)
+				req := ttnpb.Clone(tc.Request)
 				res, err := ttnpb.NewNsEndDeviceRegistryClient(ns.LoopbackConn()).Delete(ctx, req)
 				a.So(setByIDCalls, should.Equal, tc.SetByIDCalls)
 				if tc.ErrorAssertion != nil && a.So(tc.ErrorAssertion(t, err), should.BeTrue) {
@@ -1373,6 +1364,388 @@ func TestDeviceRegistryDelete(t *testing.T) {
 					a.So(res, should.Resemble, ttnpb.Empty)
 				}
 				a.So(req, should.Resemble, tc.Request)
+			},
+		})
+	}
+}
+
+func TestDeviceRegistryBatchDelete(t *testing.T) { // nolint:paralleltest
+	registeredApplicationID := "test-app"
+	registeredApplicationIDs := &ttnpb.ApplicationIdentifiers{
+		ApplicationId: registeredApplicationID,
+	}
+	dev1 := &ttnpb.EndDevice{
+		Ids: &ttnpb.EndDeviceIdentifiers{
+			ApplicationIds: &ttnpb.ApplicationIdentifiers{
+				ApplicationId: registeredApplicationID,
+			},
+			DeviceId: "test-device-1",
+			JoinEui:  types.EUI64{0x42, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes(),
+			DevEui:   types.EUI64{0x42, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes(),
+		},
+		RootKeys: &ttnpb.RootKeys{
+			RootKeyId: "testKey",
+			NwkKey: &ttnpb.KeyEnvelope{
+				Key: types.AES128Key{
+					0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x0,
+				}.Bytes(),
+				KekLabel: "test",
+			},
+			AppKey: &ttnpb.KeyEnvelope{
+				Key: types.AES128Key{
+					0x0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+				}.Bytes(),
+				KekLabel: "test",
+			},
+		},
+	}
+	dev2 := ttnpb.Clone(dev1)
+	dev2.Ids.DeviceId = "test-device-2"
+	dev2.Ids.JoinEui = types.EUI64{0x42, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes()
+	dev2.Ids.DevEui = types.EUI64{0x42, 0x43, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes()
+
+	dev3 := ttnpb.Clone(dev1)
+	dev3.Ids.DeviceId = "test-device-3"
+	dev3.Ids.JoinEui = types.EUI64{0x42, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes()
+	dev3.Ids.DevEui = types.EUI64{0x42, 0x44, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes()
+
+	for _, tc := range []struct {
+		Name            string
+		ContextFunc     func(context.Context) context.Context
+		BatchDeleteFunc func(
+			ctx context.Context,
+			appIDs *ttnpb.ApplicationIdentifiers,
+			deviceIDs []string,
+		) ([]*ttnpb.EndDeviceIdentifiers, error)
+		Request          *ttnpb.BatchDeleteEndDevicesRequest
+		ErrorAssertion   func(*testing.T, error) bool
+		BatchDeleteCalls uint64
+	}{
+		{
+			Name: "No device write rights",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_GATEWAY_SETTINGS_BASIC,
+							},
+						},
+					}),
+				})
+			},
+			BatchDeleteFunc: func(
+				ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				err := errors.New("BatchDeleteFunc must not be called")
+				test.MustTFromContext(ctx).Error(err)
+				return nil, err
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: registeredApplicationIDs,
+				DeviceIds: []string{
+					dev1.Ids.DeviceId,
+					dev2.Ids.DeviceId,
+					dev3.Ids.DeviceId,
+				},
+			},
+			ErrorAssertion: func(t *testing.T, err error) bool {
+				t.Helper()
+				if !assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue) {
+					t.Errorf("Received error: %s", err)
+					return false
+				}
+				return true
+			},
+			BatchDeleteCalls: 0,
+		},
+		{
+			Name: "Non-existing device",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+							},
+						},
+					}),
+				})
+			},
+			BatchDeleteFunc: func(ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				// Devices not found are skipped.
+				return nil, nil
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: registeredApplicationIDs,
+				DeviceIds: []string{
+					dev1.Ids.DeviceId,
+					dev2.Ids.DeviceId,
+					dev3.Ids.DeviceId,
+				},
+			},
+			BatchDeleteCalls: 1,
+		},
+		{
+			Name: "Wrong application ID",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+							},
+						},
+					}),
+				})
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "test-unknown-app-id"},
+				DeviceIds: []string{
+					dev1.Ids.DeviceId,
+					dev2.Ids.DeviceId,
+					dev3.Ids.DeviceId,
+				},
+			},
+			BatchDeleteFunc: func(
+				ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				err := errors.New("BatchDeleteFunc must not be called")
+				test.MustTFromContext(ctx).Error(err)
+				return nil, err
+			},
+			ErrorAssertion: func(t *testing.T, err error) bool {
+				t.Helper()
+				if !assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue) {
+					t.Errorf("Received error: %s", err)
+					return false
+				}
+				return true
+			},
+			BatchDeleteCalls: 0,
+		},
+		{
+			Name: "Invalid Device",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+							},
+						},
+					}),
+				})
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: registeredApplicationIDs,
+				DeviceIds: []string{
+					"test-dev-&*@(#)",
+				},
+			},
+			BatchDeleteFunc: func(
+				ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				err := errors.New("BatchDeleteFunc must not be called")
+				test.MustTFromContext(ctx).Error(err)
+				return nil, err
+			},
+			ErrorAssertion: func(t *testing.T, err error) bool {
+				t.Helper()
+				if !assertions.New(t).So(errors.IsInvalidArgument(err), should.BeTrue) {
+					t.Errorf("Received error: %s", err)
+					return false
+				}
+				return true
+			},
+			BatchDeleteCalls: 0,
+		},
+		{
+			Name: "Existing device",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+							},
+						},
+					}),
+				})
+			},
+			BatchDeleteFunc: func(
+				ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				a := assertions.New(test.MustTFromContext(ctx))
+				a.So(deviceIDs, should.HaveLength, 1)
+				a.So(appIDs, should.Resemble, registeredApplicationIDs)
+				a.So(deviceIDs[0], should.Equal, dev1.GetIds().DeviceId)
+				return []*ttnpb.EndDeviceIdentifiers{
+					dev1.Ids,
+				}, nil
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: registeredApplicationIDs,
+				DeviceIds: []string{
+					dev1.Ids.DeviceId,
+				},
+			},
+			BatchDeleteCalls: 1,
+		},
+		{
+			Name: "One invalid device in batch",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+							},
+						},
+					}),
+				})
+			},
+			BatchDeleteFunc: func(
+				ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				a := assertions.New(test.MustTFromContext(ctx))
+				a.So(deviceIDs, should.HaveLength, 3)
+				a.So(appIDs, should.Resemble, registeredApplicationIDs)
+
+				for _, devID := range deviceIDs {
+					switch devID {
+					case dev1.GetIds().DeviceId:
+					case dev2.GetIds().DeviceId:
+						t.Log("Known device ID")
+					case "test-dev-unknown-id":
+						t.Log("Ignore expected unknown device ID")
+					default:
+						t.Log("Unexpected device ID")
+					}
+				}
+				return []*ttnpb.EndDeviceIdentifiers{
+					dev1.Ids,
+					dev2.Ids,
+				}, nil
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: registeredApplicationIDs,
+				DeviceIds: []string{
+					dev1.Ids.DeviceId,
+					dev2.Ids.DeviceId,
+					"test-dev-unknown-id",
+				},
+			},
+			BatchDeleteCalls: 1,
+		},
+		{
+			Name: "Valid Batch",
+			ContextFunc: func(ctx context.Context) context.Context {
+				return rights.NewContext(ctx, &rights.Rights{
+					ApplicationRights: *rights.NewMap(map[string]*ttnpb.Rights{
+						unique.ID(test.Context(), registeredApplicationIDs): {
+							Rights: []ttnpb.Right{
+								ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+							},
+						},
+					}),
+				})
+			},
+			BatchDeleteFunc: func(
+				ctx context.Context,
+				appIDs *ttnpb.ApplicationIdentifiers,
+				deviceIDs []string,
+			) ([]*ttnpb.EndDeviceIdentifiers, error) {
+				a := assertions.New(test.MustTFromContext(ctx))
+				a.So(appIDs, should.Resemble, registeredApplicationIDs)
+				a.So(deviceIDs, should.HaveLength, 3)
+				for _, devID := range deviceIDs {
+					switch devID {
+					case dev1.GetIds().DeviceId:
+					case dev2.GetIds().DeviceId:
+					case dev3.GetIds().DeviceId:
+						// Known device ID
+					default:
+						t.Error("Unknown device ID: ", devID)
+					}
+				}
+				return []*ttnpb.EndDeviceIdentifiers{
+					dev1.Ids,
+					dev2.Ids,
+					dev3.Ids,
+				}, nil
+			},
+			Request: &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: registeredApplicationIDs,
+				DeviceIds: []string{
+					dev1.Ids.DeviceId,
+					dev2.Ids.DeviceId,
+					dev3.Ids.DeviceId,
+				},
+			},
+			BatchDeleteCalls: 1,
+		},
+	} {
+		tc := tc
+		test.RunSubtest(t, test.SubtestConfig{
+			Name:     tc.Name,
+			Parallel: true,
+			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
+				t.Helper()
+				var batchDeleteCalls uint64
+				ns, ctx, env, stop := StartTest(
+					ctx,
+					TestConfig{
+						NetworkServer: Config{
+							Devices: &MockDeviceRegistry{
+								BatchDeleteFunc: func(
+									ctx context.Context,
+									appIDs *ttnpb.ApplicationIdentifiers,
+									deviceIDs []string,
+								) ([]*ttnpb.EndDeviceIdentifiers, error) {
+									atomic.AddUint64(&batchDeleteCalls, 1)
+									return tc.BatchDeleteFunc(ctx, appIDs, deviceIDs)
+								},
+							},
+						},
+						TaskStarter: StartTaskExclude(
+							DownlinkProcessTaskName,
+							DownlinkDispatchTaskName,
+						),
+					},
+				)
+				defer stop()
+
+				go LogEvents(t, env.Events)
+
+				ns.AddContextFiller(tc.ContextFunc)
+				ns.AddContextFiller(func(ctx context.Context) context.Context {
+					return test.ContextWithTB(ctx, t)
+				})
+
+				req := ttnpb.Clone(tc.Request)
+				a.So(req, should.Resemble, tc.Request)
+
+				_, err := ttnpb.NewNsEndDeviceBatchRegistryClient(ns.LoopbackConn()).Delete(ctx, req)
+				a.So(batchDeleteCalls, should.Equal, tc.BatchDeleteCalls)
+				if tc.ErrorAssertion != nil {
+					a.So(tc.ErrorAssertion(t, err), should.BeTrue)
+				} else {
+					a.So(err, should.BeNil)
+				}
 			},
 		})
 	}

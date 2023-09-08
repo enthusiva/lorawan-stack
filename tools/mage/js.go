@@ -17,8 +17,6 @@ package ttnmage
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 
@@ -39,33 +37,17 @@ func yarnWorkingDirectoryArg(elem ...string) string {
 	return fmt.Sprintf("--cwd=%s", filepath.Join(elem...))
 }
 
-func installYarn() error {
-	ok, err := target.Path(
-		filepath.Join("node_modules", "yarn"),
-	)
-	if err != nil {
-		return targetError(err)
-	}
-	if !ok {
-		return nil
-	}
-	if err := sh.RunV("npm", "install", "--no-package-lock", "--no-save", "--production=false", "yarn"); err != nil {
-		return fmt.Errorf("failed to install yarn: %w", err)
-	}
-	return nil
-}
-
 func execYarn(stdout, stderr io.Writer, args ...string) error {
-	_, err := sh.Exec(nil, stdout, stderr, "npx", append([]string{"yarn"}, args...)...)
+	_, err := sh.Exec(nil, stdout, stderr, "yarn", args...)
 	return err
 }
 
 func runYarn(args ...string) error {
-	return sh.Run("npx", append([]string{"yarn"}, args...)...)
+	return sh.Run("yarn", args...)
 }
 
 func runYarnV(args ...string) error {
-	return sh.RunV("npx", append([]string{"yarn"}, args...)...)
+	return sh.RunV("yarn", args...)
 }
 
 func (Js) runYarnCommand(cmd string, args ...string) error {
@@ -81,18 +63,14 @@ func (js Js) runWebpack(config string, args ...string) error {
 }
 
 func (js Js) runEslint(args ...string) error {
-	return js.runYarnCommand("eslint", append([]string{"--color", "--no-ignore"}, args...)...)
+	return js.runYarnCommand("eslint", append([]string{"--color", "--no-ignore", "--max-warnings", "0"}, args...)...)
 }
 
 func (js Js) waitOn() error {
-	u, err := url.Parse(js.frontendURL())
-	if err != nil {
-		return err
-	}
 	return js.runYarnCommand("wait-on", []string{
 		fmt.Sprintf("--timeout=%d", 120000),
 		fmt.Sprintf("--interval=%d", 1000),
-		fmt.Sprintf("http-get://%s/oauth", u.Host),
+		fmt.Sprintf("%s/oauth", js.frontendURL()),
 	}...)
 }
 
@@ -100,12 +78,17 @@ func (js Js) runCypress(command string, args ...string) error {
 	mg.Deps(js.waitOn)
 	return js.runYarnCommand("cypress", append([]string{
 		command,
-		"--config-file", filepath.Join("config", "cypress.json"),
-		"--config", fmt.Sprintf("baseUrl=%s", js.frontendURL())},
+		"--config-file", filepath.Join("config", "cypress.config.js"),
+		"--config", fmt.Sprintf("baseUrl=%s", js.frontendURL()),
+	},
 		args...)...)
 }
 
 func (js Js) frontendURL() string {
+	baseUrl := os.Getenv("CYPRESS_BASE_URL")
+	if baseUrl != "" {
+		return baseUrl
+	}
 	if js.isProductionMode() {
 		return fmt.Sprintf("http://localhost:%d", prodPort)
 	}
@@ -128,6 +111,13 @@ func (Js) isProductionMode() bool {
 	}
 }
 
+func (js Js) deps() error {
+	if mg.Verbose() {
+		fmt.Println("Installing JS dependencies")
+	}
+	return runYarn("install", "--no-progress", "--production=false", "--check-files")
+}
+
 // Deps installs the javascript dependencies.
 func (js Js) Deps() error {
 	ok, err := target.Dir(
@@ -140,23 +130,10 @@ func (js Js) Deps() error {
 	if err != nil {
 		return targetError(err)
 	}
-	// installYarn updates modtime of node_modules, so we not only need to check that, but also the contents of node_modules.
-	// NOTE: Getting rid of installYarn and installing both yarn and the dependencies here does not work, since JsSDK.Build
-	// depends on yarn being available.
 	if !ok {
-		files, err := ioutil.ReadDir("node_modules")
-		if err != nil {
-			return fmt.Errorf("failed to read node_modules: %w", err)
-		}
-		if len(files) > 2 ||
-			js.isProductionMode() && len(files) > 1 {
-			// Check if it's only yarn and, in development mode, ttn-lw link installed in `node_modules`.
-			// NOTE: There's no link in production mode.
-			return nil
-		}
+		return nil
 	}
-
-	mg.Deps(installYarn, JsSDK.Build)
+	mg.Deps(JsSDK.Build)
 	if !js.isProductionMode() {
 		if mg.Verbose() {
 			fmt.Println("Linking ttn-lw package")
@@ -168,19 +145,11 @@ func (js Js) Deps() error {
 			return fmt.Errorf("failed to link JS SDK: %w", err)
 		}
 	}
-	if mg.Verbose() {
-		fmt.Println("Installing JS dependencies")
-	}
-	return runYarn("install", "--no-progress", "--production=false")
+	return js.deps()
 }
 
 // BuildDll runs the webpack command to build the DLL bundle
 func (js Js) BuildDll() error {
-	if js.isProductionMode() {
-		fmt.Println("Skipping DLL building (production mode)")
-		return nil
-	}
-
 	ok, err := target.Path(
 		filepath.Join("public", "libs.bundle.js"),
 		"yarn.lock",
@@ -200,7 +169,11 @@ func (js Js) BuildDll() error {
 
 // Build runs the webpack command with the project config.
 func (js Js) Build() error {
-	mg.Deps(js.Deps, js.Translations, js.BackendTranslations, js.BuildDll)
+	mg.Deps(js.Deps, js.BackendTranslations)
+	ci := os.Getenv("CI")
+	if ci != "true" {
+		mg.Deps(js.BuildDll)
+	}
 	if mg.Verbose() {
 		fmt.Println("Running Webpack")
 	}
@@ -209,14 +182,13 @@ func (js Js) Build() error {
 
 // Serve runs webpack-dev-server.
 func (js Js) Serve() error {
-	mg.Deps(js.Deps, js.Translations, js.BackendTranslations, js.BuildDll)
+	mg.Deps(js.Deps, js.BackendTranslations, js.BuildDll)
 	if mg.Verbose() {
 		fmt.Println("Running Webpack for Main Bundle in watch mode")
 	}
 	os.Setenv("DEV_SERVER_BUILD", "true")
 	return js.runYarnCommandV("webpack-dev-server",
 		"--config", "config/webpack.config.babel.js",
-		"-w",
 	)
 }
 
@@ -225,7 +197,7 @@ func (js Js) Messages() error {
 	mg.Deps(js.Deps)
 	ok, err := target.Dir(
 		filepath.Join(".cache", "messages"),
-		filepath.Join("pkg", "webui", "console"),
+		filepath.Join("pkg", "webui"),
 	)
 	if err != nil {
 		return targetError(err)
@@ -239,15 +211,19 @@ func (js Js) Messages() error {
 	if err = sh.Rm(filepath.Join(".cache", "messages")); err != nil {
 		return fmt.Errorf("failed to delete existing messages: %w", err)
 	}
-	if err = os.MkdirAll(filepath.Join("pkg", "webui", "locales"), 0755); err != nil {
+	if err = os.MkdirAll(filepath.Join("pkg", "webui", "locales"), 0o755); err != nil {
 		return fmt.Errorf("failed to create locale directory: %w", err)
 	}
-	return execYarn(nil, os.Stderr, "babel", filepath.Join("pkg", "webui"))
+	return execYarn(nil, os.Stderr, "babel", "--ignore", "\"**/story.js\"", "--ignore", "\"**/*_test.js\"", filepath.Join("pkg", "webui"))
 }
 
-// Translations builds the frontend locale files.
-func (js Js) Translations() error {
-	mg.Deps(js.Deps, js.Messages)
+// Translations writes the babel message files and converts them into locale files.
+func (js Js) Translations() {
+	mg.SerialDeps(js.Messages, js.ExtractLocaleFiles)
+}
+
+// ExtractLocaleFiles extracts the locale files from the babel message files.
+func (js Js) ExtractLocaleFiles() error {
 	ok, err := target.Dir(
 		filepath.Join("pkg", "webui", "locales", "en.json"),
 		filepath.Join(".cache", "messages"),
@@ -328,7 +304,7 @@ func (js Js) Fmt() error {
 	return js.runYarnCommand("prettier",
 		"--config", "./config/.prettierrc.js",
 		"--write",
-		"./pkg/webui/**/*.js", "./config/**/*.js",
+		"./pkg/webui/**/*.js", "./config/**/*.js", "./cypress/**/*.js",
 	)
 }
 
@@ -338,7 +314,7 @@ func (js Js) Lint() error {
 	if mg.Verbose() {
 		fmt.Println("Running eslint on .js files")
 	}
-	return js.runEslint("./pkg/webui/**/*.js", "./config/**/*.js")
+	return js.runEslint("./pkg/webui/**/*.js", "./config/**/*.js", "./cypress/**/*.js")
 }
 
 // LintSnap runs eslint over frontend snap files.
@@ -363,14 +339,12 @@ func (js Js) Storybook() error {
 	}
 	return js.runYarnCommandV("start-storybook",
 		"--config-dir", "./config/storybook",
-		"--static-dir", "public",
 		"--port", "9001",
 	)
 }
 
 // Vulnerabilities runs yarn audit to check for vulnerable node packages.
 func (js Js) Vulnerabilities() error {
-	mg.Deps(installYarn)
 	if mg.Verbose() {
 		fmt.Println("Checking for vulnerabilities")
 	}
@@ -379,16 +353,20 @@ func (js Js) Vulnerabilities() error {
 
 // CypressHeadless runs the Cypress end-to-end tests in the headless mode.
 func (js Js) CypressHeadless() error {
-	mg.Deps(Js.Deps)
+	mg.Deps(Js.deps)
 	if mg.Verbose() {
 		fmt.Println("Running Cypress E2E tests in headless mode")
+	}
+	ci := os.Getenv("CI")
+	if ci == "true" {
+		return js.runCypress("run", "--record", "--parallel", "--group", fmt.Sprintf("'%s'", os.Getenv("RUN_HASH")))
 	}
 	return js.runCypress("run")
 }
 
 // CypressInteractive runs the Cypress end-to-end tests in interactive mode.
 func (js Js) CypressInteractive() error {
-	mg.Deps(Js.Deps)
+	mg.Deps(Js.deps)
 	if mg.Verbose() {
 		fmt.Println("Running Cypress E2E tests in interactive mode")
 	}

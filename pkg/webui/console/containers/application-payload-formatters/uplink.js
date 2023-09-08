@@ -12,31 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
-import bind from 'autobind-decorator'
-import { connect } from 'react-redux'
+import React, { useCallback, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { defineMessages } from 'react-intl'
+import { useParams } from 'react-router-dom'
 
 import PAYLOAD_FORMATTER_TYPES from '@console/constants/formatter-types'
-
-import api from '@console/api'
 
 import Notification from '@ttn-lw/components/notification'
 import PageTitle from '@ttn-lw/components/page-title'
 import toast from '@ttn-lw/components/toast'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
+import ErrorNotification from '@ttn-lw/components/error-notification'
 
 import PayloadFormattersForm from '@console/components/payload-formatters-form'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
+import { isNotFoundError } from '@ttn-lw/lib/errors/utils'
+import attachPromise from '@ttn-lw/lib/store/actions/attach-promise'
 
-import { updateApplicationLinkSuccess } from '@console/store/actions/link'
+import { checkFromState, mayViewApplicationLink } from '@console/lib/feature-checks'
+
+import { updateApplicationLink, updateApplicationLinkSuccess } from '@console/store/actions/link'
 
 import {
+  selectApplicationLinkError,
   selectApplicationLinkFormatters,
-  selectSelectedApplicationId,
 } from '@console/store/selectors/applications'
 
 import style from './application-payload-formatters.styl'
@@ -45,98 +47,80 @@ const m = defineMessages({
   title: 'Default uplink payload formatter',
   infoText:
     'You can use the "Payload formatter" tab of individual end devices to test uplink payload formatters and to define individual payload formatter settings per end device.',
+  uplinkResetWarning:
+    'You do not have sufficient rights to view the current uplink payload formatter. Only overwriting is allowed.',
 })
-@connect(
-  state => {
-    const formatters = selectApplicationLinkFormatters(state) || {}
 
-    return {
-      appId: selectSelectedApplicationId(state),
-      formatters,
-    }
-  },
-  { updateLinkSuccess: updateApplicationLinkSuccess },
-)
-@withBreadcrumb('apps.single.payload-formatters.uplink', props => {
-  const { appId } = props
+const ApplicationPayloadFormatters = () => {
+  const { appId } = useParams()
+  const formatters = useSelector(selectApplicationLinkFormatters) || {}
+  const linkError = useSelector(selectApplicationLinkError)
+  const mayViewLink = useSelector(state => checkFromState(mayViewApplicationLink, state))
+  const [type, setType] = useState(formatters.down_formatter || PAYLOAD_FORMATTER_TYPES.NONE)
+  const dispatch = useDispatch()
 
-  return (
+  useBreadcrumbs(
+    'apps.single.payload-formatters.uplink',
     <Breadcrumb
       path={`/applications/${appId}/payload-formatters/uplink`}
       content={sharedMessages.uplink}
-    />
+    />,
   )
-})
-class ApplicationPayloadFormatters extends React.PureComponent {
-  static propTypes = {
-    appId: PropTypes.string.isRequired,
-    formatters: PropTypes.formatters.isRequired,
-    updateLinkSuccess: PropTypes.func.isRequired,
-  }
 
-  constructor(props) {
-    super(props)
+  const onSubmit = useCallback(
+    async values =>
+      await dispatch(
+        attachPromise(
+          updateApplicationLink(appId, {
+            default_formatters: {
+              down_formatter: formatters.down_formatter || PAYLOAD_FORMATTER_TYPES.NONE,
+              down_formatter_parameter: formatters.down_formatter_parameter || '',
+              up_formatter: values.type,
+              up_formatter_parameter: values.parameter,
+            },
+          }),
+        ),
+      ),
+    [appId, formatters, dispatch],
+  )
 
-    const { formatters } = props
+  const onSubmitSuccess = useCallback(
+    link => {
+      toast({
+        title: appId,
+        message: sharedMessages.payloadFormattersUpdateSuccess,
+        type: toast.types.SUCCESS,
+      })
+      dispatch(updateApplicationLinkSuccess(link))
+    },
+    [appId, dispatch],
+  )
 
-    this.state = {
-      type: formatters.up_formatter || PAYLOAD_FORMATTER_TYPES.NONE,
-    }
-  }
+  const onTypeChange = useCallback(type => {
+    setType(type)
+  }, [])
 
-  @bind
-  async onSubmit(values) {
-    const { appId, formatters } = this.props
+  const isNoneType = type === PAYLOAD_FORMATTER_TYPES.NONE
+  const hasError = Boolean(linkError) && !isNotFoundError(linkError)
 
-    return await api.application.link.set(appId, {
-      default_formatters: {
-        down_formatter: formatters.down_formatter || PAYLOAD_FORMATTER_TYPES.NONE,
-        down_formatter_parameter: formatters.down_formatter_parameter || '',
-        up_formatter: values.type,
-        up_formatter_parameter: values.parameter,
-      },
-    })
-  }
-
-  @bind
-  onSubmitSuccess(link) {
-    const { appId, updateLinkSuccess } = this.props
-    toast({
-      title: appId,
-      message: sharedMessages.payloadFormattersUpdateSuccess,
-      type: toast.types.SUCCESS,
-    })
-    updateLinkSuccess(link)
-  }
-
-  @bind
-  onTypeChange(type) {
-    this.setState({ type })
-  }
-
-  render() {
-    const { formatters } = this.props
-    const { type } = this.state
-
-    const isNoneType = type === PAYLOAD_FORMATTER_TYPES.NONE
-
-    return (
-      <React.Fragment>
-        <PageTitle title={m.title} />
-        {!isNoneType && (
-          <Notification className={style.notification} small info content={m.infoText} />
-        )}
-        <PayloadFormattersForm
-          uplink
-          onSubmit={this.onSubmit}
-          onSubmitSuccess={this.onSubmitSuccess}
-          initialType={formatters.up_formatter || PAYLOAD_FORMATTER_TYPES.NONE}
-          initialParameter={formatters.up_formatter_parameter || ''}
-          onTypeChange={this.onTypeChange}
-        />
-      </React.Fragment>
-    )
-  }
+  return (
+    <>
+      <PageTitle title={m.title} />
+      {hasError && <ErrorNotification content={linkError} small />}
+      {!isNoneType && (
+        <Notification className={style.notification} small info content={m.infoText} />
+      )}
+      {!mayViewLink && <Notification content={m.uplinkResetWarning} info small />}
+      <PayloadFormattersForm
+        uplink
+        onSubmit={onSubmit}
+        onSubmitSuccess={onSubmitSuccess}
+        initialType={formatters.up_formatter || PAYLOAD_FORMATTER_TYPES.NONE}
+        initialParameter={formatters.up_formatter_parameter || ''}
+        onTypeChange={onTypeChange}
+      />
+    </>
+  )
 }
 
 export default ApplicationPayloadFormatters

@@ -20,12 +20,14 @@ func (m *AuthInfoResponse) GetEntityIdentifiers() *EntityIdentifiers {
 		return nil
 	}
 	switch accessMethod := m.GetAccessMethod().(type) {
-	case *AuthInfoResponse_APIKey:
-		return &accessMethod.APIKey.EntityIDs
-	case *AuthInfoResponse_OAuthAccessToken:
-		return accessMethod.OAuthAccessToken.UserIDs.EntityIdentifiers()
+	case *AuthInfoResponse_ApiKey:
+		return accessMethod.ApiKey.EntityIds
+	case *AuthInfoResponse_OauthAccessToken:
+		return accessMethod.OauthAccessToken.UserIds.GetEntityIdentifiers()
 	case *AuthInfoResponse_UserSession:
-		return accessMethod.UserSession.UserIdentifiers.EntityIdentifiers()
+		return accessMethod.UserSession.GetUserIds().GetEntityIdentifiers()
+	case *AuthInfoResponse_GatewayToken_:
+		return accessMethod.GatewayToken.GetGatewayIds().GetEntityIdentifiers()
 	}
 	return nil
 }
@@ -36,12 +38,14 @@ func (m *AuthInfoResponse) GetRights() []Right {
 		return nil
 	}
 	switch accessMethod := m.GetAccessMethod().(type) {
-	case *AuthInfoResponse_APIKey:
-		return accessMethod.APIKey.Rights
-	case *AuthInfoResponse_OAuthAccessToken:
-		return accessMethod.OAuthAccessToken.Rights
+	case *AuthInfoResponse_ApiKey:
+		return accessMethod.ApiKey.GetApiKey().GetRights()
+	case *AuthInfoResponse_OauthAccessToken:
+		return accessMethod.OauthAccessToken.GetRights()
 	case *AuthInfoResponse_UserSession:
-		return RightsFrom(RIGHT_ALL).Implied().GetRights()
+		return RightsFrom(Right_RIGHT_ALL).Implied().GetRights()
+	case *AuthInfoResponse_GatewayToken_:
+		return accessMethod.GatewayToken.GetRights()
 	}
 	return nil
 }
@@ -52,11 +56,11 @@ func (m *AuthInfoResponse) GetOrganizationOrUserIdentifiers() *OrganizationOrUse
 	if ids == nil {
 		return nil
 	}
-	if ids := ids.GetOrganizationIDs(); ids != nil {
-		return ids.OrganizationOrUserIdentifiers()
+	if ids := ids.GetOrganizationIds(); ids != nil {
+		return ids.GetOrganizationOrUserIdentifiers()
 	}
-	if ids := ids.GetUserIDs(); ids != nil {
-		return ids.OrganizationOrUserIdentifiers()
+	if ids := ids.GetUserIds(); ids != nil {
+		return ids.GetOrganizationOrUserIdentifiers()
 	}
 	return nil
 }

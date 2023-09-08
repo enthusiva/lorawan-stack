@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
-import { connect } from 'react-redux'
+import React, { useCallback } from 'react'
 import { Col, Row, Container } from 'react-grid-system'
-import bind from 'autobind-decorator'
 import { defineMessages } from 'react-intl'
+import { useSelector, useDispatch } from 'react-redux'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
+import Message from '@ttn-lw/lib/components/message'
 
 import LocationForm from '@console/components/location-form'
 
-import attachPromise from '@ttn-lw/lib/store/actions/attach-promise'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
+import attachPromise from '@ttn-lw/lib/store/actions/attach-promise'
+
+import locationToMarkers from '@console/lib/location-to-markers'
 
 import { updateDevice } from '@console/store/actions/devices'
 
@@ -35,108 +36,75 @@ import { selectSelectedApplicationId } from '@console/store/selectors/applicatio
 import { selectSelectedDevice, selectSelectedDeviceId } from '@console/store/selectors/devices'
 
 const m = defineMessages({
-  setDeviceLocation: 'Set end device location',
+  locationInfoTitle: 'Understanding end device location settings',
+  locationInfo:
+    'The Things Stack is capable of storing locations from multiple sources at the same time. Next to automatic location updates sourced from frame payloads of the end device and various other means of resolving location, it is also possible to set a location manually. You can use this form to update this location-type.',
+  setDeviceLocation: 'Set end device location manually',
 })
 
-const getRegistryLocation = locations => {
-  let registryLocation
-  if (locations) {
-    for (const key of Object.keys(locations)) {
-      if (locations[key].source === 'SOURCE_REGISTRY') {
-        registryLocation = { location: locations[key], key }
-        break
-      }
-    }
-  }
-  return registryLocation
-}
+const DeviceGeneralSettings = () => {
+  const dispatch = useDispatch()
+  const appId = useSelector(selectSelectedApplicationId)
+  const devId = useSelector(selectSelectedDeviceId)
+  const device = useSelector(selectSelectedDevice)
 
-@connect(
-  state => ({
-    device: selectSelectedDevice(state),
-    appId: selectSelectedApplicationId(state),
-    devId: selectSelectedDeviceId(state),
-  }),
-  { updateDevice: attachPromise(updateDevice) },
-)
-@withBreadcrumb('device.single.location', props => {
-  const { devId, appId } = props
-  return (
+  useBreadcrumbs(
+    'device.single.location',
     <Breadcrumb
       path={`/applications/${appId}/devices/${devId}/location`}
       content={sharedMessages.location}
-    />
+    />,
   )
-})
-export default class DeviceGeneralSettings extends React.Component {
-  static propTypes = {
-    appId: PropTypes.string.isRequired,
-    devId: PropTypes.string.isRequired,
-    device: PropTypes.device.isRequired,
-    updateDevice: PropTypes.func.isRequired,
-  }
 
-  @bind
-  async handleSubmit(values) {
-    const { device, appId, devId, updateDevice } = this.props
+  const handleSubmit = useCallback(
+    async location => {
+      const { locations } = device
 
-    const patch = {
-      locations: {
-        ...device.locations,
-      },
-    }
+      await dispatch(
+        attachPromise(updateDevice(appId, devId, { locations: { ...locations, user: location } })),
+      )
+    },
+    [appId, devId, device, dispatch],
+  )
 
-    const registryLocation = getRegistryLocation(device.locations)
-    if (registryLocation) {
-      // Update old location value.
-      patch.locations[registryLocation.key] = {
-        ...registryLocation.location,
-        ...values,
+  const handleDelete = useCallback(
+    async deleteAll => {
+      const { locations } = device
+      const { user, ...nonUserLocations } = locations || {}
+
+      const newLocations = {
+        ...(!deleteAll ? nonUserLocations : undefined),
       }
-    } else {
-      // Create new location value.
-      patch.locations.user = {
-        ...values,
-        accuracy: 0,
-        source: 'SOURCE_REGISTRY',
-      }
-    }
 
-    await updateDevice(appId, devId, patch)
-  }
+      return dispatch(attachPromise(updateDevice(appId, devId, { locations: newLocations })))
+    },
+    [appId, devId, device, dispatch],
+  )
 
-  @bind
-  async handleDelete() {
-    const { device, devId, appId, updateDevice } = this.props
-    const registryLocation = getRegistryLocation(device.locations)
+  const { user, ...nonUserLocations } = device.locations || {}
 
-    const patch = {
-      locations: { ...device.location },
-    }
-    delete patch.locations[registryLocation.key]
-
-    return updateDevice(appId, devId, patch)
-  }
-
-  render() {
-    const { device, devId } = this.props
-    const registryLocation = getRegistryLocation(device.locations)
-
-    return (
-      <Container>
-        <IntlHelmet title={sharedMessages.location} />
-        <Row>
-          <Col lg={8} md={12}>
-            <LocationForm
-              entityId={devId}
-              formTitle={m.setDeviceLocation}
-              initialValues={registryLocation ? registryLocation.location : undefined}
-              onSubmit={this.handleSubmit}
-              onDelete={this.handleDelete}
-            />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Container>
+      <IntlHelmet title={sharedMessages.location} />
+      <Row>
+        <Col lg={8} md={12}>
+          <LocationForm
+            entityId={devId}
+            formTitle={m.setDeviceLocation}
+            initialValues={user}
+            additionalMarkers={locationToMarkers(nonUserLocations)}
+            onSubmit={handleSubmit}
+            onDelete={handleDelete}
+            centerOnMarkers
+          />
+        </Col>
+        <Col lg={4} md={12}>
+          <Message content={m.locationInfoTitle} component="h4" className="mb-0 mt-ls-xl" />
+          <Message content={m.locationInfo} component="p" />
+        </Col>
+      </Row>
+    </Container>
+  )
 }
+
+export default DeviceGeneralSettings

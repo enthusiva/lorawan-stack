@@ -26,17 +26,20 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/heptiolabs/healthcheck"
+	"go.opentelemetry.io/otel/trace"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/fillcontext"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
+	"go.thethings.network/lorawan-stack/v3/pkg/healthcheck"
 	"go.thethings.network/lorawan-stack/v3/pkg/interop"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcserver"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/tracing"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/web"
 	"golang.org/x/crypto/acme/autocert"
@@ -64,7 +67,7 @@ type Component struct {
 	cluster    cluster.Cluster
 	clusterNew func(ctx context.Context, config *cluster.Config, options ...cluster.Option) (cluster.Cluster, error)
 
-	grpc           *rpcserver.Server
+	GRPC           *rpcserver.Server
 	grpcLogger     log.Interface
 	grpcSubsystems []rpcserver.Registerer
 
@@ -74,7 +77,7 @@ type Component struct {
 	interop           *interop.Server
 	interopSubsystems []interop.Registerer
 
-	healthHandler healthcheck.Handler
+	healthHandler healthcheck.HealthChecker
 
 	loopback *grpc.ClientConn
 
@@ -83,13 +86,15 @@ type Component struct {
 
 	fillers []fillcontext.Filler
 
-	FrequencyPlans *frequencyplans.Store
-	KeyVault       crypto.KeyVault
+	frequencyPlans *frequencyplans.Store
+
+	componentKEKLabeler crypto.ComponentKEKLabeler
+	keyService          crypto.KeyService
 
 	rightsFetcher rights.Fetcher
 
-	taskStarter TaskStarter
-	taskConfigs []*TaskConfig
+	taskStarter task.Starter
+	taskConfigs []*task.Config
 
 	limiter ratelimit.Interface
 }
@@ -116,7 +121,7 @@ func WithGRPCLogger(l log.Interface) Option {
 
 // WithTaskStarter returns an option that overrides the component's TaskStarter for
 // starting tasks.
-func WithTaskStarter(s TaskStarter) Option {
+func WithTaskStarter(s task.Starter) Option {
 	return func(c *Component) {
 		c.taskStarter = s
 	}
@@ -131,6 +136,17 @@ func WithBaseConfigGetter(f func(ctx context.Context) config.ServiceBase) Option
 	}
 }
 
+// WithTracerProvider returns an option that stores the given trace provider
+// in the component's context.
+func WithTracerProvider(tp trace.TracerProvider) Option {
+	return func(c *Component) {
+		c.ctx = tracing.NewContextWithTracerProvider(c.ctx, tp)
+		c.AddContextFiller(func(ctx context.Context) context.Context {
+			return tracing.NewContextWithTracerProvider(ctx, tp)
+		})
+	}
+}
+
 // New returns a new component.
 func New(logger log.Stack, config *Config, opts ...Option) (c *Component, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -142,11 +158,6 @@ func New(logger log.Stack, config *Config, opts ...Option) (c *Component, err er
 
 	ctx = log.NewContext(ctx, logger)
 
-	keyVault, err := config.KeyVault.KeyVault()
-	if err != nil {
-		return nil, err
-	}
-
 	c = &Component{
 		ctx:                ctx,
 		cancelCtx:          cancel,
@@ -155,16 +166,26 @@ func New(logger log.Stack, config *Config, opts ...Option) (c *Component, err er
 		config: config,
 		logger: logger,
 
-		healthHandler: healthcheck.NewHandler(),
-
 		tcpListeners: make(map[string]*listener),
 
-		KeyVault: keyVault,
-
-		taskStarter: StartTaskFunc(DefaultStartTask),
+		taskStarter: task.StartTaskFunc(task.DefaultStartTask),
 	}
 
-	c.limiter, err = config.RateLimiting.New(ctx)
+	c.healthHandler, err = healthcheck.NewDefaultHealthChecker()
+	if err != nil {
+		return nil, err
+	}
+
+	c.componentKEKLabeler, err = config.KeyVault.ComponentKEKLabeler()
+	if err != nil {
+		return nil, err
+	}
+	c.keyService, err = config.KeyVault.KeyService(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+
+	c.limiter, err = ratelimit.New(ctx, config.RateLimiting, config.Blob, c)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +194,11 @@ func New(logger log.Stack, config *Config, opts ...Option) (c *Component, err er
 		opt(c)
 	}
 
-	fpsFetcher, err := config.FrequencyPlansFetcher(ctx)
+	fpsFetcher, err := config.FrequencyPlansFetcher(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	c.FrequencyPlans = frequencyplans.NewStore(fpsFetcher)
+	c.frequencyPlans = frequencyplans.NewStore(fpsFetcher)
 
 	if c.clusterNew == nil {
 		c.clusterNew = cluster.New
@@ -192,7 +213,7 @@ func New(logger log.Stack, config *Config, opts ...Option) (c *Component, err er
 	}
 
 	config.Interop.SenderClientCA.BlobConfig = config.Blob
-	c.interop, err = interop.NewServer(c, c.FillContext, config.Interop)
+	c.interop, err = interop.NewServer(c, c.fillers, config.Interop)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +221,10 @@ func New(logger log.Stack, config *Config, opts ...Option) (c *Component, err er
 	c.initRights()
 
 	c.initGRPC()
+
+	if !config.ServiceBase.SkipVersionCheck {
+		c.RegisterTask(versionCheckTask(ctx, c))
+	}
 
 	return c, nil
 }
@@ -260,14 +285,29 @@ func (c *Component) FromRequestContext(ctx context.Context) context.Context {
 	}
 }
 
+// ComponentKEKLabeler returns the component's ComponentKEKLabeler
+func (c *Component) ComponentKEKLabeler() crypto.ComponentKEKLabeler {
+	return c.componentKEKLabeler
+}
+
+// KeyService returns the component's KeyService.
+func (c *Component) KeyService() crypto.KeyService {
+	return c.keyService
+}
+
+// FrequencyPlansStore returns the component's frequencyPlans Store
+func (c *Component) FrequencyPlansStore(ctx context.Context) (*frequencyplans.Store, error) {
+	return c.frequencyPlans, nil
+}
+
 // Start starts the component.
 func (c *Component) Start() (err error) {
-	if c.grpc != nil {
+	if c.GRPC != nil {
 		c.logger.Debug("Initializing gRPC server...")
 		if err = c.setupGRPC(); err != nil {
 			return err
 		}
-		serviceInfo := c.grpc.Server.GetServiceInfo()
+		serviceInfo := c.GRPC.Server.GetServiceInfo()
 		services := make([]string, 0, len(serviceInfo))
 		for service := range serviceInfo {
 			services = append(services, service)
@@ -295,13 +335,13 @@ func (c *Component) Start() (err error) {
 		sub.RegisterInterop(c.interop)
 	}
 
-	if c.grpc != nil {
+	if c.GRPC != nil {
 		c.logger.Debug("Starting gRPC server...")
 		if err = c.listenGRPC(); err != nil {
 			c.logger.WithError(err).Error("Could not start gRPC server")
 			return err
 		}
-		c.web.Prefix(ttnpb.HTTPAPIPrefix + "/").Handler(http.StripPrefix(ttnpb.HTTPAPIPrefix, c.grpc))
+		c.web.Prefix(ttnpb.HTTPAPIPrefix + "/").Handler(http.StripPrefix(ttnpb.HTTPAPIPrefix, c.GRPC))
 		c.logger.Debug("Started gRPC server")
 	}
 
@@ -349,16 +389,12 @@ func (c *Component) Run() error {
 		c.logger.Debug("Left cluster")
 	}()
 
-	signal.Notify(c.terminationSignals, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(c.terminationSignals, os.Interrupt, syscall.SIGTERM)
 
-	for {
-		select {
-		case sig := <-c.terminationSignals:
-			fmt.Println()
-			c.logger.WithField("signal", sig).Info("Received signal, exiting...")
-			return nil
-		}
-	}
+	sig := <-c.terminationSignals
+	fmt.Println()
+	c.logger.WithField("signal", sig).Info("Received signal, exiting...")
+	return nil
 }
 
 // Close closes the server.
@@ -376,9 +412,15 @@ func (c *Component) Close() {
 		c.logger.Debugf("Stopped listening on %s", l.Addr())
 	}
 
-	if c.grpc != nil {
+	if c.loopback != nil {
+		c.logger.Debug("Stopping gRPC client...")
+		c.loopback.Close()
+		c.logger.Debug("Stopped gRPC client")
+	}
+
+	if c.GRPC != nil {
 		c.logger.Debug("Stopping gRPC server...")
-		c.grpc.Stop()
+		c.GRPC.Stop()
 		c.logger.Debug("Stopped gRPC server")
 	}
 }
@@ -394,7 +436,7 @@ func (c *Component) AllowInsecureForCredentials() bool {
 // Otherwise, the request is routed to the default web server.
 func (c *Component) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.ProtoMajor == 2 && strings.Contains(r.Header.Get("Content-Type"), "application/grpc") {
-		c.grpc.Server.ServeHTTP(w, r)
+		c.GRPC.Server.ServeHTTP(w, r)
 	} else {
 		c.web.ServeHTTP(w, r)
 	}

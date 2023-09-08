@@ -17,42 +17,39 @@ package identityserver
 import (
 	"context"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/jinzhu/gorm"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
-	"go.thethings.network/lorawan-stack/v3/pkg/email"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/emails"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
-	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/unique"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
 	evtCreateApplicationAPIKey = events.Define(
 		"application.api-key.create", "create application API key",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
 	)
 	evtUpdateApplicationAPIKey = events.Define(
 		"application.api-key.update", "update application API key",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
 	)
 	evtDeleteApplicationAPIKey = events.Define(
 		"application.api-key.delete", "delete application API key",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
 	)
 	evtUpdateApplicationCollaborator = events.Define(
 		"application.collaborator.update", "update application collaborator",
 		events.WithVisibility(
-			ttnpb.RIGHT_APPLICATION_SETTINGS_COLLABORATORS,
-			ttnpb.RIGHT_USER_APPLICATIONS_LIST,
+			ttnpb.Right_RIGHT_APPLICATION_SETTINGS_COLLABORATORS,
+			ttnpb.Right_RIGHT_USER_APPLICATIONS_LIST,
 		),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
@@ -60,58 +57,72 @@ var (
 	evtDeleteApplicationCollaborator = events.Define(
 		"application.collaborator.delete", "delete application collaborator",
 		events.WithVisibility(
-			ttnpb.RIGHT_APPLICATION_SETTINGS_COLLABORATORS,
-			ttnpb.RIGHT_USER_APPLICATIONS_LIST,
+			ttnpb.Right_RIGHT_APPLICATION_SETTINGS_COLLABORATORS,
+			ttnpb.Right_RIGHT_USER_APPLICATIONS_LIST,
 		),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
 	)
 )
 
-func (is *IdentityServer) listApplicationRights(ctx context.Context, ids *ttnpb.ApplicationIdentifiers) (*ttnpb.Rights, error) {
-	appRights, err := rights.ListApplication(ctx, *ids)
+func (*IdentityServer) listApplicationRights(
+	ctx context.Context, ids *ttnpb.ApplicationIdentifiers,
+) (*ttnpb.Rights, error) {
+	appRights, err := rights.ListApplication(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	return appRights.Intersect(ttnpb.AllApplicationRights), nil
 }
 
-func (is *IdentityServer) createApplicationAPIKey(ctx context.Context, req *ttnpb.CreateApplicationAPIKeyRequest) (key *ttnpb.APIKey, err error) {
+func (is *IdentityServer) createApplicationAPIKey(
+	ctx context.Context, req *ttnpb.CreateApplicationAPIKeyRequest,
+) (key *ttnpb.APIKey, err error) {
 	// Require that caller has rights to manage API keys.
-	if err = rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS); err != nil {
-		return nil, err
-	}
-	// Require that caller has at least the rights of the API key.
-	if err = rights.RequireApplication(ctx, req.ApplicationIdentifiers, req.Rights...); err != nil {
-		return nil, err
-	}
-	key, token, err := GenerateAPIKey(ctx, req.Name, req.Rights...)
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS)
 	if err != nil {
 		return nil, err
 	}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		key, err = store.GetAPIKeyStore(db).CreateAPIKey(ctx, req.ApplicationIdentifiers, key)
+	// Require that caller has at least the rights of the API key.
+	if err = rights.RequireApplication(ctx, req.GetApplicationIds(), req.Rights...); err != nil {
+		return nil, err
+	}
+	key, token, err := GenerateAPIKey(ctx, req.Name, ttnpb.StdTime(req.ExpiresAt), req.Rights...)
+	if err != nil {
+		return nil, err
+	}
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		key, err = st.CreateAPIKey(ctx, req.GetApplicationIds().GetEntityIdentifiers(), key)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	key.Key = token
-	events.Publish(evtCreateApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.ApplicationIdentifiers, nil))
-	err = is.SendContactsEmail(ctx, req.EntityIdentifiers(), func(data emails.Data) email.MessageData {
-		data.SetEntity(req.EntityIdentifiers())
-		return &emails.APIKeyCreated{Data: data, Key: key, Rights: key.Rights}
+	key.Key = ""
+
+	events.Publish(evtCreateApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.GetApplicationIds(), key))
+	go is.notifyInternal(ctx, &ttnpb.CreateNotificationRequest{
+		EntityIds:        req.GetApplicationIds().GetEntityIdentifiers(),
+		NotificationType: "api_key_created",
+		Data:             ttnpb.MustMarshalAny(key),
+		Receivers: []ttnpb.NotificationReceiver{
+			ttnpb.NotificationReceiver_NOTIFICATION_RECEIVER_ADMINISTRATIVE_CONTACT,
+		},
+		Email: true,
 	})
-	if err != nil {
-		log.FromContext(ctx).WithError(err).Error("Could not send API key creation notification email")
-	}
+
+	key.Key = token
 	return key, nil
 }
 
-func (is *IdentityServer) listApplicationAPIKeys(ctx context.Context, req *ttnpb.ListApplicationAPIKeysRequest) (keys *ttnpb.APIKeys, err error) {
-	if err = rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS); err != nil {
+func (is *IdentityServer) listApplicationAPIKeys(
+	ctx context.Context, req *ttnpb.ListApplicationAPIKeysRequest,
+) (keys *ttnpb.APIKeys, err error) {
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS)
+	if err != nil {
 		return nil, err
 	}
+	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
 	defer func() {
@@ -120,26 +131,29 @@ func (is *IdentityServer) listApplicationAPIKeys(ctx context.Context, req *ttnpb
 		}
 	}()
 	keys = &ttnpb.APIKeys{}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		keys.APIKeys, err = store.GetAPIKeyStore(db).FindAPIKeys(ctx, req.ApplicationIdentifiers)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		keys.ApiKeys, err = st.FindAPIKeys(ctx, req.GetApplicationIds().GetEntityIdentifiers())
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	for _, key := range keys.APIKeys {
+	for _, key := range keys.ApiKeys {
 		key.Key = ""
 	}
 	return keys, nil
 }
 
-func (is *IdentityServer) getApplicationAPIKey(ctx context.Context, req *ttnpb.GetApplicationAPIKeyRequest) (key *ttnpb.APIKey, err error) {
-	if err = rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS); err != nil {
+func (is *IdentityServer) getApplicationAPIKey(
+	ctx context.Context, req *ttnpb.GetApplicationAPIKeyRequest,
+) (key *ttnpb.APIKey, err error) {
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS)
+	if err != nil {
 		return nil, err
 	}
 
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		_, key, err = store.GetAPIKeyStore(db).GetAPIKey(ctx, req.KeyID)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		key, err = st.GetAPIKey(ctx, req.GetApplicationIds().GetEntityIdentifiers(), req.KeyId)
 		if err != nil {
 			return err
 		}
@@ -153,67 +167,109 @@ func (is *IdentityServer) getApplicationAPIKey(ctx context.Context, req *ttnpb.G
 	return key, nil
 }
 
-func (is *IdentityServer) updateApplicationAPIKey(ctx context.Context, req *ttnpb.UpdateApplicationAPIKeyRequest) (key *ttnpb.APIKey, err error) {
+func (is *IdentityServer) updateApplicationAPIKey(
+	ctx context.Context, req *ttnpb.UpdateApplicationAPIKeyRequest,
+) (key *ttnpb.APIKey, err error) {
 	// Require that caller has rights to manage API keys.
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_API_KEYS); err != nil {
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS)
+	if err != nil {
 		return nil, err
 	}
 
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		if len(req.APIKey.Rights) > 0 {
-			_, key, err := store.GetAPIKeyStore(db).GetAPIKey(ctx, req.APIKey.ID)
+	// Backwards compatibility for older clients.
+	if len(req.FieldMask.GetPaths()) == 0 {
+		req.FieldMask = ttnpb.FieldMask("rights", "name")
+	}
+
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		if len(req.ApiKey.Rights) > 0 {
+			key, err := st.GetAPIKey(ctx, req.GetApplicationIds().GetEntityIdentifiers(), req.ApiKey.Id)
 			if err != nil {
 				return err
 			}
 
-			newRights := ttnpb.RightsFrom(req.APIKey.Rights...)
+			newRights := ttnpb.RightsFrom(req.ApiKey.Rights...)
 			existingRights := ttnpb.RightsFrom(key.Rights...)
 
 			// Require the caller to have all added rights.
-			if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, newRights.Sub(existingRights).GetRights()...); err != nil {
+			if err := rights.RequireApplication(
+				ctx, req.GetApplicationIds(), newRights.Sub(existingRights).GetRights()...,
+			); err != nil {
 				return err
 			}
 			// Require the caller to have all removed rights.
-			if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, existingRights.Sub(newRights).GetRights()...); err != nil {
+			if err := rights.RequireApplication(
+				ctx, req.GetApplicationIds(), existingRights.Sub(newRights).GetRights()...,
+			); err != nil {
 				return err
 			}
 		}
 
-		key, err = store.GetAPIKeyStore(db).UpdateAPIKey(ctx, req.ApplicationIdentifiers, &req.APIKey)
+		if len(req.ApiKey.Rights) == 0 && ttnpb.HasAnyField(req.GetFieldMask().GetPaths(), "rights") {
+			// TODO: Remove delete capability (https://github.com/TheThingsNetwork/lorawan-stack/issues/6488).
+			return st.DeleteAPIKey(ctx, req.ApplicationIds.GetEntityIdentifiers(), req.ApiKey)
+		}
+
+		key, err = st.UpdateAPIKey(ctx, req.ApplicationIds.GetEntityIdentifiers(), req.ApiKey, req.FieldMask.GetPaths())
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	if key == nil { // API key was deleted.
-		events.Publish(evtDeleteApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.ApplicationIdentifiers, nil))
+		events.Publish(evtDeleteApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.GetApplicationIds(), nil))
 		return &ttnpb.APIKey{}, nil
 	}
 	key.Key = ""
-	events.Publish(evtUpdateApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.ApplicationIdentifiers, nil))
-	err = is.SendContactsEmail(ctx, req.EntityIdentifiers(), func(data emails.Data) email.MessageData {
-		data.SetEntity(req.EntityIdentifiers())
-		return &emails.APIKeyChanged{Data: data, Key: key, Rights: key.Rights}
+
+	events.Publish(evtUpdateApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.GetApplicationIds(), key))
+	go is.notifyInternal(ctx, &ttnpb.CreateNotificationRequest{
+		EntityIds:        req.GetApplicationIds().GetEntityIdentifiers(),
+		NotificationType: "api_key_changed",
+		Data:             ttnpb.MustMarshalAny(key),
+		Receivers: []ttnpb.NotificationReceiver{
+			ttnpb.NotificationReceiver_NOTIFICATION_RECEIVER_ADMINISTRATIVE_CONTACT,
+		},
+		Email: true,
 	})
-	if err != nil {
-		log.FromContext(ctx).WithError(err).Error("Could not send API key update notification email")
-	}
 
 	return key, nil
 }
 
-func (is *IdentityServer) getApplicationCollaborator(ctx context.Context, req *ttnpb.GetApplicationCollaboratorRequest) (*ttnpb.GetCollaboratorResponse, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_COLLABORATORS); err != nil {
+func (is *IdentityServer) deleteApplicationAPIKey(
+	ctx context.Context, req *ttnpb.DeleteApplicationAPIKeyRequest,
+) (*emptypb.Empty, error) {
+	// Require that caller has rights to manage API keys.
+	err := rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_API_KEYS)
+	if err != nil {
+		return nil, err
+	}
+
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		return st.DeleteAPIKey(ctx, req.ApplicationIds.GetEntityIdentifiers(), &ttnpb.APIKey{Id: req.KeyId})
+	})
+	if err != nil {
+		return nil, err
+	}
+	events.Publish(evtDeleteApplicationAPIKey.NewWithIdentifiersAndData(ctx, req.GetApplicationIds(), nil))
+	return ttnpb.Empty, nil
+}
+
+func (is *IdentityServer) getApplicationCollaborator(
+	ctx context.Context, req *ttnpb.GetApplicationCollaboratorRequest,
+) (_ *ttnpb.GetCollaboratorResponse, err error) {
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_COLLABORATORS)
+	if err != nil {
 		return nil, err
 	}
 	res := &ttnpb.GetCollaboratorResponse{
-		OrganizationOrUserIdentifiers: req.OrganizationOrUserIdentifiers,
+		Ids: req.GetCollaborator(),
 	}
-	err := is.withDatabase(ctx, func(db *gorm.DB) error {
-		rights, err := is.getMembershipStore(ctx, db).GetMember(
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		rights, err := st.GetMember(
 			ctx,
-			&req.OrganizationOrUserIdentifiers,
-			req.ApplicationIdentifiers,
+			req.GetCollaborator(),
+			req.GetApplicationIds().GetEntityIdentifiers(),
 		)
 		if err != nil {
 			return err
@@ -227,65 +283,119 @@ func (is *IdentityServer) getApplicationCollaborator(ctx context.Context, req *t
 	return res, nil
 }
 
-func (is *IdentityServer) setApplicationCollaborator(ctx context.Context, req *ttnpb.SetApplicationCollaboratorRequest) (*types.Empty, error) {
+var errApplicationNeedsCollaborator = errors.DefineFailedPrecondition(
+	"application_needs_collaborator", "every application needs at least one collaborator with all rights",
+)
+
+func (is *IdentityServer) setApplicationCollaborator(
+	ctx context.Context, req *ttnpb.SetApplicationCollaboratorRequest,
+) (_ *emptypb.Empty, err error) {
 	// Require that caller has rights to manage collaborators.
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_COLLABORATORS); err != nil {
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_COLLABORATORS)
+	if err != nil {
 		return nil, err
 	}
 
-	err := is.withDatabase(ctx, func(db *gorm.DB) error {
-		store := is.getMembershipStore(ctx, db)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		existingRights, err := st.GetMember(
+			ctx,
+			req.GetCollaborator().GetIds(),
+			req.GetApplicationIds().GetEntityIdentifiers(),
+		)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		existingRights = existingRights.Implied()
+		newRights := ttnpb.RightsFrom(req.GetCollaborator().GetRights()...).Implied()
+		addedRights := newRights.Sub(existingRights)
+		removedRights := existingRights.Sub(newRights)
 
-		if len(req.Collaborator.Rights) > 0 {
-			newRights := ttnpb.RightsFrom(req.Collaborator.Rights...)
-			existingRights, err := store.GetMember(
-				ctx,
-				&req.Collaborator.OrganizationOrUserIdentifiers,
-				req.ApplicationIdentifiers,
-			)
-
-			if err != nil && !errors.IsNotFound(err) {
-				return err
-			}
-			// Require the caller to have all added rights.
-			if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, newRights.Sub(existingRights).GetRights()...); err != nil {
-				return err
-			}
-			// Require the caller to have all removed rights.
-			if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, existingRights.Sub(newRights).GetRights()...); err != nil {
+		// Require the caller to have all added rights.
+		if len(addedRights.GetRights()) > 0 {
+			if err := rights.RequireApplication(ctx, req.GetApplicationIds(), addedRights.GetRights()...); err != nil {
 				return err
 			}
 		}
 
-		return store.SetMember(
+		// Unless we're deleting the collaborator, require the caller to have all removed rights.
+		if len(newRights.GetRights()) > 0 && len(removedRights.GetRights()) > 0 {
+			if err := rights.RequireApplication(ctx, req.GetApplicationIds(), removedRights.GetRights()...); err != nil {
+				return err
+			}
+		}
+
+		if removedRights.IncludesAll(ttnpb.Right_RIGHT_APPLICATION_ALL) {
+			memberRights, err := st.FindMembers(ctx, req.GetApplicationIds().GetEntityIdentifiers())
+			if err != nil {
+				return err
+			}
+			var hasOtherOwner bool
+			for _, v := range memberRights {
+				member, rights := v.Ids, v.Rights
+
+				if unique.ID(ctx, member) == unique.ID(ctx, req.GetCollaborator().GetIds()) {
+					continue
+				}
+				if rights.Implied().IncludesAll(ttnpb.Right_RIGHT_APPLICATION_ALL) {
+					hasOtherOwner = true
+					break
+				}
+			}
+			if !hasOtherOwner {
+				return errApplicationNeedsCollaborator.New()
+			}
+		}
+
+		if len(req.Collaborator.Rights) == 0 {
+			// TODO: Remove delete capability (https://github.com/TheThingsNetwork/lorawan-stack/issues/6488).
+			return st.DeleteMember(ctx, req.GetCollaborator().GetIds(), req.GetApplicationIds().GetEntityIdentifiers())
+		}
+
+		return st.SetMember(
 			ctx,
-			&req.Collaborator.OrganizationOrUserIdentifiers,
-			req.ApplicationIdentifiers,
+			req.GetCollaborator().GetIds(),
+			req.GetApplicationIds().GetEntityIdentifiers(),
 			ttnpb.RightsFrom(req.Collaborator.Rights...),
 		)
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(req.Collaborator.Rights) > 0 {
-		events.Publish(evtUpdateApplicationCollaborator.NewWithIdentifiersAndData(ctx, ttnpb.CombineIdentifiers(req.ApplicationIdentifiers, req.Collaborator), nil))
-		err = is.SendContactsEmail(ctx, req.EntityIdentifiers(), func(data emails.Data) email.MessageData {
-			data.SetEntity(req.EntityIdentifiers())
-			return &emails.CollaboratorChanged{Data: data, Collaborator: req.Collaborator}
+	if len(req.GetCollaborator().GetRights()) > 0 {
+		events.Publish(evtUpdateApplicationCollaborator.New(
+			ctx,
+			events.WithIdentifiers(req.GetApplicationIds(), req.GetCollaborator().GetIds()),
+			events.WithData(req.GetCollaborator()),
+		))
+		go is.notifyInternal(ctx, &ttnpb.CreateNotificationRequest{
+			EntityIds:        req.GetApplicationIds().GetEntityIdentifiers(),
+			NotificationType: "collaborator_changed",
+			Data:             ttnpb.MustMarshalAny(req.GetCollaborator()),
+			Receivers: []ttnpb.NotificationReceiver{
+				ttnpb.NotificationReceiver_NOTIFICATION_RECEIVER_ADMINISTRATIVE_CONTACT,
+			},
+			Email: false,
 		})
-		if err != nil {
-			log.FromContext(ctx).WithError(err).Error("Could not send collaborator updated notification email")
-		}
 	} else {
-		events.Publish(evtDeleteApplicationCollaborator.NewWithIdentifiersAndData(ctx, ttnpb.CombineIdentifiers(req.ApplicationIdentifiers, req.Collaborator), nil))
+		events.Publish(evtDeleteApplicationCollaborator.New(
+			ctx, events.WithIdentifiers(req.GetApplicationIds(), req.GetCollaborator().GetIds()),
+		))
 	}
 	return ttnpb.Empty, nil
 }
 
-func (is *IdentityServer) listApplicationCollaborators(ctx context.Context, req *ttnpb.ListApplicationCollaboratorsRequest) (collaborators *ttnpb.Collaborators, err error) {
-	if err = rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_SETTINGS_COLLABORATORS); err != nil {
+func (is *IdentityServer) listApplicationCollaborators(
+	ctx context.Context, req *ttnpb.ListApplicationCollaboratorsRequest,
+) (collaborators *ttnpb.Collaborators, err error) {
+	if err = is.RequireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
+	err = rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_COLLABORATORS)
+	if err != nil {
+		defer func() { collaborators = collaborators.PublicSafe() }()
+	}
+
+	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
 	defer func() {
@@ -293,17 +403,20 @@ func (is *IdentityServer) listApplicationCollaborators(ctx context.Context, req 
 			setTotalHeader(ctx, total)
 		}
 	}()
-	err = is.withDatabase(ctx, func(db *gorm.DB) error {
-		memberRights, err := is.getMembershipStore(ctx, db).FindMembers(ctx, req.ApplicationIdentifiers)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		memberRights, err := st.FindMembers(ctx, req.GetApplicationIds().GetEntityIdentifiers())
 		if err != nil {
 			return err
 		}
-		collaborators = &ttnpb.Collaborators{}
-		for member, rights := range memberRights {
-			collaborators.Collaborators = append(collaborators.Collaborators, &ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *member,
-				Rights:                        rights.GetRights(),
-			})
+		collaborators = &ttnpb.Collaborators{
+			Collaborators: make([]*ttnpb.Collaborator, len(memberRights)),
+		}
+		for i, v := range memberRights {
+			member, rights := v.Ids, v.Rights
+			collaborators.Collaborators[i] = &ttnpb.Collaborator{
+				Ids:    member,
+				Rights: rights.GetRights(),
+			}
 		}
 		return nil
 	})
@@ -313,38 +426,117 @@ func (is *IdentityServer) listApplicationCollaborators(ctx context.Context, req 
 	return collaborators, nil
 }
 
+func (is *IdentityServer) deleteApplicationCollaborator(
+	ctx context.Context, req *ttnpb.DeleteApplicationCollaboratorRequest,
+) (*emptypb.Empty, error) {
+	err := rights.RequireApplication(ctx, req.GetApplicationIds(), ttnpb.Right_RIGHT_APPLICATION_SETTINGS_COLLABORATORS)
+	if err != nil {
+		return nil, err
+	}
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		removedRights, err := st.GetMember(ctx, req.GetCollaboratorIds(), req.GetApplicationIds().GetEntityIdentifiers())
+		if err != nil {
+			return err
+		}
+		if removedRights.Implied().IncludesAll(ttnpb.Right_RIGHT_APPLICATION_ALL) {
+			memberRights, err := st.FindMembers(ctx, req.GetApplicationIds().GetEntityIdentifiers())
+			if err != nil {
+				return err
+			}
+			var hasOtherOwner bool
+			for _, v := range memberRights {
+				member, rights := v.Ids, v.Rights
+				if unique.ID(ctx, member) == unique.ID(ctx, req.GetCollaboratorIds()) {
+					continue
+				}
+				if rights.Implied().IncludesAll(ttnpb.Right_RIGHT_APPLICATION_ALL) {
+					hasOtherOwner = true
+					break
+				}
+			}
+			if !hasOtherOwner {
+				return errOrganizationNeedsCollaborator.New()
+			}
+		}
+
+		return st.DeleteMember(
+			ctx,
+			req.GetCollaboratorIds(),
+			req.GetApplicationIds().GetEntityIdentifiers(),
+		)
+	})
+	if err != nil {
+		return ttnpb.Empty, err
+	}
+	events.Publish(evtDeleteApplicationCollaborator.New(
+		ctx,
+		events.WithIdentifiers(req.GetApplicationIds(), req.GetCollaboratorIds()),
+	))
+	return ttnpb.Empty, nil
+}
+
 type applicationAccess struct {
+	ttnpb.UnimplementedApplicationAccessServer
+
 	*IdentityServer
 }
 
-func (aa *applicationAccess) ListRights(ctx context.Context, req *ttnpb.ApplicationIdentifiers) (*ttnpb.Rights, error) {
+func (aa *applicationAccess) ListRights(
+	ctx context.Context, req *ttnpb.ApplicationIdentifiers,
+) (*ttnpb.Rights, error) {
 	return aa.listApplicationRights(ctx, req)
 }
 
-func (aa *applicationAccess) CreateAPIKey(ctx context.Context, req *ttnpb.CreateApplicationAPIKeyRequest) (*ttnpb.APIKey, error) {
+func (aa *applicationAccess) CreateAPIKey(
+	ctx context.Context, req *ttnpb.CreateApplicationAPIKeyRequest,
+) (*ttnpb.APIKey, error) {
 	return aa.createApplicationAPIKey(ctx, req)
 }
 
-func (aa *applicationAccess) ListAPIKeys(ctx context.Context, req *ttnpb.ListApplicationAPIKeysRequest) (*ttnpb.APIKeys, error) {
+func (aa *applicationAccess) ListAPIKeys(
+	ctx context.Context, req *ttnpb.ListApplicationAPIKeysRequest,
+) (*ttnpb.APIKeys, error) {
 	return aa.listApplicationAPIKeys(ctx, req)
 }
 
-func (aa *applicationAccess) GetAPIKey(ctx context.Context, req *ttnpb.GetApplicationAPIKeyRequest) (*ttnpb.APIKey, error) {
+func (aa *applicationAccess) GetAPIKey(
+	ctx context.Context, req *ttnpb.GetApplicationAPIKeyRequest,
+) (*ttnpb.APIKey, error) {
 	return aa.getApplicationAPIKey(ctx, req)
 }
 
-func (aa *applicationAccess) UpdateAPIKey(ctx context.Context, req *ttnpb.UpdateApplicationAPIKeyRequest) (*ttnpb.APIKey, error) {
+func (aa *applicationAccess) UpdateAPIKey(
+	ctx context.Context, req *ttnpb.UpdateApplicationAPIKeyRequest,
+) (*ttnpb.APIKey, error) {
 	return aa.updateApplicationAPIKey(ctx, req)
 }
 
-func (aa *applicationAccess) GetCollaborator(ctx context.Context, req *ttnpb.GetApplicationCollaboratorRequest) (*ttnpb.GetCollaboratorResponse, error) {
+func (aa *applicationAccess) DeleteAPIKey(
+	ctx context.Context, req *ttnpb.DeleteApplicationAPIKeyRequest,
+) (*emptypb.Empty, error) {
+	return aa.deleteApplicationAPIKey(ctx, req)
+}
+
+func (aa *applicationAccess) GetCollaborator(
+	ctx context.Context, req *ttnpb.GetApplicationCollaboratorRequest,
+) (*ttnpb.GetCollaboratorResponse, error) {
 	return aa.getApplicationCollaborator(ctx, req)
 }
 
-func (aa *applicationAccess) SetCollaborator(ctx context.Context, req *ttnpb.SetApplicationCollaboratorRequest) (*types.Empty, error) {
+func (aa *applicationAccess) SetCollaborator(
+	ctx context.Context, req *ttnpb.SetApplicationCollaboratorRequest,
+) (*emptypb.Empty, error) {
 	return aa.setApplicationCollaborator(ctx, req)
 }
 
-func (aa *applicationAccess) ListCollaborators(ctx context.Context, req *ttnpb.ListApplicationCollaboratorsRequest) (*ttnpb.Collaborators, error) {
+func (aa *applicationAccess) ListCollaborators(
+	ctx context.Context, req *ttnpb.ListApplicationCollaboratorsRequest,
+) (*ttnpb.Collaborators, error) {
 	return aa.listApplicationCollaborators(ctx, req)
+}
+
+func (aa *applicationAccess) DeleteCollaborator(
+	ctx context.Context, req *ttnpb.DeleteApplicationCollaboratorRequest,
+) (*emptypb.Empty, error) {
+	return aa.deleteApplicationCollaborator(ctx, req)
 }

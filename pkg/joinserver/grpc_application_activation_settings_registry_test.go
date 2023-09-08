@@ -19,12 +19,11 @@ import (
 	"fmt"
 	"testing"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
-	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoutil"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	. "go.thethings.network/lorawan-stack/v3/pkg/joinserver"
 	"go.thethings.network/lorawan-stack/v3/pkg/joinserver/redis"
@@ -40,14 +39,16 @@ func NewRedisApplicationActivationSettingRegistry(ctx context.Context) (Applicat
 	tb := test.MustTBFromContext(ctx)
 	cl, flush := test.NewRedis(ctx, "application-activation-settings")
 	reg := &redis.ApplicationActivationSettingRegistry{
-		Redis: cl,
+		Redis:   cl,
+		LockTTL: test.Delay << 10,
+	}
+	if err := reg.Init(ctx); !assertions.New(tb).So(err, should.BeNil) {
+		tb.FailNow()
 	}
 	return reg,
 		func() {
 			flush()
-			if err := cl.Close(); err != nil {
-				tb.Errorf("Failed to close Redis appliation activation setting registry client: %s", err)
-			}
+			cl.Close()
 		}
 }
 
@@ -61,19 +62,15 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		appIDStr = "test-app"
 		asID     = "test-as-id"
 	)
-	appID := ttnpb.ApplicationIdentifiers{
-		ApplicationID: appIDStr,
+	appID := &ttnpb.ApplicationIdentifiers{
+		ApplicationId: appIDStr,
 	}
 	netID := types.NetID{0x0, 0x1, 0x2}
 	jsKEK := types.AES128Key{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xe}
 	sessionKEK := types.AES128Key{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xd}
 
-	keyVault := cryptoutil.NewMemKeyVault(map[string][]byte{
-		jsKEKLabel:      jsKEK[:],
-		sessionKEKLabel: sessionKEK[:],
-	})
 	jsKEKEnvelopeUnwrapped := &ttnpb.KeyEnvelope{
-		Key: &jsKEK,
+		Key: jsKEK.Bytes(),
 	}
 
 	credOpt := grpc.PerRPCCredentials(rpcmetadata.MD{
@@ -85,21 +82,33 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		reg, closeFn := NewRedisApplicationActivationSettingRegistry(ctx)
 
 		js := test.Must(New(
-			componenttest.NewComponent(t, &component.Config{},
+			componenttest.NewComponent(
+				t,
+				&component.Config{
+					ServiceBase: config.ServiceBase{
+						KeyVault: config.KeyVault{
+							Provider: "static",
+							Static: map[string][]byte{
+								jsKEKLabel:      jsKEK[:],
+								sessionKEKLabel: sessionKEK[:],
+							},
+						},
+					},
+				},
 				component.WithClusterNew(func(context.Context, *cluster.Config, ...cluster.Option) (cluster.Cluster, error) {
 					return &test.MockCluster{
 						JoinFunc: test.ClusterJoinNilFunc,
-						GetPeerFunc: func(reqCtx context.Context, role ttnpb.ClusterRole, ids ttnpb.Identifiers) (cluster.Peer, error) {
+						GetPeerFunc: func(reqCtx context.Context, role ttnpb.ClusterRole, ids cluster.EntityIdentifiers) (cluster.Peer, error) {
 							_, a := test.MustNewTFromContext(ctx)
 							a.So(role, should.Equal, ttnpb.ClusterRole_ACCESS)
 							return test.Must(test.NewGRPCServerPeer(ctx, &test.MockApplicationAccessServer{
 								ListRightsFunc: func(ctx context.Context, ids *ttnpb.ApplicationIdentifiers) (*ttnpb.Rights, error) {
-									a.So(ids, should.Resemble, &appID)
+									a.So(ids, should.Resemble, appID)
 									return &ttnpb.Rights{
 										Rights: rights,
 									}, nil
 								},
-							}, ttnpb.RegisterApplicationAccessServer)).(cluster.Peer), nil
+							}, ttnpb.RegisterApplicationAccessServer)), nil
 						},
 					}, nil
 				}),
@@ -107,9 +116,9 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 			&Config{
 				ApplicationActivationSettings: reg,
 				DeviceKEKLabel:                jsKEKLabel,
+				DevNonceLimit:                 defaultDevNonceLimit,
 			},
-		)).(*JoinServer)
-		js.KeyVault = keyVault
+		))
 		componenttest.StartComponent(t, js.Component)
 		return ttnpb.NewApplicationActivationSettingRegistryClient(js.LoopbackConn()), reg, func() {
 			js.Close()
@@ -134,13 +143,8 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No rights",
 			Request: &ttnpb.GetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek",
-						"kek_label",
-					},
-				},
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask("kek", "kek_label"),
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -149,16 +153,11 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No read right",
 			Request: &ttnpb.GetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek",
-						"kek_label",
-					},
-				},
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask("kek", "kek_label"),
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -167,10 +166,10 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "Not found/no paths",
 			Request: &ttnpb.GetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
+				ApplicationIds: appID,
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsNotFound(err), should.BeTrue)
@@ -179,16 +178,11 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "Not found/with paths",
 			Request: &ttnpb.GetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek",
-						"kek_label",
-					},
-				},
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask("kek", "kek_label"),
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsNotFound(err), should.BeTrue)
@@ -231,17 +225,12 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No rights",
 			Request: &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				ApplicationActivationSettings: ttnpb.ApplicationActivationSettings{
-					KEKLabel: sessionKEKLabel,
-					KEK:      jsKEKEnvelopeUnwrapped,
+				ApplicationIds: appID,
+				Settings: &ttnpb.ApplicationActivationSettings{
+					KekLabel: sessionKEKLabel,
+					Kek:      jsKEKEnvelopeUnwrapped,
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek",
-						"kek_label",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("kek", "kek_label"),
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -250,20 +239,15 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No write right",
 			Request: &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				ApplicationActivationSettings: ttnpb.ApplicationActivationSettings{
-					KEKLabel: sessionKEKLabel,
-					KEK:      jsKEKEnvelopeUnwrapped,
+				ApplicationIds: appID,
+				Settings: &ttnpb.ApplicationActivationSettings{
+					KekLabel: sessionKEKLabel,
+					Kek:      jsKEKEnvelopeUnwrapped,
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek",
-						"kek_label",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("kek", "kek_label"),
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -272,20 +256,15 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No read right",
 			Request: &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				ApplicationActivationSettings: ttnpb.ApplicationActivationSettings{
-					KEKLabel: sessionKEKLabel,
-					KEK:      jsKEKEnvelopeUnwrapped,
+				ApplicationIds: appID,
+				Settings: &ttnpb.ApplicationActivationSettings{
+					KekLabel: sessionKEKLabel,
+					Kek:      jsKEKEnvelopeUnwrapped,
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek",
-						"kek_label",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("kek", "kek_label"),
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -294,15 +273,15 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No paths",
 			Request: &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				ApplicationActivationSettings: ttnpb.ApplicationActivationSettings{
-					KEKLabel: sessionKEKLabel,
-					KEK:      jsKEKEnvelopeUnwrapped,
+				ApplicationIds: appID,
+				Settings: &ttnpb.ApplicationActivationSettings{
+					KekLabel: sessionKEKLabel,
+					Kek:      jsKEKEnvelopeUnwrapped,
 				},
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsInvalidArgument(err), should.BeTrue)
@@ -311,23 +290,18 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "Empty KEK",
 			Request: &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				ApplicationActivationSettings: ttnpb.ApplicationActivationSettings{
-					KEKLabel: sessionKEKLabel,
-					KEK: &ttnpb.KeyEnvelope{
-						Key: &types.AES128Key{},
+				ApplicationIds: appID,
+				Settings: &ttnpb.ApplicationActivationSettings{
+					KekLabel: sessionKEKLabel,
+					Kek: &ttnpb.KeyEnvelope{
+						Key: types.AES128Key{}.Bytes(),
 					},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek_label",
-						"kek",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("kek_label", "kek"),
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsInvalidArgument(err), should.BeTrue)
@@ -336,20 +310,15 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "KEK with empty label",
 			Request: &ttnpb.SetApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
-				ApplicationActivationSettings: ttnpb.ApplicationActivationSettings{
-					KEK: jsKEKEnvelopeUnwrapped,
+				ApplicationIds: appID,
+				Settings: &ttnpb.ApplicationActivationSettings{
+					Kek: jsKEKEnvelopeUnwrapped,
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"kek_label",
-						"kek",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("kek_label", "kek"),
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsInvalidArgument(err), should.BeTrue)
@@ -392,7 +361,7 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No rights",
 			Request: &ttnpb.DeleteApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
+				ApplicationIds: appID,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -401,10 +370,10 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No write right",
 			Request: &ttnpb.DeleteApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
+				ApplicationIds: appID,
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -413,10 +382,10 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "No read right",
 			Request: &ttnpb.DeleteApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
+				ApplicationIds: appID,
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsPermissionDenied(err), should.BeTrue)
@@ -425,11 +394,11 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "Not found",
 			Request: &ttnpb.DeleteApplicationActivationSettingsRequest{
-				ApplicationIdentifiers: appID,
+				ApplicationIds: appID,
 			},
 			Rights: []ttnpb.Right{
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+				ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 			},
 			ErrorAssertion: func(t *testing.T, err error) bool {
 				return assertions.New(t).So(errors.IsNotFound(err), should.BeTrue)
@@ -464,10 +433,10 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 		{
 			Name: "KEK sent plaintext",
 			CreateSettings: &ttnpb.ApplicationActivationSettings{
-				KEKLabel:            sessionKEKLabel,
-				KEK:                 jsKEKEnvelopeUnwrapped,
-				HomeNetID:           &netID,
-				ApplicationServerID: asID,
+				KekLabel:            sessionKEKLabel,
+				Kek:                 jsKEKEnvelopeUnwrapped,
+				HomeNetId:           netID.Bytes(),
+				ApplicationServerId: asID,
 			},
 			CreatePaths: []string{
 				"application_server_id",
@@ -476,10 +445,10 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 				"home_net_id",
 			},
 			GetSettings: &ttnpb.ApplicationActivationSettings{
-				KEKLabel:            sessionKEKLabel,
-				KEK:                 jsKEKEnvelopeUnwrapped,
-				HomeNetID:           &netID,
-				ApplicationServerID: asID,
+				KekLabel:            sessionKEKLabel,
+				Kek:                 jsKEKEnvelopeUnwrapped,
+				HomeNetId:           netID.Bytes(),
+				ApplicationServerId: asID,
 			},
 		},
 	} {
@@ -489,8 +458,8 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 				cl, reg, stop := newJS(ctx,
-					ttnpb.RIGHT_APPLICATION_DEVICES_READ_KEYS,
-					ttnpb.RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ_KEYS,
+					ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE_KEYS,
 				)
 				defer stop()
 
@@ -498,11 +467,9 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 					Name: "Create",
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						sets, err := cl.Set(ctx, &ttnpb.SetApplicationActivationSettingsRequest{
-							ApplicationIdentifiers:        appID,
-							ApplicationActivationSettings: *tc.CreateSettings,
-							FieldMask: pbtypes.FieldMask{
-								Paths: tc.CreatePaths,
-							},
+							ApplicationIds: appID,
+							Settings:       tc.CreateSettings,
+							FieldMask:      ttnpb.FieldMask(tc.CreatePaths...),
 						}, credOpt)
 						if !a.So(err, should.BeNil) {
 							t.Fatalf("Failed to create settings: %s", test.FormatError(err))
@@ -519,17 +486,15 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 						if !a.So(err, should.BeNil) {
 							t.Fatalf("Failed to get settings from registry directly: %s", test.FormatError(err))
 						}
-						a.So(stored.GetKEK().GetKey(), should.BeNil)
+						a.So(stored.GetKek().GetKey(), should.BeNil)
 					},
 				})
 				test.RunSubtestFromContext(ctx, test.SubtestConfig{
 					Name: "Get after creation",
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						sets, err := cl.Get(ctx, &ttnpb.GetApplicationActivationSettingsRequest{
-							ApplicationIdentifiers: appID,
-							FieldMask: pbtypes.FieldMask{
-								Paths: tc.CreatePaths,
-							},
+							ApplicationIds: appID,
+							FieldMask:      ttnpb.FieldMask(tc.CreatePaths...),
 						}, credOpt)
 						if !a.So(err, should.BeNil) {
 							t.Fatalf("Failed to get settings: %s", test.FormatError(err))
@@ -541,11 +506,9 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 					Name: "Update",
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						sets, err := cl.Set(ctx, &ttnpb.SetApplicationActivationSettingsRequest{
-							ApplicationIdentifiers:        appID,
-							ApplicationActivationSettings: *tc.CreateSettings,
-							FieldMask: pbtypes.FieldMask{
-								Paths: tc.CreatePaths,
-							},
+							ApplicationIds: appID,
+							Settings:       tc.CreateSettings,
+							FieldMask:      ttnpb.FieldMask(tc.CreatePaths...),
 						}, credOpt)
 						if !a.So(err, should.BeNil) {
 							t.Fatalf("Failed to update settings: %s", test.FormatError(err))
@@ -557,13 +520,9 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 					Name: "Remove KEK",
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						sets, err := cl.Set(ctx, &ttnpb.SetApplicationActivationSettingsRequest{
-							ApplicationIdentifiers: appID,
-							FieldMask: pbtypes.FieldMask{
-								Paths: []string{
-									"kek_label",
-									"kek",
-								},
-							},
+							ApplicationIds: appID,
+							Settings:       &ttnpb.ApplicationActivationSettings{},
+							FieldMask:      ttnpb.FieldMask("kek_label", "kek"),
 						}, credOpt)
 						if !a.So(err, should.BeNil) {
 							t.Fatalf("Failed to remove KEK: %s", test.FormatError(err))
@@ -575,7 +534,7 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 					Name: "Delete",
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						_, err := cl.Delete(ctx, &ttnpb.DeleteApplicationActivationSettingsRequest{
-							ApplicationIdentifiers: appID,
+							ApplicationIds: appID,
 						}, credOpt)
 						if !a.So(err, should.BeNil) {
 							t.Fatalf("Failed to delete settings: %s", test.FormatError(err))
@@ -586,10 +545,8 @@ func TestApplicationActivationSettingRegistryServer(t *testing.T) {
 					Name: "Get after deletion",
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						sets, err := cl.Get(ctx, &ttnpb.GetApplicationActivationSettingsRequest{
-							ApplicationIdentifiers: appID,
-							FieldMask: pbtypes.FieldMask{
-								Paths: tc.CreatePaths,
-							},
+							ApplicationIds: appID,
+							FieldMask:      ttnpb.FieldMask(tc.CreatePaths...),
 						}, credOpt)
 						if !a.So(err, should.NotBeNil) {
 							t.Fatalf("Successful get after deletion")

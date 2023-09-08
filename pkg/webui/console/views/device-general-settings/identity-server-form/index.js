@@ -14,6 +14,7 @@
 
 import React from 'react'
 import { defineMessages } from 'react-intl'
+import { isEqual } from 'lodash'
 
 import SubmitButton from '@ttn-lw/components/submit-button'
 import SubmitBar from '@ttn-lw/components/submit-bar'
@@ -27,8 +28,9 @@ import getHostnameFromUrl from '@ttn-lw/lib/host-from-url'
 import diff from '@ttn-lw/lib/diff'
 import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import tooltipIds from '@ttn-lw/lib/constants/tooltip-ids'
 
-import { mapFormValueToAttributes, mapAttributesToFormValue } from '@console/lib/attributes'
+import { encodeAttributes, decodeAttributes } from '@console/lib/attributes'
 import { parseLorawanMacVersion } from '@console/lib/device-utils'
 
 import { hasExternalJs, isDeviceOTAA } from '../utils'
@@ -36,9 +38,9 @@ import { hasExternalJs, isDeviceOTAA } from '../utils'
 import validationSchema from './validation-schema'
 
 const messages = defineMessages({
+  unclaimAndDeleteDevice: 'Unclaim and delete end device',
   deleteDevice: 'Delete end device',
-  deleteWarning:
-    'Are you sure you want to delete "{deviceId}"? This action cannot be undone and it will not be possible to reuse the end device ID.',
+  deleteWarning: 'Are you sure you want to delete "{deviceId}"? This action cannot be undone.',
 })
 
 const IdentityServerForm = React.memo(props => {
@@ -49,9 +51,12 @@ const IdentityServerForm = React.memo(props => {
     onDelete,
     onDeleteSuccess,
     onDeleteFailure,
+    onUnclaim,
+    onUnclaimFailure,
     jsConfig,
     nsConfig,
     asConfig,
+    supportsClaiming,
   } = props
   const { name, ids } = device
 
@@ -81,7 +86,7 @@ const IdentityServerForm = React.memo(props => {
     const initialValues = {
       ...device,
       _external_js: hasExternalJs(device),
-      attributes: mapAttributesToFormValue(device.attributes),
+      attributes: device.attributes,
     }
 
     return validationSchema.cast(initialValues, { context: validationContext })
@@ -110,12 +115,16 @@ const IdentityServerForm = React.memo(props => {
   const onFormSubmit = React.useCallback(
     async (values, { resetForm, setSubmitting }) => {
       const castedValues = validationSchema.cast(values, { context: validationContext })
-      const updatedValues = diff(initialValues, castedValues, ['_external_js'])
+      const { attributes } = values
+
+      if (isEqual(initialValues.attributes || {}, attributes)) {
+        delete castedValues.attributes
+      }
+
+      const updatedValues = diff(initialValues, castedValues, { exclude: ['_external_js'] })
 
       const update =
-        'attributes' in updatedValues
-          ? { ...updatedValues, attributes: mapFormValueToAttributes(values.attributes) }
-          : updatedValues
+        'attributes' in updatedValues ? { ...updatedValues, attributes } : updatedValues
 
       setError('')
       try {
@@ -131,13 +140,22 @@ const IdentityServerForm = React.memo(props => {
   )
 
   const onDeviceDelete = React.useCallback(async () => {
+    // Check if device is claimable and if so, try to unclaim.
+    if (supportsClaiming) {
+      try {
+        await onUnclaim()
+      } catch {
+        return onUnclaimFailure()
+      }
+    }
+    // Delete device.
     try {
       await onDelete()
       onDeleteSuccess()
     } catch (error) {
       onDeleteFailure()
     }
-  }, [onDelete, onDeleteFailure, onDeleteSuccess])
+  }, [onDelete, onDeleteFailure, onDeleteSuccess, onUnclaim, onUnclaimFailure, supportsClaiming])
 
   const { enabled: jsEnabled } = jsConfig
   const { enabled: asEnabled } = asConfig
@@ -161,13 +179,10 @@ const IdentityServerForm = React.memo(props => {
   }
 
   let joinEUITitle = sharedMessages.appEUIJoinEUI
-  let joinEUIDescription
   if (lorawanVersion >= 100 && lorawanVersion < 104) {
     joinEUITitle = sharedMessages.appEUI
-    joinEUIDescription = sharedMessages.appEUIDescription
   } else if (lorawanVersion >= 104) {
     joinEUITitle = sharedMessages.joinEUI
-    joinEUIDescription = sharedMessages.joinEUIDescription
   }
 
   return (
@@ -196,10 +211,10 @@ const IdentityServerForm = React.memo(props => {
           type="byte"
           min={8}
           max={8}
-          description={joinEUIDescription}
           required
           disabled
           component={Input}
+          tooltipId={tooltipIds.JOIN_EUI}
         />
       )}
       {hasDevEUI && (
@@ -209,10 +224,10 @@ const IdentityServerForm = React.memo(props => {
           type="byte"
           min={8}
           max={8}
-          description={sharedMessages.deviceEUIDescription}
           required
           disabled
           component={Input}
+          tooltipId={tooltipIds.DEV_EUI}
         />
       )}
       <Form.Field
@@ -221,6 +236,7 @@ const IdentityServerForm = React.memo(props => {
         placeholder={sharedMessages.deviceNamePlaceholder}
         description={sharedMessages.deviceNameDescription}
         component={Input}
+        tooltipId={tooltipIds.DEVICE_NAME}
       />
       <Form.Field
         title={sharedMessages.devDesc}
@@ -228,6 +244,7 @@ const IdentityServerForm = React.memo(props => {
         type="textarea"
         description={sharedMessages.deviceDescDescription}
         component={Input}
+        tooltipId={tooltipIds.DEVICE_DESCRIPTION}
       />
       <Form.Field
         title={sharedMessages.networkServerAddress}
@@ -269,13 +286,15 @@ const IdentityServerForm = React.memo(props => {
         addMessage={sharedMessages.addAttributes}
         component={KeyValueMap}
         description={sharedMessages.attributeDescription}
+        encode={encodeAttributes}
+        decode={decodeAttributes}
       />
       <SubmitBar>
         <Form.Submit component={SubmitButton} message={sharedMessages.saveChanges} />
         <ModalButton
           type="button"
           icon="delete"
-          message={messages.deleteDevice}
+          message={supportsClaiming ? messages.unclaimAndDeleteDevice : messages.deleteDevice}
           modalData={{
             message: { values: { deviceId: name || ids.device_id }, ...messages.deleteWarning },
           }}
@@ -298,6 +317,9 @@ IdentityServerForm.propTypes = {
   onDeleteSuccess: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
   onSubmitSuccess: PropTypes.func.isRequired,
+  onUnclaim: PropTypes.func.isRequired,
+  onUnclaimFailure: PropTypes.func.isRequired,
+  supportsClaiming: PropTypes.bool.isRequired,
 }
 
 export default IdentityServerForm

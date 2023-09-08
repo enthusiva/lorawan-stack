@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/TheThingsIndustries/mystique/pkg/topic"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mqtt/topics"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
@@ -31,7 +31,7 @@ const gatewayID = "test"
 func TestDefaultTopics(t *testing.T) {
 	ctx := test.Context()
 	v3 := topics.New(ctx)
-	uid := unique.ID(ctx, ttnpb.GatewayIdentifiers{GatewayID: gatewayID})
+	uid := unique.ID(ctx, &ttnpb.GatewayIdentifiers{GatewayId: gatewayID})
 	for _, tc := range []struct {
 		UID      string
 		Func     func(string) []string

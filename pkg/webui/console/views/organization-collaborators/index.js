@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,16 +13,16 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
-import { Switch, Route } from 'react-router'
+import { Routes, Route, useParams } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import ErrorView from '@ttn-lw/lib/components/error-view'
-import NotFoundRoute from '@ttn-lw/lib/components/not-found-route'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import SubViewError from '@console/views/sub-view-error'
 import OrganizationCollaboratorsList from '@console/views/organization-collaborators-list'
@@ -30,49 +30,44 @@ import OrganizationCollaboratorAdd from '@console/views/organization-collaborato
 import OrganizationCollaboratorEdit from '@console/views/organization-collaborator-edit'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
+import { userPathId as userPathIdRegexp } from '@ttn-lw/lib/regexp'
 
 import { mayViewOrEditOrganizationCollaborators } from '@console/lib/feature-checks'
 
-import { selectSelectedOrganizationId } from '@console/store/selectors/organizations'
+const OrganizationCollaborators = () => {
+  const { orgId } = useParams()
 
-@connect(state => ({ orgId: selectSelectedOrganizationId(state) }))
-@withFeatureRequirement(mayViewOrEditOrganizationCollaborators, {
-  redirect: ({ orgId }) => `/organizations/${orgId}`,
-})
-@withBreadcrumb('orgs.single.collaborators', props => {
-  const { match } = props
-  const { orgId } = match.params
-
-  return (
+  useBreadcrumbs(
+    'orgs.single.collaborators',
     <Breadcrumb
       path={`/organizations/${orgId}/collaborators`}
       content={sharedMessages.collaborators}
-    />
+    />,
   )
-})
-class OrganizationCollaborators extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
 
-  render() {
-    const { match } = this.props
-
-    return (
-      <ErrorView ErrorComponent={SubViewError}>
-        <Switch>
-          <Route exact path={`${match.path}`} component={OrganizationCollaboratorsList} />
-          <Route exact path={`${match.path}/add`} component={OrganizationCollaboratorAdd} />
+  return (
+    <Require
+      featureCheck={mayViewOrEditOrganizationCollaborators}
+      otherwise={{ redirect: `/organizations/${orgId}` }}
+    >
+      <ErrorView errorRender={SubViewError}>
+        <Routes>
+          <Route index Component={OrganizationCollaboratorsList} />
+          <Route path="add" Component={OrganizationCollaboratorAdd} />
           <Route
-            path={`${match.path}/:collaboratorType(user|organization)/:collaboratorId`}
-            component={OrganizationCollaboratorEdit}
+            path="user/:collaboratorId"
+            element={
+              <ValidateRouteParam
+                check={{ collaboratorId: userPathIdRegexp }}
+                Component={OrganizationCollaboratorEdit}
+              />
+            }
           />
-          <NotFoundRoute />
-        </Switch>
+          <Route path="*" element={<GenericNotFound />} />
+        </Routes>
       </ErrorView>
-    )
-  }
+    </Require>
+  )
 }
 
 export default OrganizationCollaborators

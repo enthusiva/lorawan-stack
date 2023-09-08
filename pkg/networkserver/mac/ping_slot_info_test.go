@@ -18,9 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -38,13 +37,13 @@ func TestHandlePingSlotInfoReq(t *testing.T) {
 		{
 			Name: "nil payload",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass: ttnpb.CLASS_B,
+				MacState: &ttnpb.MACState{
+					DeviceClass: ttnpb.Class_CLASS_B,
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass: ttnpb.CLASS_B,
+				MacState: &ttnpb.MACState{
+					DeviceClass: ttnpb.Class_CLASS_B,
 				},
 			},
 			Error: ErrNoPayload,
@@ -52,13 +51,13 @@ func TestHandlePingSlotInfoReq(t *testing.T) {
 		{
 			Name: "class B device",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass: ttnpb.CLASS_B,
+				MacState: &ttnpb.MACState{
+					DeviceClass: ttnpb.Class_CLASS_B,
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass: ttnpb.CLASS_B,
+				MacState: &ttnpb.MACState{
+					DeviceClass: ttnpb.Class_CLASS_B,
 				},
 			},
 			Payload: &ttnpb.MACCommand_PingSlotInfoReq{
@@ -73,16 +72,16 @@ func TestHandlePingSlotInfoReq(t *testing.T) {
 		{
 			Name: "empty queue",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass: ttnpb.CLASS_A,
+				MacState: &ttnpb.MACState{
+					DeviceClass: ttnpb.Class_CLASS_A,
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass:         ttnpb.CLASS_A,
+				MacState: &ttnpb.MACState{
+					DeviceClass:         ttnpb.Class_CLASS_A,
 					PingSlotPeriodicity: &ttnpb.PingSlotPeriodValue{Value: 42},
 					QueuedResponses: []*ttnpb.MACCommand{
-						ttnpb.CID_PING_SLOT_INFO.MACCommand(),
+						ttnpb.MACCommandIdentifier_CID_PING_SLOT_INFO.MACCommand(),
 					},
 				},
 			},
@@ -99,8 +98,8 @@ func TestHandlePingSlotInfoReq(t *testing.T) {
 		{
 			Name: "non-empty queue",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass: ttnpb.CLASS_A,
+				MacState: &ttnpb.MACState{
+					DeviceClass: ttnpb.Class_CLASS_A,
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -109,14 +108,14 @@ func TestHandlePingSlotInfoReq(t *testing.T) {
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					DeviceClass:         ttnpb.CLASS_A,
+				MacState: &ttnpb.MACState{
+					DeviceClass:         ttnpb.Class_CLASS_A,
 					PingSlotPeriodicity: &ttnpb.PingSlotPeriodValue{Value: 42},
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
 						{},
-						ttnpb.CID_PING_SLOT_INFO.MACCommand(),
+						ttnpb.MACCommandIdentifier_CID_PING_SLOT_INFO.MACCommand(),
 					},
 				},
 			},
@@ -136,7 +135,7 @@ func TestHandlePingSlotInfoReq(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				evs, err := HandlePingSlotInfoReq(ctx, dev, tc.Payload)
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||

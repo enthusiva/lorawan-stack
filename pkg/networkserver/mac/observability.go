@@ -23,7 +23,7 @@ import (
 )
 
 func macEventOptions(extraOpts ...events.Option) []events.Option {
-	return append([]events.Option{events.WithVisibility(ttnpb.RIGHT_APPLICATION_TRAFFIC_READ)}, extraOpts...)
+	return append([]events.Option{events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ)}, extraOpts...)
 }
 
 func defineReceiveMACAcceptEvent(name, desc string, opts ...events.Option) func() events.Builder {
@@ -85,7 +85,8 @@ func defineEnqueueMACRequestEvent(name, desc string, opts ...events.Option) func
 func defineClassSwitchEvent(class rune) func() events.Builder {
 	return events.DefineFunc(
 		fmt.Sprintf("ns.class.switch.%c", class), fmt.Sprintf("switched to class %c", unicode.ToUpper(class)),
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithPropagateToParent(),
 	)
 }
 
@@ -94,10 +95,33 @@ var (
 	EvtEnqueueProprietaryMACRequest = defineEnqueueMACRequestEvent("proprietary", "proprietary MAC command")
 	EvtReceiveProprietaryMAC        = events.Define(
 		"ns.mac.proprietary.receive", "receive proprietary MAC command",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
 	)
 
 	EvtClassASwitch = defineClassSwitchEvent('a')()
 	EvtClassBSwitch = defineClassSwitchEvent('b')()
 	EvtClassCSwitch = defineClassSwitchEvent('c')()
+
+	EvtParseMACCommandFail = events.Define(
+		"ns.mac.command.parse.fail", "parse MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithErrorDataType(),
+		events.WithPropagateToParent(),
+	)
+	EvtUnknownMACCommand = events.Define(
+		"ns.mac.command.unknown", "unknown MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithDataType(&ttnpb.MACCommand{}),
+	)
+	EvtProcessMACCommandFail = events.Define(
+		"ns.mac.command.process.fail", "process MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithErrorDataType(),
+		events.WithPropagateToParent(),
+	)
+	EvtUnansweredMACCommand = events.Define(
+		"ns.mac.command.unanswered", "MAC command answer missing",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithDataType(&ttnpb.MACCommands{}),
+	)
 )

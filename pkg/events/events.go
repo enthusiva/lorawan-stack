@@ -25,23 +25,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/gogoproto"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/jsonpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// Event interface
+// Event interface.
 type Event interface {
 	UniqueID() string
 	Context() context.Context
 	Name() string
 	Time() time.Time
 	Identifiers() []*ttnpb.EntityIdentifiers
-	Data() interface{}
-	CorrelationIDs() []string
+	Data() any
+	CorrelationIds() []string
 	Origin() string
 	Caller() string
 	Visibility() *ttnpb.Rights
@@ -55,18 +58,19 @@ type Event interface {
 func local(evt Event) *event {
 	localEvent, ok := evt.(*event)
 	if !ok {
+		t := evt.Time()
 		localEvent = &event{
 			ctx: evt.Context(),
-			innerEvent: ttnpb.Event{
-				UniqueID:       evt.UniqueID(),
+			innerEvent: &ttnpb.Event{
+				UniqueId:       evt.UniqueID(),
 				Name:           evt.Name(),
-				Time:           evt.Time(),
+				Time:           timestamppb.New(t),
 				Identifiers:    evt.Identifiers(),
-				CorrelationIDs: evt.CorrelationIDs(),
+				CorrelationIds: evt.CorrelationIds(),
 				Origin:         evt.Origin(),
 				Visibility:     evt.Visibility(),
 				UserAgent:      evt.UserAgent(),
-				RemoteIP:       evt.RemoteIP(),
+				RemoteIp:       evt.RemoteIP(),
 			},
 			data:   evt.Data(),
 			caller: evt.Caller(),
@@ -74,9 +78,9 @@ func local(evt Event) *event {
 		authentication := &ttnpb.Event_Authentication{
 			Type:      evt.AuthType(),
 			TokenType: evt.AuthTokenType(),
-			TokenID:   evt.AuthTokenID(),
+			TokenId:   evt.AuthTokenID(),
 		}
-		if authentication.TokenID != "" || authentication.TokenType != "" || authentication.Type != "" {
+		if authentication.TokenId != "" || authentication.TokenType != "" || authentication.Type != "" {
 			localEvent.innerEvent.Authentication = authentication
 		}
 	}
@@ -85,8 +89,8 @@ func local(evt Event) *event {
 
 type event struct {
 	ctx        context.Context
-	innerEvent ttnpb.Event
-	data       interface{}
+	innerEvent *ttnpb.Event
+	data       any
 	caller     string
 }
 
@@ -98,7 +102,7 @@ var pathPrefix = func() string {
 	return strings.TrimSuffix(file, filepath.Join("pkg", "events", "events.go"))
 }()
 
-// IncludeCaller indicates whether the caller of Publish should be included in the event
+// IncludeCaller indicates whether the caller of Publish should be included in the event.
 var IncludeCaller bool
 
 // withCaller returns an event with the Caller field populated, if configured to do so.
@@ -137,21 +141,27 @@ func (e *event) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (e event) UniqueID() string                        { return e.innerEvent.UniqueID }
-func (e event) Context() context.Context                { return e.ctx }
-func (e event) Name() string                            { return e.innerEvent.Name }
-func (e event) Time() time.Time                         { return e.innerEvent.Time }
+func (e event) UniqueID() string         { return e.innerEvent.UniqueId }
+func (e event) Context() context.Context { return e.ctx }
+func (e event) Name() string             { return e.innerEvent.Name }
+func (e event) Time() time.Time {
+	t := ttnpb.StdTime(e.innerEvent.GetTime())
+	if t != nil {
+		return *t
+	}
+	return time.Time{}
+}
 func (e event) Identifiers() []*ttnpb.EntityIdentifiers { return e.innerEvent.Identifiers }
-func (e event) Data() interface{}                       { return e.data }
-func (e event) CorrelationIDs() []string                { return e.innerEvent.CorrelationIDs }
+func (e event) Data() any                               { return e.data }
+func (e event) CorrelationIds() []string                { return e.innerEvent.CorrelationIds }
 func (e event) Origin() string                          { return e.innerEvent.Origin }
 func (e event) Caller() string                          { return e.caller }
 func (e event) Visibility() *ttnpb.Rights               { return e.innerEvent.Visibility }
 func (e event) UserAgent() string                       { return e.innerEvent.UserAgent }
-func (e event) RemoteIP() string                        { return e.innerEvent.RemoteIP }
+func (e event) RemoteIP() string                        { return e.innerEvent.RemoteIp }
 func (e event) AuthType() string                        { return e.innerEvent.GetAuthentication().GetType() }
 func (e event) AuthTokenType() string                   { return e.innerEvent.GetAuthentication().GetTokenType() }
-func (e event) AuthTokenID() string                     { return e.innerEvent.GetAuthentication().GetTokenID() }
+func (e event) AuthTokenID() string                     { return e.innerEvent.GetAuthentication().GetTokenId() }
 
 var hostname string
 
@@ -166,29 +176,37 @@ func New(ctx context.Context, name, description string, opts ...Option) Event {
 	return (&definition{name: name, description: description}).New(ctx, opts...)
 }
 
-func marshalData(data interface{}) (*pbtypes.Any, error) {
-	var (
-		any *pbtypes.Any
-		err error
-	)
+func marshalData(data any) (anyPB *anypb.Any, err error) {
 	if protoMessage, ok := data.(proto.Message); ok {
-		any, err = pbtypes.MarshalAny(protoMessage)
-	} else if errData, ok := data.(error); ok {
-		if ttnErrData, ok := errors.From(errData); ok {
-			any, err = pbtypes.MarshalAny(ttnpb.ErrorDetailsToProto(ttnErrData))
-		} else {
-			any, err = pbtypes.MarshalAny(&pbtypes.StringValue{Value: errData.Error()})
-		}
-	} else {
-		value, err := gogoproto.Value(data)
+		anyPB, err = anypb.New(protoMessage)
 		if err != nil {
 			return nil, err
 		}
-		if _, isNull := value.Kind.(*pbtypes.Value_NullValue); !isNull {
-			any, err = pbtypes.MarshalAny(value)
+	} else if errData, ok := data.(error); ok {
+		if ttnErrData, ok := errors.From(errData); ok {
+			anyPB, err = anypb.New(ttnpb.ErrorDetailsToProto(ttnErrData))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			anyPB, err = anypb.New(&wrapperspb.StringValue{Value: errData.Error()})
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		value, err := goproto.Value(data)
+		if err != nil {
+			return nil, err
+		}
+		if _, isNull := value.Kind.(*structpb.Value_NullValue); !isNull {
+			anyPB, err = anypb.New(value)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	return any, err
+	return anyPB, nil
 }
 
 // Proto returns the protobuf representation of the event.
@@ -207,7 +225,7 @@ func Proto(e Event) (*ttnpb.Event, error) {
 			return nil, err
 		}
 	}
-	return &pb, nil
+	return pb, nil
 }
 
 // FromProto returns the event from its protobuf representation.
@@ -216,19 +234,16 @@ func FromProto(pb *ttnpb.Event) (Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	var data interface{}
+	var data any
 	if pb.Data != nil {
-		any, err := pbtypes.EmptyAny(pb.Data)
+		anyMsg, err := pb.Data.UnmarshalNew()
 		if err != nil {
 			return nil, err
 		}
-		if err = pbtypes.UnmarshalAny(pb.Data, any); err != nil {
-			return nil, err
-		}
-		data = any
-		v, ok := any.(*pbtypes.Value)
+		data = anyMsg
+		v, ok := anyMsg.(*structpb.Value)
 		if ok {
-			iface, err := gogoproto.Interface(v)
+			iface, err := goproto.Interface(v)
 			if err != nil {
 				return nil, err
 			}
@@ -238,16 +253,16 @@ func FromProto(pb *ttnpb.Event) (Event, error) {
 	return &event{
 		ctx:  ctx,
 		data: data,
-		innerEvent: ttnpb.Event{
-			UniqueID:       pb.UniqueID,
+		innerEvent: &ttnpb.Event{
+			UniqueId:       pb.UniqueId,
 			Name:           pb.Name,
 			Time:           pb.Time,
 			Identifiers:    pb.Identifiers,
-			CorrelationIDs: pb.CorrelationIDs,
+			CorrelationIds: pb.CorrelationIds,
 			Origin:         pb.Origin,
 			Visibility:     pb.Visibility,
 			Authentication: pb.Authentication,
-			RemoteIP:       pb.RemoteIP,
+			RemoteIp:       pb.RemoteIp,
 			UserAgent:      pb.UserAgent,
 		},
 	}, nil

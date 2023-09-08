@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,154 +12,353 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
-import { connect } from 'react-redux'
+import React from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { defineMessages } from 'react-intl'
+import { createSelector } from 'reselect'
 
 import Status from '@ttn-lw/components/status'
 import Icon from '@ttn-lw/components/icon'
+import Button from '@ttn-lw/components/button'
+import toast from '@ttn-lw/components/toast'
+import ButtonGroup from '@ttn-lw/components/button/group'
+import DeleteModalButton from '@ttn-lw/components/delete-modal-button'
 
 import FetchTable from '@ttn-lw/containers/fetch-table'
 
 import Message from '@ttn-lw/lib/components/message'
+import DateTime from '@ttn-lw/lib/components/date-time'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 import PropTypes from '@ttn-lw/lib/prop-types'
 import { getUserId } from '@ttn-lw/lib/selectors/id'
+import attachPromise from '@ttn-lw/lib/store/actions/attach-promise'
 
-import { checkFromState, mayManageUsers } from '@console/lib/feature-checks'
+import { checkFromState, mayManageUsers, maySendInvites } from '@console/lib/feature-checks'
 
-import { getUsersList } from '@console/store/actions/users'
+import {
+  getUsersList,
+  deleteInvite,
+  getUserInvitations,
+  deleteUser,
+  restoreUser,
+} from '@console/store/actions/users'
 
-import { selectUserId } from '@console/store/selectors/user'
+import { selectUserId } from '@console/store/selectors/logout'
 import {
   selectUsers,
   selectUsersTotalCount,
-  selectUsersFetching,
-  selectUsersError,
+  selectUserInvitations,
+  selectUserInvitationsTotalCount,
 } from '@console/store/selectors/users'
 
 import style from './users-table.styl'
 
-@connect(state => ({
-  currentUserId: selectUserId(state),
-}))
-export default class UsersTable extends Component {
-  static propTypes = {
-    currentUserId: PropTypes.string.isRequired,
-    pageSize: PropTypes.number.isRequired,
-  }
+const m = defineMessages({
+  invite: 'Invite user',
+  revokeInvitation: 'Revoke this invitation',
+  sentAt: 'Sent',
+  revokeSuccess: 'Invite removed successfully',
+  revokeError: 'There was an error and the invite could not be revoked',
+})
 
-  constructor(props) {
-    super(props)
-    this.headers = [
-      {
-        name: 'ids.user_id',
-        displayName: sharedMessages.id,
-        width: 28,
-        sortable: true,
-        sortKey: 'user_id',
-        render: ids => {
-          const userId = getUserId({ ids })
-          if (userId === props.currentUserId) {
-            return (
-              <span>
-                {userId}{' '}
-                <Message className={style.hint} content={sharedMessages.currentUserIndicator} />
-              </span>
-            )
-          }
-          return userId
-        },
-      },
-      {
-        name: 'name',
-        displayName: sharedMessages.name,
-        width: 22,
-        sortable: true,
-      },
-      {
-        name: 'primary_email_address',
-        displayName: sharedMessages.email,
-        width: 28,
-        sortable: true,
-      },
-      {
-        name: 'state',
-        displayName: sharedMessages.state,
-        width: 15,
-        sortable: true,
-        render: state => {
-          let indicator = 'unknown'
-          let label = sharedMessages.notSet
-          switch (state) {
-            case 'STATE_APPROVED':
-              indicator = 'good'
-              label = sharedMessages.stateApproved
-              break
-            case 'STATE_REQUESTED':
-              indicator = 'mediocre'
-              label = sharedMessages.stateRequested
-              break
-            case 'STATE_REJECTED':
-              indicator = 'bad'
-              label = sharedMessages.stateRejected
-              break
-            case 'STATE_FLAGGED':
-              indicator = 'bad'
-              label = sharedMessages.stateFlagged
-              break
-            case 'STATE_SUSPENDED':
-              indicator = 'bad'
-              label = sharedMessages.stateSuspended
-              break
-          }
+const USERS_TAB = 'users'
+const DELETED_TAB = 'deleted'
+const INVITATIONS_TAB = 'invitations'
+const tabs = [
+  {
+    title: sharedMessages.users,
+    name: 'users',
+  },
+  { title: sharedMessages.deleted, name: DELETED_TAB },
+  {
+    title: sharedMessages.userInvitations,
+    name: 'invitations',
+  },
+]
 
-          return <Status status={indicator} label={label} pulse={false} />
-        },
-      },
-      {
-        name: 'admin',
-        displayName: sharedMessages.admin,
-        width: 7,
-        render: isAdmin => {
-          if (isAdmin) {
-            return <Icon className={style.icon} icon="check" />
-          }
-
-          return null
-        },
-      },
-    ]
-
-    this.getUsersList = params =>
-      getUsersList(params, ['name', 'primary_email_address', 'state', 'admin'])
-  }
-
-  baseDataSelector(state) {
-    return {
-      users: selectUsers(state),
-      totalCount: selectUsersTotalCount(state),
-      fetching: selectUsersFetching(state),
-      error: selectUsersError(state),
-      mayAdd: checkFromState(mayManageUsers, state),
+const state = {
+  name: 'state',
+  displayName: sharedMessages.state,
+  width: 15,
+  render: state => {
+    let indicator = 'unknown'
+    let label = sharedMessages.notSet
+    switch (state) {
+      case 'STATE_APPROVED':
+        indicator = 'good'
+        label = sharedMessages.stateApproved
+        break
+      case 'STATE_REQUESTED':
+        indicator = 'mediocre'
+        label = sharedMessages.stateRequested
+        break
+      case 'STATE_REJECTED':
+        indicator = 'bad'
+        label = sharedMessages.stateRejected
+        break
+      case 'STATE_FLAGGED':
+        indicator = 'bad'
+        label = sharedMessages.stateFlagged
+        break
+      case 'STATE_SUSPENDED':
+        indicator = 'bad'
+        label = sharedMessages.stateSuspended
+        break
     }
-  }
 
-  render() {
-    const { pageSize } = this.props
-
-    return (
-      <FetchTable
-        entity="users"
-        headers={this.headers}
-        addMessage={sharedMessages.userAdd}
-        tableTitle={<Message content={sharedMessages.users} />}
-        getItemsAction={this.getUsersList}
-        searchItemsAction={this.getUsersList}
-        baseDataSelector={this.baseDataSelector}
-        pageSize={pageSize}
-        searchable
-      />
-    )
-  }
+    return <Status status={indicator} label={label} pulse={false} />
+  },
 }
+
+const UsersTable = props => {
+  const { pageSize } = props
+  const dispatch = useDispatch()
+  const currentUserId = useSelector(selectUserId)
+  const mayInvite = useSelector(state => checkFromState(maySendInvites, state))
+
+  const [tab, setTab] = React.useState(USERS_TAB)
+  const isInvitationsTab = tab === INVITATIONS_TAB
+  const isDeletedTab = tab === DELETED_TAB
+
+  const handleRestore = React.useCallback(
+    async id => {
+      try {
+        await dispatch(attachPromise(restoreUser(id)))
+        toast({
+          title: id,
+          message: m.restoreSuccess,
+          type: toast.types.SUCCESS,
+        })
+      } catch (err) {
+        toast({
+          title: id,
+          message: m.restoreFail,
+          type: toast.types.ERROR,
+        })
+      }
+    },
+    [dispatch],
+  )
+
+  const handlePurge = React.useCallback(
+    async id => {
+      try {
+        await dispatch(attachPromise(deleteUser(id)), { purge: true })
+        toast({
+          title: id,
+          message: m.purgeSuccess,
+          type: toast.types.SUCCESS,
+        })
+      } catch (err) {
+        toast({
+          title: id,
+          message: m.purgeFail,
+          type: toast.types.ERROR,
+        })
+      }
+    },
+    [dispatch],
+  )
+
+  const onDeleteInvite = React.useCallback(
+    async email => {
+      try {
+        await dispatch(attachPromise(deleteInvite(email)))
+        toast({
+          message: m.revokeSuccess,
+          type: toast.types.SUCCESS,
+        })
+        setTab(INVITATIONS_TAB)
+        dispatch(getUserInvitations())
+      } catch {
+        toast({
+          message: m.revokeError,
+          type: toast.types.ERROR,
+        })
+      }
+    },
+    [dispatch],
+  )
+
+  const headers = React.useMemo(() => {
+    const baseHeaders = []
+
+    if (tab === INVITATIONS_TAB) {
+      baseHeaders.push(
+        {
+          name: 'email',
+          displayName: sharedMessages.email,
+          width: 28,
+        },
+        {
+          name: 'created_at',
+          displayName: m.sentAt,
+          width: 15,
+          render: date => <DateTime.Relative value={date} />,
+        },
+        ...state,
+        {
+          name: 'actions',
+          displayName: sharedMessages.actions,
+          width: 42,
+          getValue: row => ({
+            email: row.email,
+            delete: onDeleteInvite.bind(null, { email: row.email }),
+          }),
+          render: details => (
+            <Button
+              type="button"
+              onClick={details.delete}
+              message={m.revokeInvitation}
+              icon="delete"
+              danger
+            />
+          ),
+        },
+      )
+    } else {
+      baseHeaders.push(
+        {
+          name: 'ids.user_id',
+          displayName: sharedMessages.id,
+          width: 28,
+          sortable: true,
+          sortKey: 'user_id',
+          render: ids => {
+            const userId = getUserId({ ids })
+            if (userId === currentUserId) {
+              return (
+                <span>
+                  {userId}{' '}
+                  <Message className={style.hint} content={sharedMessages.currentUserIndicator} />
+                </span>
+              )
+            }
+            return userId
+          },
+        },
+        {
+          name: 'name',
+          displayName: sharedMessages.name,
+          width: 22,
+          sortable: true,
+        },
+        {
+          name: 'primary_email_address',
+          displayName: sharedMessages.email,
+          width: 28,
+          sortable: true,
+        },
+      )
+      if (tab === DELETED_TAB) {
+        baseHeaders.push({
+          name: 'actions',
+          displayName: sharedMessages.actions,
+          width: 45,
+          getValue: row => ({
+            id: row.ids.user_id,
+            name: row.name,
+            restore: handleRestore.bind(null, row.ids.user_id),
+            purge: handlePurge.bind(null, row.ids.user_id),
+          }),
+          render: details => (
+            <ButtonGroup align="end">
+              <Button message={sharedMessages.restore} onClick={details.restore} />
+              <DeleteModalButton
+                entityId={details.id}
+                entityName={details.name}
+                message={sharedMessages.purge}
+                onApprove={details.purge}
+                onlyPurge
+              />
+            </ButtonGroup>
+          ),
+        })
+      } else {
+        baseHeaders.push(state, {
+          name: 'admin',
+          displayName: sharedMessages.admin,
+          width: 7,
+          render: isAdmin => {
+            if (isAdmin) {
+              return <Icon className={style.icon} icon="check" />
+            }
+
+            return null
+          },
+        })
+      }
+    }
+
+    return baseHeaders
+  }, [currentUserId, tab, onDeleteInvite, handleRestore, handlePurge])
+
+  const getItems = React.useCallback(params => {
+    const { tab, query } = params
+    const isDeletedTab = tab === DELETED_TAB
+    setTab(tab)
+
+    if (tab === INVITATIONS_TAB) {
+      return getUserInvitations(params, ['state'])
+    }
+    return getUsersList(
+      { ...params, deleted: isDeletedTab },
+      ['name', 'primary_email_address', 'state', 'admin'],
+      {
+        isSearch: isDeletedTab || query.length > 0,
+      },
+    )
+  }, [])
+
+  const invitationsBaseDataSelector = createSelector(
+    selectUserInvitations,
+    selectUserInvitationsTotalCount,
+    (invitations, totalCount) => ({
+      invitations,
+      totalCount,
+      mayAdd: mayInvite,
+      mayLink: false,
+    }),
+  )
+  const usersBaseDataSelector = createSelector(
+    selectUsers,
+    selectUsersTotalCount,
+    (users, totalCount) => ({
+      users,
+      totalCount,
+      mayAdd: mayManageUsers,
+    }),
+  )
+
+  const getItemPathPrefix = item => `/${item.email}`
+
+  return (
+    <FetchTable
+      entity={isInvitationsTab ? 'invitations' : 'users'}
+      defaultOrder={isInvitationsTab ? '' : '-user_id'}
+      headers={headers}
+      addMessage={isInvitationsTab ? m.invite : sharedMessages.userAdd}
+      itemPathPrefix={isInvitationsTab ? 'invitations/' : ''}
+      getItemPathPrefix={isInvitationsTab ? getItemPathPrefix : undefined}
+      tableTitle={<Message content={sharedMessages.users} />}
+      getItemsAction={getItems}
+      searchItemsAction={getItems}
+      baseDataSelector={isInvitationsTab ? invitationsBaseDataSelector : usersBaseDataSelector}
+      pageSize={pageSize}
+      clickable={!isDeletedTab}
+      tabs={maySendInvites ? tabs : []}
+      searchable={!isInvitationsTab}
+    />
+  )
+}
+
+UsersTable.propTypes = {
+  pageSize: PropTypes.number,
+}
+
+UsersTable.defaultProps = {
+  pageSize: undefined,
+}
+
+export default UsersTable

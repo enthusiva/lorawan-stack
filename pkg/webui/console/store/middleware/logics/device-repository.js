@@ -12,11 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import api from '@console/api'
+import tts from '@console/api/tts'
 
+import { isNotFoundError } from '@ttn-lw/lib/errors/utils'
 import createRequestLogic from '@ttn-lw/lib/store/logics/create-request-logic'
 
 import * as repository from '@console/store/actions/device-repository'
+
+const ignoreNotFound = async (action, appId, version_ids) => {
+  try {
+    return await action(appId, version_ids)
+  } catch (e) {
+    if (!isNotFoundError(e)) {
+      throw e
+    }
+  }
+
+  return undefined
+}
 
 const listDeviceBrandsLogic = createRequestLogic({
   type: repository.LIST_BRANDS,
@@ -26,7 +39,7 @@ const listDeviceBrandsLogic = createRequestLogic({
       meta: { selector = [] },
     } = action
 
-    return api.deviceRepository.listBrands(appId, params, selector)
+    return tts.Applications.Devices.Repository.listBrands(appId, params, selector)
   },
 })
 
@@ -38,7 +51,7 @@ const getDeviceBrandLogic = createRequestLogic({
       meta: { selector = [] },
     } = action
 
-    return api.deviceRepository.getBrand(appId, brandId, selector)
+    return tts.Applications.Devices.Repository.getBrand(appId, brandId, selector)
   },
 })
 
@@ -50,7 +63,7 @@ const listDeviceModelsLogic = createRequestLogic({
       meta: { selector = [] },
     } = action
 
-    const { models, totalCount } = await api.deviceRepository.listModels(
+    const { models, totalCount } = await tts.Applications.Devices.Repository.listModels(
       appId,
       brandId,
       params,
@@ -69,7 +82,7 @@ const getDeviceModelLogic = createRequestLogic({
       meta: { selector = [] },
     } = action
 
-    return api.deviceRepository.getModel(appId, brandId, modelId, selector)
+    return tts.Applications.Devices.Repository.getModel(appId, brandId, modelId, selector)
   },
 })
 
@@ -80,7 +93,28 @@ const getTemplateLogic = createRequestLogic({
       payload: { appId, version },
     } = action
 
-    return api.deviceRepository.getTemplate(appId, version)
+    return tts.Applications.Devices.Repository.getTemplate(appId, version)
+  },
+})
+
+const getRepositoryPayloadFormattersLogic = createRequestLogic({
+  type: repository.GET_REPO_PF,
+  process: async ({ action }) => {
+    const {
+      payload: { appId, version_ids },
+    } = action
+
+    const repositoryPayloadFormatters = await Promise.all([
+      ignoreNotFound(tts.Applications.Devices.Repository.getUplinkDecoder, appId, version_ids),
+      ignoreNotFound(tts.Applications.Devices.Repository.getDownlinkDecoder, appId, version_ids),
+      ignoreNotFound(tts.Applications.Devices.Repository.getDownlinkEncoder, appId, version_ids),
+    ])
+
+    return {
+      ...repositoryPayloadFormatters[0],
+      ...repositoryPayloadFormatters[1],
+      ...repositoryPayloadFormatters[2],
+    }
   },
 })
 
@@ -90,4 +124,5 @@ export default [
   listDeviceModelsLogic,
   getDeviceModelLogic,
   getTemplateLogic,
+  getRepositoryPayloadFormattersLogic,
 ]

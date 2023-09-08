@@ -12,18 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const selectEventsStore = (state, entityId) => state[entityId]
+import CONNECTION_STATUS from '@console/constants/connection-status'
+
+import { EVENT_STATUS_CLEARED } from '@console/lib/events/definitions'
+
+const selectEventsStore = (state, entityId) => state[entityId] || {}
 
 export const createEventsSelector = entity => (state, entityId) => {
   const store = selectEventsStore(state.events[entity], entityId)
 
-  return store ? store.events : []
+  return store.events || []
 }
 
 export const createEventsStatusSelector = entity => (state, entityId) => {
   const store = selectEventsStore(state.events[entity], entityId)
 
-  return store ? store.status : 'unknown'
+  return store.status || CONNECTION_STATUS.UNKNOWN
 }
 
 export const createEventsPausedSelector = entity => (state, entityId) => {
@@ -41,7 +45,7 @@ export const createEventsInterruptedSelector = entity => (state, entityId) => {
 export const createEventsErrorSelector = entity => (state, entityId) => {
   const store = selectEventsStore(state.events[entity], entityId)
 
-  return store ? store.error : undefined
+  return store.error
 }
 
 export const createEventsTruncatedSelector = entity => (state, entityId) => {
@@ -53,13 +57,25 @@ export const createEventsTruncatedSelector = entity => (state, entityId) => {
 export const createLatestEventSelector = entity => {
   const eventsSelector = createEventsSelector(entity)
 
-  const selectLatestEvent = (state, entityId) => {
+  const selectLatestEvent = (state, entityId, includeSynthetic = false) => {
     const events = eventsSelector(state, entityId)
 
-    return events[0]
+    return includeSynthetic ? events[0] : events.find(e => !e.isSynthetic)
   }
 
   return selectLatestEvent
+}
+
+export const createLatestClearedEventSelector = entity => {
+  const eventsSelector = createEventsSelector(entity)
+
+  const selectLatestClearedEvent = (state, entityId) => {
+    const events = eventsSelector(state, entityId)
+
+    return events.find(e => e.name === EVENT_STATUS_CLEARED)
+  }
+
+  return selectLatestClearedEvent
 }
 
 export const createInterruptedStreamsSelector = entity => state => {
@@ -72,4 +88,10 @@ export const createInterruptedStreamsSelector = entity => state => {
 
     return acc
   }, {})
+}
+
+export const createEventsFilterSelector = entity => (state, entityId) => {
+  const store = selectEventsStore(state.events[entity], entityId)
+
+  return store.filter
 }

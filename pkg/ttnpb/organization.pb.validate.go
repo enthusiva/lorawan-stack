@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _organization_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on Organization with the rules
 // defined in the proto definition for this message. If any rules are
@@ -52,7 +49,14 @@ func (m *Organization) ValidateFields(paths ...string) error {
 		switch name {
 		case "ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetIds() == nil {
+				return OrganizationValidationError{
+					field:  "ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return OrganizationValidationError{
 						field:  "ids",
@@ -64,7 +68,7 @@ func (m *Organization) ValidateFields(paths ...string) error {
 
 		case "created_at":
 
-			if v, ok := interface{}(&m.CreatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetCreatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return OrganizationValidationError{
 						field:  "created_at",
@@ -76,7 +80,7 @@ func (m *Organization) ValidateFields(paths ...string) error {
 
 		case "updated_at":
 
-			if v, ok := interface{}(&m.UpdatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetUpdatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return OrganizationValidationError{
 						field:  "updated_at",
@@ -173,6 +177,30 @@ func (m *Organization) ValidateFields(paths ...string) error {
 					}
 				}
 
+			}
+
+		case "administrative_contact":
+
+			if v, ok := interface{}(m.GetAdministrativeContact()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return OrganizationValidationError{
+						field:  "administrative_contact",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "technical_contact":
+
+			if v, ok := interface{}(m.GetTechnicalContact()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return OrganizationValidationError{
+						field:  "technical_contact",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
 			}
 
 		default:
@@ -354,7 +382,14 @@ func (m *GetOrganizationRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return GetOrganizationRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetOrganizationRequestValidationError{
 						field:  "organization_ids",
@@ -366,7 +401,7 @@ func (m *GetOrganizationRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetOrganizationRequestValidationError{
 						field:  "field_mask",
@@ -471,7 +506,7 @@ func (m *ListOrganizationsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListOrganizationsRequestValidationError{
 						field:  "field_mask",
@@ -597,7 +632,14 @@ func (m *CreateOrganizationRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "organization":
 
-			if v, ok := interface{}(&m.Organization).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganization() == nil {
+				return CreateOrganizationRequestValidationError{
+					field:  "organization",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganization()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateOrganizationRequestValidationError{
 						field:  "organization",
@@ -609,7 +651,14 @@ func (m *CreateOrganizationRequest) ValidateFields(paths ...string) error {
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.Collaborator).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return CreateOrganizationRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateOrganizationRequestValidationError{
 						field:  "collaborator",
@@ -703,7 +752,14 @@ func (m *UpdateOrganizationRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "organization":
 
-			if v, ok := interface{}(&m.Organization).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganization() == nil {
+				return UpdateOrganizationRequestValidationError{
+					field:  "organization",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganization()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateOrganizationRequestValidationError{
 						field:  "organization",
@@ -715,7 +771,7 @@ func (m *UpdateOrganizationRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateOrganizationRequestValidationError{
 						field:  "field_mask",
@@ -809,13 +865,29 @@ func (m *ListOrganizationAPIKeysRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return ListOrganizationAPIKeysRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListOrganizationAPIKeysRequestValidationError{
 						field:  "organization_ids",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
+				}
+			}
+
+		case "order":
+
+			if _, ok := _ListOrganizationAPIKeysRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return ListOrganizationAPIKeysRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ api_key_id -api_key_id name -name created_at -created_at expires_at -expires_at]",
 				}
 			}
 
@@ -897,6 +969,18 @@ var _ interface {
 	ErrorName() string
 } = ListOrganizationAPIKeysRequestValidationError{}
 
+var _ListOrganizationAPIKeysRequest_Order_InLookup = map[string]struct{}{
+	"":            {},
+	"api_key_id":  {},
+	"-api_key_id": {},
+	"name":        {},
+	"-name":       {},
+	"created_at":  {},
+	"-created_at": {},
+	"expires_at":  {},
+	"-expires_at": {},
+}
+
 // ValidateFields checks the field values on GetOrganizationAPIKeyRequest with
 // the rules defined in the proto definition for this message. If any rules
 // are violated, an error is returned.
@@ -914,7 +998,14 @@ func (m *GetOrganizationAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return GetOrganizationAPIKeyRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetOrganizationAPIKeyRequestValidationError{
 						field:  "organization_ids",
@@ -925,7 +1016,7 @@ func (m *GetOrganizationAPIKeyRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "key_id":
-			// no validation rules for KeyID
+			// no validation rules for KeyId
 		default:
 			return GetOrganizationAPIKeyRequestValidationError{
 				field:  name,
@@ -1010,7 +1101,14 @@ func (m *CreateOrganizationAPIKeyRequest) ValidateFields(paths ...string) error 
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return CreateOrganizationAPIKeyRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateOrganizationAPIKeyRequestValidationError{
 						field:  "organization_ids",
@@ -1056,6 +1154,29 @@ func (m *CreateOrganizationAPIKeyRequest) ValidateFields(paths ...string) error 
 					return CreateOrganizationAPIKeyRequestValidationError{
 						field:  fmt.Sprintf("rights[%v]", idx),
 						reason: "value must be one of the defined enum values",
+					}
+				}
+
+			}
+
+		case "expires_at":
+
+			if t := m.GetExpiresAt(); t != nil {
+				ts, err := t.AsTime(), t.CheckValid()
+				if err != nil {
+					return CreateOrganizationAPIKeyRequestValidationError{
+						field:  "expires_at",
+						reason: "value is not a valid timestamp",
+						cause:  err,
+					}
+				}
+
+				now := time.Now()
+
+				if ts.Sub(now) <= 0 {
+					return CreateOrganizationAPIKeyRequestValidationError{
+						field:  "expires_at",
+						reason: "value must be greater than now",
 					}
 				}
 
@@ -1145,7 +1266,14 @@ func (m *UpdateOrganizationAPIKeyRequest) ValidateFields(paths ...string) error 
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return UpdateOrganizationAPIKeyRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateOrganizationAPIKeyRequestValidationError{
 						field:  "organization_ids",
@@ -1157,10 +1285,29 @@ func (m *UpdateOrganizationAPIKeyRequest) ValidateFields(paths ...string) error 
 
 		case "api_key":
 
-			if v, ok := interface{}(&m.APIKey).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApiKey() == nil {
+				return UpdateOrganizationAPIKeyRequestValidationError{
+					field:  "api_key",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApiKey()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateOrganizationAPIKeyRequestValidationError{
 						field:  "api_key",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "field_mask":
+
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return UpdateOrganizationAPIKeyRequestValidationError{
+						field:  "field_mask",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
@@ -1234,6 +1381,109 @@ var _ interface {
 	ErrorName() string
 } = UpdateOrganizationAPIKeyRequestValidationError{}
 
+// ValidateFields checks the field values on DeleteOrganizationAPIKeyRequest
+// with the rules defined in the proto definition for this message. If any
+// rules are violated, an error is returned.
+func (m *DeleteOrganizationAPIKeyRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DeleteOrganizationAPIKeyRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "organization_ids":
+
+			if m.GetOrganizationIds() == nil {
+				return DeleteOrganizationAPIKeyRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteOrganizationAPIKeyRequestValidationError{
+						field:  "organization_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "key_id":
+			// no validation rules for KeyId
+		default:
+			return DeleteOrganizationAPIKeyRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteOrganizationAPIKeyRequestValidationError is the validation error
+// returned by DeleteOrganizationAPIKeyRequest.ValidateFields if the
+// designated constraints aren't met.
+type DeleteOrganizationAPIKeyRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteOrganizationAPIKeyRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteOrganizationAPIKeyRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteOrganizationAPIKeyRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteOrganizationAPIKeyRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteOrganizationAPIKeyRequestValidationError) ErrorName() string {
+	return "DeleteOrganizationAPIKeyRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DeleteOrganizationAPIKeyRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteOrganizationAPIKeyRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteOrganizationAPIKeyRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteOrganizationAPIKeyRequestValidationError{}
+
 // ValidateFields checks the field values on
 // ListOrganizationCollaboratorsRequest with the rules defined in the proto
 // definition for this message. If any rules are violated, an error is returned.
@@ -1251,7 +1501,14 @@ func (m *ListOrganizationCollaboratorsRequest) ValidateFields(paths ...string) e
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return ListOrganizationCollaboratorsRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListOrganizationCollaboratorsRequestValidationError{
 						field:  "organization_ids",
@@ -1272,6 +1529,15 @@ func (m *ListOrganizationCollaboratorsRequest) ValidateFields(paths ...string) e
 
 		case "page":
 			// no validation rules for Page
+		case "order":
+
+			if _, ok := _ListOrganizationCollaboratorsRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return ListOrganizationCollaboratorsRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ id -id -rights rights]",
+				}
+			}
+
 		default:
 			return ListOrganizationCollaboratorsRequestValidationError{
 				field:  name,
@@ -1339,6 +1605,14 @@ var _ interface {
 	ErrorName() string
 } = ListOrganizationCollaboratorsRequestValidationError{}
 
+var _ListOrganizationCollaboratorsRequest_Order_InLookup = map[string]struct{}{
+	"":        {},
+	"id":      {},
+	"-id":     {},
+	"-rights": {},
+	"rights":  {},
+}
+
 // ValidateFields checks the field values on GetOrganizationCollaboratorRequest
 // with the rules defined in the proto definition for this message. If any
 // rules are violated, an error is returned.
@@ -1356,7 +1630,14 @@ func (m *GetOrganizationCollaboratorRequest) ValidateFields(paths ...string) err
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return GetOrganizationCollaboratorRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetOrganizationCollaboratorRequestValidationError{
 						field:  "organization_ids",
@@ -1368,7 +1649,14 @@ func (m *GetOrganizationCollaboratorRequest) ValidateFields(paths ...string) err
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.OrganizationOrUserIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return GetOrganizationCollaboratorRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetOrganizationCollaboratorRequestValidationError{
 						field:  "collaborator",
@@ -1462,7 +1750,14 @@ func (m *SetOrganizationCollaboratorRequest) ValidateFields(paths ...string) err
 		switch name {
 		case "organization_ids":
 
-			if v, ok := interface{}(&m.OrganizationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetOrganizationIds() == nil {
+				return SetOrganizationCollaboratorRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SetOrganizationCollaboratorRequestValidationError{
 						field:  "organization_ids",
@@ -1474,7 +1769,14 @@ func (m *SetOrganizationCollaboratorRequest) ValidateFields(paths ...string) err
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.Collaborator).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return SetOrganizationCollaboratorRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SetOrganizationCollaboratorRequestValidationError{
 						field:  "collaborator",
@@ -1550,3 +1852,123 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = SetOrganizationCollaboratorRequestValidationError{}
+
+// ValidateFields checks the field values on
+// DeleteOrganizationCollaboratorRequest with the rules defined in the proto
+// definition for this message. If any rules are violated, an error is returned.
+func (m *DeleteOrganizationCollaboratorRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DeleteOrganizationCollaboratorRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "organization_ids":
+
+			if m.GetOrganizationIds() == nil {
+				return DeleteOrganizationCollaboratorRequestValidationError{
+					field:  "organization_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteOrganizationCollaboratorRequestValidationError{
+						field:  "organization_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "collaborator_ids":
+
+			if m.GetCollaboratorIds() == nil {
+				return DeleteOrganizationCollaboratorRequestValidationError{
+					field:  "collaborator_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaboratorIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteOrganizationCollaboratorRequestValidationError{
+						field:  "collaborator_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return DeleteOrganizationCollaboratorRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteOrganizationCollaboratorRequestValidationError is the validation error
+// returned by DeleteOrganizationCollaboratorRequest.ValidateFields if the
+// designated constraints aren't met.
+type DeleteOrganizationCollaboratorRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteOrganizationCollaboratorRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteOrganizationCollaboratorRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteOrganizationCollaboratorRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteOrganizationCollaboratorRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteOrganizationCollaboratorRequestValidationError) ErrorName() string {
+	return "DeleteOrganizationCollaboratorRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DeleteOrganizationCollaboratorRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteOrganizationCollaboratorRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteOrganizationCollaboratorRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteOrganizationCollaboratorRequestValidationError{}

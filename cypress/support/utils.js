@@ -91,6 +91,31 @@ const disableGatewayServer = config => {
   })
 }
 
+/**
+ * Generates a Join Server Only configuration object.
+ *
+ * @param {object} config - The stack configuration object.
+ */
+const generateJoinServerOnlyConfig = config => {
+  Cypress._.merge(config, {
+    APP_CONFIG: {
+      stack_config: {
+        gs: { enabled: false, base_url: '' },
+        ns: { enabled: false, base_url: '' },
+        as: { enabled: false, base_url: '' },
+      },
+    },
+  })
+  Cypress.config({
+    asBaseUrl: '',
+    asEnabled: false,
+    gsBaseUrl: '',
+    gsEnabled: false,
+    nsBaseUrl: '',
+    nsEnabled: false,
+  })
+}
+
 /** General utitlies. */
 
 /**
@@ -101,6 +126,44 @@ const disableGatewayServer = config => {
  */
 const generateHexValue = length => crypto.randomBytes(Math.floor(length / 2)).toString('hex')
 
+const generateCollaborator = (entity, type) => {
+  const collabUserId = 'test-collab-user'
+  const organizationId = 'test-collab-org'
+
+  const applicationRights = ['RIGHT_APPLICATION_ALL']
+  const gatewayRights = ['RIGHT_GATEWAY_ALL']
+  const organizationRights = [
+    'RIGHT_APPLICATION_ALL',
+    'RIGHT_CLIENT_ALL',
+    'RIGHT_GATEWAY_ALL',
+    'RIGHT_ORGANIZATION_ALL',
+  ]
+
+  const userIds = {
+    user_ids: {
+      user_id: collabUserId,
+    },
+  }
+
+  const orgIds = {
+    organization_ids: {
+      organization_id: organizationId,
+    },
+  }
+
+  return {
+    collaborator: {
+      ids: type === 'user' ? userIds : orgIds,
+      rights:
+        entity === 'applications'
+          ? applicationRights
+          : entity === 'gateways'
+          ? gatewayRights
+          : organizationRights,
+    },
+  }
+}
+
 export {
   disableIdentityServer,
   disableNetworkServer,
@@ -108,4 +171,6 @@ export {
   disableJoinServer,
   disableGatewayServer,
   generateHexValue,
+  generateJoinServerOnlyConfig,
+  generateCollaborator,
 }

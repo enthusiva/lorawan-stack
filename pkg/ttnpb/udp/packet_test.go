@@ -16,10 +16,9 @@ package udp
 
 import (
 	"bytes"
-	"math"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
@@ -80,35 +79,4 @@ func TestFailedPackets(t *testing.T) {
 		a.So(err, should.BeNil)
 		a.So(p.Data, should.NotBeNil)
 	}
-}
-
-func TestPacketType(t *testing.T) {
-	a := assertions.New(t)
-
-	eui := new(types.EUI64)
-	data := new(Data)
-
-	pTypes := []PacketType{PushAck, PushData, PullData, PullResp, PullAck, TxAck}
-	for _, pType := range pTypes {
-		a.So(pType.String(), should.NotEqual, "?")
-
-		pType.HasGatewayEUI()
-		pType.HasData()
-
-		p := Packet{
-			ProtocolVersion: Version1,
-			Token:           [2]byte{},
-			PacketType:      pType,
-			GatewayEUI:      eui,
-			Data:            data,
-		}
-		switch pType {
-		case PushData, PullData:
-			_, err := p.BuildAck()
-			a.So(err, should.BeNil)
-		}
-	}
-
-	inexistantPacketType := PacketType(math.MaxUint8)
-	a.So(inexistantPacketType.String(), should.Equal, "?")
 }

@@ -23,6 +23,7 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -77,9 +78,9 @@ func (lbt *LBT) ToConcentratorConfig() *ttnpb.ConcentratorConfig_LBTConfiguratio
 		return nil
 	}
 	return &ttnpb.ConcentratorConfig_LBTConfiguration{
-		RSSIOffset: lbt.RSSIOffset,
-		RSSITarget: lbt.RSSITarget,
-		ScanTime:   lbt.ScanTime,
+		RssiOffset: lbt.RSSIOffset,
+		RssiTarget: lbt.RSSITarget,
+		ScanTime:   durationpb.New(lbt.ScanTime),
 	}
 }
 
@@ -208,7 +209,7 @@ func (lsc *LoRaStandardChannel) ToConcentratorConfig(phy band.Band) (*ttnpb.Conc
 	if !ok {
 		return nil, errInvalidDataRateIndex.New()
 	}
-	lora := dr.Rate.GetLoRa()
+	lora := dr.Rate.GetLora()
 	return &ttnpb.ConcentratorConfig_LoRaStandardChannel{
 		Frequency:       lsc.Frequency,
 		Radio:           uint32(lsc.Radio),
@@ -306,7 +307,7 @@ func (r Radio) ToConcentratorConfig() *ttnpb.GatewayRadio {
 		Enable:     r.Enable,
 		Frequency:  r.Frequency,
 		ChipType:   r.ChipType,
-		RSSIOffset: r.RSSIOffset,
+		RssiOffset: r.RSSIOffset,
 	}
 	if tx := r.TxConfiguration; tx != nil {
 		ccr.TxConfiguration = &ttnpb.GatewayRadio_TxConfiguration{
@@ -348,71 +349,70 @@ type FrequencyPlan struct {
 }
 
 // Extend returns the same frequency plan, with values overridden by the passed frequency plan.
-func (fp FrequencyPlan) Extend(ext FrequencyPlan) FrequencyPlan {
-	if ext.BandID != "" {
-		fp.BandID = ext.BandID
+func (fp FrequencyPlan) Extend(extension FrequencyPlan) FrequencyPlan {
+	extended := fp
+	if extension.BandID != "" {
+		extended.BandID = extension.BandID
 	}
-	if channels := ext.UplinkChannels; len(channels) > 0 {
-		fp.UplinkChannels = make([]Channel, 0, len(channels))
+	if channels := extension.UplinkChannels; len(channels) > 0 {
+		extended.UplinkChannels = make([]Channel, 0, len(channels))
 		for _, ch := range channels {
-			fp.UplinkChannels = append(fp.UplinkChannels, *ch.Clone())
+			extended.UplinkChannels = append(extended.UplinkChannels, *ch.Clone())
 		}
 	}
-	if channels := ext.DownlinkChannels; len(channels) > 0 {
-		fp.DownlinkChannels = make([]Channel, 0, len(channels))
+	if channels := extension.DownlinkChannels; len(channels) > 0 {
+		extended.DownlinkChannels = make([]Channel, 0, len(channels))
 		for _, ch := range channels {
-			fp.DownlinkChannels = append(fp.DownlinkChannels, *ch.Clone())
+			extended.DownlinkChannels = append(extended.DownlinkChannels, *ch.Clone())
 		}
 	}
-	if ext.LoRaStandardChannel != nil {
-		fp.LoRaStandardChannel = ext.LoRaStandardChannel.Clone()
+	if extension.LoRaStandardChannel != nil {
+		extended.LoRaStandardChannel = extension.LoRaStandardChannel.Clone()
 	}
-	if ext.FSKChannel != nil {
-		fp.FSKChannel = ext.FSKChannel.Clone()
+	if extension.FSKChannel != nil {
+		extended.FSKChannel = extension.FSKChannel.Clone()
 	}
-	if ext.TimeOffAir != (TimeOffAir{}) {
-		fp.TimeOffAir = *ext.TimeOffAir.Clone()
+	if extension.TimeOffAir != (TimeOffAir{}) {
+		extended.TimeOffAir = *extension.TimeOffAir.Clone()
 	}
-	if ext.DwellTime != (DwellTime{}) {
-		fp.DwellTime = *ext.DwellTime.Clone()
+	if extension.DwellTime != (DwellTime{}) {
+		extended.DwellTime = *extension.DwellTime.Clone()
 	}
-	if ext.LBT != nil {
-		fp.LBT = ext.LBT.Clone()
+	if extension.LBT != nil {
+		extended.LBT = extension.LBT.Clone()
 	}
-	if radios := ext.Radios; len(radios) > 0 {
-		fp.Radios = make([]Radio, 0, len(radios))
+	if radios := extension.Radios; len(radios) > 0 {
+		extended.Radios = make([]Radio, 0, len(radios))
 		for _, r := range radios {
-			fp.Radios = append(fp.Radios, *r.Clone())
+			extended.Radios = append(extended.Radios, *r.Clone())
 		}
-		fp.ClockSource = ext.ClockSource
+		extended.ClockSource = extension.ClockSource
 	}
-	if ext.PingSlot != nil {
-		fp.PingSlot = ext.PingSlot.Clone()
+	if extension.PingSlot != nil {
+		extended.PingSlot = extension.PingSlot.Clone()
 	}
-	if ext.DefaultPingSlotDataRate != nil {
-		var i uint8
-		i = *ext.DefaultPingSlotDataRate
-		fp.DefaultPingSlotDataRate = &i
+	if extension.DefaultPingSlotDataRate != nil {
+		i := *extension.DefaultPingSlotDataRate
+		extended.DefaultPingSlotDataRate = &i
 	}
-	if ext.Rx2Channel != nil {
-		fp.Rx2Channel = ext.Rx2Channel.Clone()
+	if extension.Rx2Channel != nil {
+		extended.Rx2Channel = extension.Rx2Channel.Clone()
 	}
-	if ext.DefaultRx2DataRate != nil {
-		var i uint8
-		i = *ext.DefaultRx2DataRate
-		fp.DefaultRx2DataRate = &i
+	if extension.DefaultRx2DataRate != nil {
+		i := *extension.DefaultRx2DataRate
+		extended.DefaultRx2DataRate = &i
 	}
-	if subBands := ext.SubBands; len(subBands) > 0 {
-		fp.SubBands = make([]SubBandParameters, 0, len(subBands))
+	if subBands := extension.SubBands; len(subBands) > 0 {
+		extended.SubBands = make([]SubBandParameters, 0, len(subBands))
 		for _, sb := range subBands {
-			fp.SubBands = append(fp.SubBands, *sb.Clone())
+			extended.SubBands = append(extended.SubBands, *sb.Clone())
 		}
 	}
-	if ext.MaxEIRP != nil {
-		val := *ext.MaxEIRP
-		fp.MaxEIRP = &val
+	if extension.MaxEIRP != nil {
+		val := *extension.MaxEIRP
+		extended.MaxEIRP = &val
 	}
-	return fp
+	return extended
 }
 
 var (
@@ -422,7 +422,7 @@ var (
 
 // Validate returns an error if the frequency plan is invalid.
 func (fp FrequencyPlan) Validate() error {
-	_, err := band.GetByID(fp.BandID)
+	_, err := band.GetLatest(fp.BandID)
 	if err != nil {
 		return err
 	}
@@ -480,7 +480,7 @@ func (fp *FrequencyPlan) RespectsDwellTime(isDownlink bool, frequency uint64, du
 
 // ToConcentratorConfig returns the frequency plan in the protobuf format.
 func (fp *FrequencyPlan) ToConcentratorConfig() (*ttnpb.ConcentratorConfig, error) {
-	phy, err := band.GetByID(fp.BandID)
+	phy, err := band.GetLatest(fp.BandID)
 	if err != nil {
 		return nil, err
 	}
@@ -492,9 +492,9 @@ func (fp *FrequencyPlan) ToConcentratorConfig() (*ttnpb.ConcentratorConfig, erro
 	if err != nil {
 		return nil, err
 	}
-	cc.LoRaStandardChannel = lora
-	cc.FSKChannel = fp.FSKChannel.ToConcentratorConfig()
-	cc.LBT = fp.LBT.ToConcentratorConfig()
+	cc.LoraStandardChannel = lora
+	cc.FskChannel = fp.FSKChannel.ToConcentratorConfig()
+	cc.Lbt = fp.LBT.ToConcentratorConfig()
 	cc.PingSlot = fp.PingSlot.ToConcentratorConfig()
 	for _, radio := range fp.Radios {
 		cc.Radios = append(cc.Radios, radio.ToConcentratorConfig())
@@ -537,7 +537,7 @@ func (d FrequencyPlanDescription) content(f fetch.Interface) ([]byte, error) {
 	return content, nil
 }
 
-var errParseFile = errors.DefineCorruption("parse_file", "could not parse file")
+var errParseFile = errors.DefineCorruption("parse_file", "parse file")
 
 func (d FrequencyPlanDescription) proto(f fetch.Interface) (FrequencyPlan, error) {
 	fp := FrequencyPlan{}
@@ -640,9 +640,9 @@ func (s *Store) descriptions() (frequencyPlanList, error) {
 
 var (
 	errNotConfigured = errors.Define("not_configured", "frequency plans not configured")
-	errRead          = errors.Define("read", "could not read frequency plan `{id}`")
-	errReadBase      = errors.Define("read_base", "could not read the base `{base_id}` of frequency plan `{id}`")
-	errReadList      = errors.Define("read_list", "could not read the list of frequency plans")
+	errRead          = errors.Define("read", "read frequency plan `{id}`")
+	errReadBase      = errors.Define("read_base", "read the base `{base_id}` of frequency plan `{id}`")
+	errReadList      = errors.Define("read_list", "read the list of frequency plans")
 	errNotFound      = errors.DefineNotFound("not_found", "frequency plan `{id}` not found")
 	errInvalid       = errors.DefineCorruption("invalid", "invalid frequency plan")
 )

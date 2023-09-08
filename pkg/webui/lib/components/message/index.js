@@ -12,23 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
-import { FormattedMessage, useIntl } from 'react-intl'
+import React, { useContext } from 'react'
+import { FormattedMessage, IntlContext } from 'react-intl'
 import classnames from 'classnames'
 import reactStringReplace from 'react-string-replace'
+import { isPlainObject } from 'lodash'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
+import { warn } from '@ttn-lw/lib/log'
+import interpolate from '@ttn-lw/lib/interpolate'
 
 import style from './message.styl'
 
 const renderContent = (content, component, props) => {
-  let Component = component
+  const Component = component
+
   if (!Boolean(component)) {
     if (Boolean(props.className)) {
-      Component = 'span'
-    } else {
-      Component = React.Fragment
+      return <span {...props}>{content}</span>
     }
+
+    return <React.Fragment key={props.key}>{content}</React.Fragment>
   }
 
   if (Boolean(Component) || Boolean(props.className)) {
@@ -59,10 +63,20 @@ const Message = ({
     [style.capitalize]: capitalize,
   })
 
-  const { formatMessage } = useIntl()
-
   if (cls) {
     rest.className = cls
+  }
+
+  const intlContext = useContext(IntlContext)
+
+  if (typeof content === 'string' || typeof content === 'number') {
+    return renderContent(content, component, rest)
+  }
+
+  if (!isPlainObject(content)) {
+    // Better to render nothing rather than throwing an error
+    // that potentially causes the whole view to crash.
+    return renderContent(null, component, rest)
   }
 
   let vals = values
@@ -70,9 +84,19 @@ const Message = ({
     vals = content.values
   }
 
-  if (typeof content === 'string' || typeof content === 'number') {
-    return renderContent(content, component, rest)
+  if (!Boolean(intlContext)) {
+    // Displaying the default message is a last resort that should only
+    // be considered when all other options failed. Note also that this
+    // will only do basic value interpolation! It's still better than not
+    // showing anything at all or crashing altogether.
+    warn(
+      'Attempting to render a <Message /> without Intl context. Falling back to default message!',
+      content,
+    )
+    return renderContent(interpolate(content.defaultMessage, vals), component, rest)
   }
+
+  const { formatMessage } = intlContext
 
   if (convertBackticks) {
     const contentWithMarkdown = formatMessage(content, vals)
@@ -101,7 +125,7 @@ Message.propTypes = {
    * The wrapping element component can also be set explicitly (defaults to
    * span). This can be useful to avoid unnecessary wrapping.
    */
-  component: PropTypes.node,
+  component: PropTypes.oneOfType([PropTypes.node, PropTypes.elementType]),
   /**
    * The translatable message, should be an object (with `id` or
    * `defaultMessage` key). Additionally the content can contain a `values` key,
@@ -141,12 +165,11 @@ Message.defaultProps = {
   capitalize: false,
   className: undefined,
   component: undefined,
-  convertBackticks: false,
+  convertBackticks: true,
   firstToLower: false,
   firstToUpper: false,
   lowercase: false,
   uppercase: false,
   values: undefined,
 }
-
 export default Message

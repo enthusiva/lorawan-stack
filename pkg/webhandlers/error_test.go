@@ -15,12 +15,12 @@
 package webhandlers_test
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -42,7 +42,7 @@ func TestErrorHandler(t *testing.T) {
 	res := rec.Result()
 	a.So(res.StatusCode, should.Equal, http.StatusInternalServerError)
 
-	body, _ := ioutil.ReadAll(res.Body)
+	body, _ := io.ReadAll(res.Body)
 	a.So(string(body), should.ContainSubstring, "some_error")
 
 	a.So(getError(), should.EqualErrorOrDefinition, err)

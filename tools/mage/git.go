@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +35,7 @@ func (Git) installHook(name string) (err error) {
 	if mg.Verbose() {
 		fmt.Printf("Installing %s hook\n", name)
 	}
-	return ioutil.WriteFile(
+	return os.WriteFile(
 		filepath.Join(".git", "hooks", name),
 		[]byte(fmt.Sprintf(
 			`STDIN="$(cat /dev/stdin)" ARGS="$@" make git.%s`,
@@ -88,7 +87,7 @@ func (Git) selectStaged() error {
 	return nil
 }
 
-var preCommitChecks []interface{}
+var preCommitChecks []any
 
 func (g Git) preCommit() error {
 	if mg.Verbose() {
@@ -107,6 +106,7 @@ var gitCommitPrefixes = []string{
 	"cli",
 	"console",
 	"data",
+	"dcs",
 	"dev",
 	"dr",
 	"dtc",
@@ -229,6 +229,11 @@ func (g Git) prePush(stdin string, args ...string) error {
 	case *exec.ExitError:
 		switch n := err.ExitCode(); n {
 		case 1:
+			return nil
+		case 128:
+			if mg.Verbose() {
+				fmt.Println("Unable to check presence of TTI marker commit: hash not found")
+			}
 			return nil
 		default:
 			return fmt.Errorf("expected exit code of 1, got %d", n)

@@ -17,7 +17,7 @@
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 require('@babel/register')
 
-const { default: bundleConfig, styleConfig } = require('../webpack.config.babel.js')
+const { default: bundleConfig, styleConfig } = require('../webpack.config.babel')
 
 // List of allowed plugins.
 const allow = [MiniCssExtractPlugin]
@@ -29,9 +29,9 @@ module.exports = async ({ config, mode }) => {
   }
 
   // Filter plugins on allowed type.
-  const filteredPlugins = bundleConfig.plugins.filter(plugin => {
-    return allow.reduce((ok, klass) => ok || plugin instanceof klass, false)
-  })
+  const filteredPlugins = bundleConfig.plugins.filter(plugin =>
+    allow.reduce((ok, klass) => ok || plugin instanceof klass, false),
+  )
 
   // Compose storybook config, making use of stack webpack config.
   const cfg = {

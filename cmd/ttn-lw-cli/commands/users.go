@@ -16,9 +16,8 @@ package commands
 
 import (
 	"os"
-	"reflect"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -31,9 +30,8 @@ import (
 )
 
 var (
-	selectUserFlags     = util.FieldMaskFlags(&ttnpb.User{})
-	setUserFlags        = util.FieldFlags(&ttnpb.User{})
-	profilePictureFlags = &pflag.FlagSet{}
+	selectUserFlags     = util.NormalizedFlagSet()
+	profilePictureFlags = util.NormalizedFlagSet()
 
 	selectAllUserFlags = util.SelectAllFlagSet("user")
 )
@@ -59,7 +57,7 @@ func getUserID(flagSet *pflag.FlagSet, args []string) *ttnpb.UserIdentifiers {
 	if userID == "" {
 		return nil
 	}
-	return &ttnpb.UserIdentifiers{UserID: userID}
+	return &ttnpb.UserIdentifiers{UserId: userID}
 }
 
 func printPasswordRequirements(msg *ttnpb.IsConfiguration_UserRegistration_PasswordRequirements) {
@@ -86,14 +84,6 @@ func printPasswordRequirements(msg *ttnpb.IsConfiguration_UserRegistration_Passw
 
 var errPasswordMismatch = errors.DefineInvalidArgument("password_mismatch", "password did not match")
 
-var searchUsersFlags = func() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-	flagSet.AddFlagSet(searchFlags)
-	// NOTE: These flags need to be named with underscores, not dashes!
-	util.AddField(flagSet, "state", reflect.TypeOf([]ttnpb.State{}), false)
-	return flagSet
-}()
-
 var (
 	usersCommand = &cobra.Command{
 		Use:     "users",
@@ -108,18 +98,20 @@ var (
 			paths := util.SelectFieldMask(cmd.Flags(), selectUserFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.UserRegistry/List"].Allowed)
 
+			req := &ttnpb.ListUsersRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			limit, page, opt, getTotal := withPagination(cmd.Flags())
-			res, err := ttnpb.NewUserRegistryClient(is).List(ctx, &ttnpb.ListUsersRequest{
-				FieldMask: types.FieldMask{Paths: paths},
-				Limit:     limit,
-				Page:      page,
-				Order:     getOrder(cmd.Flags()),
-				Deleted:   getDeleted(cmd.Flags()),
-			}, opt)
+			_, _, opt, getTotal := withPagination(cmd.Flags())
+			res, err := ttnpb.NewUserRegistryClient(is).List(ctx, req, opt)
 			if err != nil {
 				return err
 			}
@@ -136,16 +128,18 @@ var (
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.EntityRegistrySearch/SearchUsers"].Allowed)
 
 			req := &ttnpb.SearchUsersRequest{}
-			if err := util.SetFields(req, searchUsersFlags); err != nil {
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			var (
 				opt      grpc.CallOption
 				getTotal func() uint64
 			)
-			req.Limit, req.Page, opt, getTotal = withPagination(cmd.Flags())
-			req.FieldMask.Paths = paths
-			req.Deleted = getDeleted(cmd.Flags())
+			_, _, opt, getTotal = withPagination(cmd.Flags())
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -167,7 +161,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectUserFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.UserRegistry/Get"].Allowed)
@@ -177,8 +171,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewUserRegistryClient(is).Get(ctx, &ttnpb.GetUserRequest{
-				UserIdentifiers: *usrID,
-				FieldMask:       types.FieldMask{Paths: paths},
+				UserIds:   usrID,
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -195,22 +189,22 @@ var (
 		RunE: asBulk(func(cmd *cobra.Command, args []string) (err error) {
 			usrID := getUserID(cmd.Flags(), args)
 			var user ttnpb.User
-			user.State = ttnpb.STATE_APPROVED // This may not be honored by the server.
+			user.State = ttnpb.State_STATE_APPROVED // This may not be honored by the server.
 			if inputDecoder != nil {
-				_, err := inputDecoder.Decode(&user)
+				err := inputDecoder.Decode(&user)
 				if err != nil {
 					return err
 				}
 			}
-			if err := util.SetFields(&user, setUserFlags); err != nil {
+			_, err = user.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
-			user.Attributes = mergeAttributes(user.Attributes, cmd.Flags())
-			if usrID != nil && usrID.UserID != "" {
-				user.UserID = usrID.UserID
+			if usrID.GetUserId() != "" {
+				user.Ids = &ttnpb.UserIdentifiers{UserId: usrID.GetUserId()}
 			}
-			if user.UserID == "" {
-				return errNoUserID
+			if user.GetIds().GetUserId() == "" {
+				return errNoUserID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -240,7 +234,7 @@ var (
 					return err
 				}
 				if string(pw) != user.Password {
-					return errPasswordMismatch
+					return errPasswordMismatch.New()
 				}
 			}
 
@@ -256,7 +250,7 @@ var (
 			invitationToken, _ := cmd.Flags().GetString("invitation-token")
 
 			res, err := ttnpb.NewUserRegistryClient(is).Create(ctx, &ttnpb.CreateUserRequest{
-				User:            user,
+				User:            &user,
 				InvitationToken: invitationToken,
 			})
 			if err != nil {
@@ -284,9 +278,22 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setUserFlags, attributesFlags(), profilePictureFlags)
+			var user ttnpb.User
+			paths, err := user.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+			user.Ids = usrID
+			if profilePicture, err := cmd.Flags().GetString("profile_picture"); err == nil && profilePicture != "" {
+				user.ProfilePicture, err = readPicture(profilePicture)
+				if err != nil {
+					return err
+				}
+				paths = append(paths, "profile_picture")
+			}
+
 			if len(paths) == 0 {
 				logger.Warn("No fields selected, won't update anything")
 				return nil
@@ -298,27 +305,14 @@ var (
 				logger.Warnf("Alternatively, admins may use \"%s [user-id] --temporary-password [pass]\" to set a temporary password for a user.", cmd.CommandPath())
 				logger.Warn("The user can then use this temporary password when changing their password.")
 			}
-			var user ttnpb.User
-			if err := util.SetFields(&user, setUserFlags); err != nil {
-				return err
-			}
-			user.Attributes = mergeAttributes(user.Attributes, cmd.Flags())
-			user.UserIdentifiers = *usrID
-			if profilePicture, err := cmd.Flags().GetString("profile_picture"); err == nil && profilePicture != "" {
-				user.ProfilePicture, err = readPicture(profilePicture)
-				if err != nil {
-					return err
-				}
-				paths = append(paths, "profile_picture")
-			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
 			res, err := ttnpb.NewUserRegistryClient(is).Update(ctx, &ttnpb.UpdateUserRequest{
-				User:      user,
-				FieldMask: types.FieldMask{Paths: paths},
+				User:      &user,
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -335,7 +329,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 
 			usrID.Email, _ = cmd.Flags().GetString("email")
@@ -345,7 +339,7 @@ var (
 				return err
 			}
 			_, err = ttnpb.NewUserRegistryClient(is).CreateTemporaryPassword(ctx, &ttnpb.CreateTemporaryPasswordRequest{
-				UserIdentifiers: *usrID,
+				UserIds: usrID,
 			})
 
 			return err
@@ -362,7 +356,7 @@ var (
 
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -401,7 +395,7 @@ var (
 			revokeAllAccess, _ := cmd.Flags().GetBool("revoke-all-access")
 
 			res, err := ttnpb.NewUserRegistryClient(is).UpdatePassword(ctx, &ttnpb.UpdateUserPasswordRequest{
-				UserIdentifiers: *usrID,
+				UserIds:         usrID,
 				Old:             old,
 				New:             new,
 				RevokeAllAccess: revokeAllAccess,
@@ -420,7 +414,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -441,7 +435,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -459,9 +453,9 @@ var (
 	usersContactInfoCommand = contactInfoCommands("user", func(cmd *cobra.Command, args []string) (*ttnpb.EntityIdentifiers, error) {
 		usrID := getUserID(cmd.Flags(), args)
 		if usrID == nil {
-			return nil, errNoUserID
+			return nil, errNoUserID.New()
 		}
-		return usrID.EntityIdentifiers(), nil
+		return usrID.GetEntityIdentifiers(), nil
 	})
 
 	usersPurgeCommand = &cobra.Command{
@@ -471,14 +465,14 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 			force, err := cmd.Flags().GetBool("force")
 			if err != nil {
 				return err
 			}
 			if !confirmChoice(userPurgeWarning, force) {
-				return errNoConfirmation
+				return errNoConfirmation.New()
 			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -496,15 +490,12 @@ var (
 
 func init() {
 	profilePictureFlags.String("profile_picture", "", "upload the profile picture from this file")
-
-	usersListCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSelectFlagsForUser(selectUserFlags, "", false)
+	ttnpb.AddSetFlagsForListUsersRequest(usersListCommand.Flags(), "", false)
 	usersListCommand.Flags().AddFlagSet(selectUserFlags)
 	usersListCommand.Flags().AddFlagSet(selectAllUserFlags)
-	usersListCommand.Flags().AddFlagSet(paginationFlags())
-	usersListCommand.Flags().AddFlagSet(orderFlags())
 	usersCommand.AddCommand(usersListCommand)
-	usersSearchCommand.Flags().AddFlagSet(searchUsersFlags)
-	usersSearchCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSetFlagsForSearchUsersRequest(usersSearchCommand.Flags(), "", false)
 	usersSearchCommand.Flags().AddFlagSet(selectUserFlags)
 	usersSearchCommand.Flags().AddFlagSet(selectAllUserFlags)
 	usersCommand.AddCommand(usersSearchCommand)
@@ -512,16 +503,14 @@ func init() {
 	usersGetCommand.Flags().AddFlagSet(selectUserFlags)
 	usersGetCommand.Flags().AddFlagSet(selectAllUserFlags)
 	usersCommand.AddCommand(usersGetCommand)
-	usersCreateCommand.Flags().AddFlagSet(userIDFlags())
-	usersCreateCommand.Flags().AddFlagSet(setUserFlags)
-	usersCreateCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForUser(usersCreateCommand.Flags(), "", false)
+	flagsplugin.AddAlias(usersCreateCommand.Flags(), "ids.user-id", "user-id", flagsplugin.WithHidden(false))
 	usersCreateCommand.Flags().AddFlagSet(profilePictureFlags)
-	usersCreateCommand.Flags().Lookup("state").DefValue = ttnpb.STATE_APPROVED.String()
+	usersCreateCommand.Flags().Lookup("state").DefValue = ttnpb.State_STATE_APPROVED.String()
 	usersCreateCommand.Flags().String("invitation-token", "", "")
 	usersCommand.AddCommand(usersCreateCommand)
-	usersSetCommand.Flags().AddFlagSet(userIDFlags())
-	usersSetCommand.Flags().AddFlagSet(setUserFlags)
-	usersSetCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForUser(usersSetCommand.Flags(), "", false)
+	flagsplugin.AddAlias(usersSetCommand.Flags(), "ids.user-id", "user-id", flagsplugin.WithHidden(false))
 	usersSetCommand.Flags().AddFlagSet(profilePictureFlags)
 	usersCommand.AddCommand(usersSetCommand)
 	usersForgotPasswordCommand.Flags().AddFlagSet(userIDFlags())

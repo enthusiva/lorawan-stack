@@ -18,13 +18,24 @@ import 'focus-visible/dist/focus-visible'
 import { setConfiguration } from 'react-grid-system'
 import { defineMessages } from 'react-intl'
 
+import SourceSansRegular from '@assets/fonts/source-sans-pro-v13-latin_latin-ext-regular.woff2'
+import SourceSans600 from '@assets/fonts/source-sans-pro-v13-latin_latin-ext-600.woff2'
+import SourceSans700 from '@assets/fonts/source-sans-pro-v13-latin_latin-ext-700.woff2'
+import IBMPlexMono from '@assets/fonts/ibm-plex-mono-regular.woff2'
+import MaterialIcons from '@assets/fonts/materialicons.woff2'
+import TextSecurityDisc from '@assets/fonts/text-security-disc.woff2'
 import LAYOUT from '@ttn-lw/constants/layout'
 
 import Spinner from '@ttn-lw/components/spinner'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
+import { initialize } from '@ttn-lw/lib/store/actions/init'
+import {
+  selectInitError,
+  selectInitFetching,
+  selectIsInitialized,
+} from '@ttn-lw/lib/store/selectors/init'
 
-import ErrorMessage from './error-message'
 import Message from './message'
 
 import '@ttn-lw/styles/main.styl'
@@ -32,6 +43,16 @@ import '@ttn-lw/styles/main.styl'
 const m = defineMessages({
   initializing: 'Initializing…',
 })
+
+// Keep this list updated with fonts used in `/styles/fonts.styl`.
+const fontsToPreload = [
+  SourceSansRegular,
+  SourceSans600,
+  SourceSans700,
+  IBMPlexMono,
+  MaterialIcons,
+  TextSecurityDisc,
+]
 
 setConfiguration({
   breakpoints: [
@@ -51,11 +72,11 @@ setConfiguration({
 
 @connect(
   state => ({
-    initialized: state.init.initialized,
-    error: state.init.error,
+    initialized: !selectInitFetching(state) && selectIsInitialized(state),
+    error: selectInitError(state),
   }),
   dispatch => ({
-    initialize: () => dispatch({ type: 'INITIALIZE_REQUEST' }),
+    initialize: () => dispatch(initialize()),
   }),
 )
 export default class Init extends React.PureComponent {
@@ -75,20 +96,32 @@ export default class Init extends React.PureComponent {
     const { initialize } = this.props
 
     initialize()
+
+    // Preload font files to avoid flashes of unstyled text.
+    for (const fontUrl of fontsToPreload) {
+      const linkElem = document.createElement('link')
+      linkElem.setAttribute('rel', 'preload')
+      linkElem.setAttribute('href', fontUrl)
+      linkElem.setAttribute('as', 'font')
+      linkElem.setAttribute('crossorigin', 'anonymous')
+      document.getElementsByTagName('head')[0].appendChild(linkElem)
+    }
   }
 
   render() {
     const { initialized, error } = this.props
 
     if (error) {
-      return <ErrorMessage content={error} />
+      throw error
     }
 
     if (!initialized) {
       return (
-        <Spinner center>
-          <Message content={m.initializing} />
-        </Spinner>
+        <div style={{ height: '100vh' }}>
+          <Spinner center>
+            <Message content={m.initializing} />
+          </Spinner>
+        </div>
       )
     }
 

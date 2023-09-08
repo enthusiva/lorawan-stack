@@ -17,14 +17,9 @@ import React from 'react'
 import Message from '@ttn-lw/lib/components/message'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
-import {
-  hasCauses,
-  getBackendErrorRootCause,
-  toMessageProps,
-  isBackend,
-} from '@ttn-lw/lib/errors/utils'
+import { toMessageProps, isBackend } from '@ttn-lw/lib/errors/utils'
 
-const ErrorMessage = ({ content, withRootCause, className, ...rest }) => {
+const ErrorMessage = ({ content, withRootCause, useTopmost, className, ...rest }) => {
   const baseProps = {
     className,
     firstToUpper: true,
@@ -32,23 +27,20 @@ const ErrorMessage = ({ content, withRootCause, className, ...rest }) => {
     ...rest,
   }
 
-  if (withRootCause && hasCauses(content)) {
-    const rootProps = { ...baseProps, ...toMessageProps(content) }
-    const causeProps = { ...baseProps, ...toMessageProps(getBackendErrorRootCause(content)) }
+  const messageProps = toMessageProps(content, true)
 
+  if (withRootCause && messageProps.length > 1) {
     return (
       <span className={baseProps.className}>
-        <Message {...rootProps} />: <Message {...causeProps} />
+        <Message {...baseProps} {...messageProps[1]} />:{' '}
+        <Message {...baseProps} {...messageProps[0]} />
       </span>
     )
   }
 
-  const props = {
-    ...toMessageProps(content),
-    ...baseProps,
-  }
+  const index = useTopmost ? messageProps.length - 1 : 0
 
-  return <Message {...props} />
+  return <Message {...baseProps} {...messageProps[index]} />
 }
 
 ErrorMessage.propTypes = {
@@ -59,11 +51,13 @@ ErrorMessage.propTypes = {
    * be a usual message type, in case of frontend-defined errors.
    */
   content: PropTypes.error.isRequired,
+  useTopmost: PropTypes.bool,
   withRootCause: PropTypes.bool,
 }
 
 ErrorMessage.defaultProps = {
   className: undefined,
+  useTopmost: false,
   withRootCause: false,
 }
 

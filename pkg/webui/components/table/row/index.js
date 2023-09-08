@@ -12,65 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useCallback } from 'react'
 import classnames from 'classnames'
-import bind from 'autobind-decorator'
+
+import Link from '@ttn-lw/components/link'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 
 import style from './row.styl'
 
-class Row extends React.Component {
-  @bind
-  onClick() {
-    const { id, onClick } = this.props
+const Row = ({
+  id,
+  onClick,
+  onMouseDown,
+  body,
+  clickable,
+  className,
+  children,
+  head,
+  footer,
+  linkTo,
+}) => {
+  const handleClick = useCallback(
+    evt => {
+      onClick(id, evt)
+    },
+    [id, onClick],
+  )
 
-    onClick(id)
-  }
+  const onKeyDown = useCallback(
+    evt => {
+      if (evt.key === 'Enter') {
+        onClick(id, evt)
+      }
+    },
+    [id, onClick],
+  )
 
-  @bind
-  onKeyDown(evt) {
-    const { id, onClick } = this.props
-    if (evt.key === 'Enter') {
-      onClick(id)
-    }
-  }
+  const handleMouseDown = useCallback(
+    evt => {
+      onMouseDown(id, evt)
+    },
+    [id, onMouseDown],
+  )
 
-  get clickListener() {
-    const { body, clickable } = this.props
+  const clickListener = body && clickable ? handleClick : undefined
 
-    if (body && clickable) {
-      return this.onClick
-    }
-  }
+  const tabIndex = body && clickable ? 0 : -1
 
-  get tabIndex() {
-    const { body, clickable } = this.props
+  const rowClassNames = classnames(className, style.row, {
+    [style.clickable]: body && clickable,
+    [style.rowHead]: head,
+    [style.rowBody]: body,
+    [style.rowFooter]: footer,
+  })
 
-    return body && clickable ? 0 : -1
-  }
+  const Row = linkTo && clickable ? Link : 'div'
 
-  render() {
-    const { className, children, clickable, head, body, footer } = this.props
-
-    const rowClassNames = classnames(className, {
-      [style.clickable]: body && clickable,
-      [style.rowHead]: head,
-      [style.rowBody]: body,
-      [style.rowFooter]: footer,
-    })
-
-    return (
-      <tr
-        className={rowClassNames}
-        onKeyDown={this.onKeyDown}
-        onClick={this.clickListener}
-        tabIndex={this.tabIndex}
-      >
-        {children}
-      </tr>
-    )
-  }
+  return (
+    <Row
+      className={rowClassNames}
+      onKeyDown={onKeyDown}
+      onClick={clickListener}
+      onMouseDown={handleMouseDown}
+      tabIndex={tabIndex.toString()}
+      to={linkTo}
+      role="row"
+    >
+      {children}
+    </Row>
+  )
 }
 
 Row.propTypes = {
@@ -86,11 +97,14 @@ Row.propTypes = {
   head: PropTypes.bool,
   /** The identifier of the row. */
   id: PropTypes.number,
+  /** The href to be passed as `to` prop to the `<Link />` component that wraps the row. */
+  linkTo: PropTypes.string,
   /**
    * Function to be called when the row gets clicked. The identifier of the row
    * is passed as an argument.
    */
   onClick: PropTypes.func,
+  onMouseDown: PropTypes.func,
 }
 
 Row.defaultProps = {
@@ -98,10 +112,12 @@ Row.defaultProps = {
   className: undefined,
   clickable: true,
   head: false,
-  body: true,
+  body: false,
   footer: false,
   onClick: () => null,
+  onMouseDown: () => null,
   id: undefined,
+  linkTo: undefined,
 }
 
 export default Row

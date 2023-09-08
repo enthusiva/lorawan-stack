@@ -17,7 +17,6 @@ package test
 import (
 	"os"
 	"sort"
-	"strconv"
 	"testing"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
@@ -27,7 +26,7 @@ var colorTerm = os.Getenv("COLORTERM") != "0"
 
 type kv struct {
 	k string
-	v interface{}
+	v any
 }
 
 type fields []kv
@@ -37,7 +36,7 @@ func (f fields) Swap(i, j int)      { f[i], f[j] = f[j], f[i] }
 func (f fields) Less(i, j int) bool { return f[i].k < f[j].k }
 
 func (f fields) unique() fields {
-	uniqueMap := make(map[string]interface{}, len(f))
+	uniqueMap := make(map[string]any, len(f))
 	for _, kv := range f {
 		uniqueMap[kv.k] = kv.v
 	}
@@ -57,14 +56,17 @@ func (f fields) sorted() fields {
 
 // GetLogger returns a logger for tests.
 func GetLogger(t testing.TB) log.Stack {
-	colorTerm, _ := strconv.ParseBool(os.Getenv("COLORTERM"))
 	level := log.ErrorLevel
 	if testing.Verbose() {
 		level = log.DebugLevel
 	}
+	logHandler, err := log.NewZap("console")
+	if err != nil {
+		panic(err)
+	}
 	logger := log.NewLogger(
+		logHandler,
 		log.WithLevel(level),
-		log.WithHandler(log.NewCLI(os.Stdout, log.UseColor(colorTerm))),
 	)
 	return &testLogger{
 		stack:     logger,

@@ -27,11 +27,11 @@ const m = defineMessages({
 
 const GenerateInput = props => {
   const { onChange } = props
-  const { generateTitle, mayGenerateValue, onGenerateValue, action, ...rest } = props
+  const { mayGenerateValue, onGenerateValue, action, ...rest } = props
 
-  const handleGenerateValue = React.useCallback(() => {
+  const handleGenerateValue = React.useCallback(async () => {
     if (mayGenerateValue) {
-      const generatedValue = onGenerateValue()
+      const generatedValue = await onGenerateValue()
 
       onChange(generatedValue, true)
     }
@@ -41,13 +41,12 @@ const GenerateInput = props => {
     () => ({
       icon: 'autorenew',
       type: 'button',
-      title: generateTitle,
       disabled: !mayGenerateValue,
       onClick: handleGenerateValue,
-      raw: true,
+      message: m.generate,
       ...action,
     }),
-    [action, generateTitle, handleGenerateValue, mayGenerateValue],
+    [action, handleGenerateValue, mayGenerateValue],
   )
 
   return <Input {...rest} action={generateAction} />
@@ -57,7 +56,6 @@ GenerateInput.propTypes = {
   action: PropTypes.shape({
     ...Button.propTypes,
   }),
-  generateTitle: PropTypes.message,
   mayGenerateValue: PropTypes.bool,
   onChange: PropTypes.func.isRequired,
   onGenerateValue: PropTypes.func.isRequired,
@@ -65,7 +63,6 @@ GenerateInput.propTypes = {
 
 GenerateInput.defaultProps = {
   mayGenerateValue: true,
-  generateTitle: m.generate,
   action: {},
 }
 

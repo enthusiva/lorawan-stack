@@ -20,8 +20,7 @@ import (
 	"testing"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/gpstime"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
@@ -31,6 +30,9 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestNextDataDownlinkSlot(t *testing.T) {
@@ -44,22 +46,27 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 
 	beaconTime := gpstime.Parse(mac.BeaconPeriod)
 
-	up := &ttnpb.UplinkMessage{
+	up := &ttnpb.MACState_UplinkMessage{
 		Payload: &ttnpb.Message{
-			MHDR: ttnpb.MHDR{
+			MHdr: &ttnpb.MHDR{
 				MType: ttnpb.MType_UNCONFIRMED_UP,
 			},
-			Payload: &ttnpb.Message_MACPayload{
-				MACPayload: &ttnpb.MACPayload{},
+			Payload: &ttnpb.Message_MacPayload{
+				MacPayload: &ttnpb.MACPayload{
+					FHdr: &ttnpb.FHDR{
+						FCtrl: &ttnpb.FCtrl{},
+					},
+				},
 			},
 		},
-		RxMetadata: DefaultRxMetadata[:],
-		ReceivedAt: beaconTime,
+		Settings:   ToMACStateTxSettings(DefaultTxSettings),
+		RxMetadata: ToMACStateRxMetadata(DefaultRxMetadata[:]),
+		ReceivedAt: timestamppb.New(beaconTime),
 	}
-	ups := []*ttnpb.UplinkMessage{up}
+	ups := []*ttnpb.MACState_UplinkMessage{up}
 
-	rxDelay := ttnpb.RX_DELAY_4
-	rx1 := up.ReceivedAt.Add(rxDelay.Duration())
+	rxDelay := ttnpb.RxDelay_RX_DELAY_4
+	rx1 := ttnpb.StdTime(up.ReceivedAt).Add(rxDelay.Duration())
 	rx2 := rx1.Add(time.Second)
 
 	beforeRX1 := rx1.Add(-time.Millisecond)
@@ -88,17 +95,18 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class A/MAC diff/RX1,RX2 available",
 			EarliestAt: beforeRX1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion:     ttnpb.MAC_V1_0_3,
-					DeviceClass:        ttnpb.CLASS_A,
+					DesiredParameters:  &ttnpb.MACParameters{},
+					LorawanVersion:     ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:        ttnpb.Class_CLASS_A,
 					RxWindowsAvailable: true,
 					RecentUplinks:      ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 			ExpectedSlot: classA,
@@ -108,20 +116,20 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class A/RX1,RX2 available/application downlink",
 			EarliestAt: beforeRX1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					DesiredParameters: ttnpb.MACParameters{
+					DesiredParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion:     ttnpb.MAC_V1_0_3,
-					DeviceClass:        ttnpb.CLASS_A,
+					LorawanVersion:     ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:        ttnpb.Class_CLASS_A,
 					RxWindowsAvailable: true,
 					RecentUplinks:      ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{},
 					},
@@ -134,24 +142,24 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class A/RX1,RX2 available/class BC application downlink",
 			EarliestAt: beforeRX1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					DesiredParameters: ttnpb.MACParameters{
+					DesiredParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion:     ttnpb.MAC_V1_0_3,
-					DeviceClass:        ttnpb.CLASS_A,
+					LorawanVersion:     ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:        ttnpb.Class_CLASS_A,
 					RxWindowsAvailable: true,
 					RecentUplinks:      ups,
 				},
-				MACSettings: &ttnpb.MACSettings{
-					StatusTimePeriodicity:  DurationPtr(0),
-					StatusCountPeriodicity: &pbtypes.UInt32Value{Value: 0},
+				MacSettings: &ttnpb.MACSettings{
+					StatusTimePeriodicity:  durationpb.New(0),
+					StatusCountPeriodicity: &wrapperspb.UInt32Value{Value: 0},
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{},
@@ -164,17 +172,18 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class A/MAC diff/RX2 available",
 			EarliestAt: rx2,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion:     ttnpb.MAC_V1_0_3,
-					DeviceClass:        ttnpb.CLASS_A,
+					DesiredParameters:  &ttnpb.MACParameters{},
+					LorawanVersion:     ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:        ttnpb.Class_CLASS_A,
 					RxWindowsAvailable: true,
 					RecentUplinks:      ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 			ExpectedSlot: classA,
@@ -184,16 +193,17 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class A/MAC diff/RX windows closed",
 			EarliestAt: afterRX2,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_A,
-					RecentUplinks:  ups,
+					DesiredParameters: &ttnpb.MACParameters{},
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:       ttnpb.Class_CLASS_A,
+					RecentUplinks:     ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 		},
@@ -201,20 +211,21 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class B/MAC diff/RX1,RX2 available",
 			EarliestAt: rx1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
+					DesiredParameters: &ttnpb.MACParameters{},
 					PingSlotPeriodicity: &ttnpb.PingSlotPeriodValue{
-						Value: ttnpb.PING_EVERY_2S,
+						Value: ttnpb.PingSlotPeriod_PING_EVERY_2S,
 					},
-					LoRaWANVersion:     ttnpb.MAC_V1_0_3,
-					DeviceClass:        ttnpb.CLASS_B,
+					LorawanVersion:     ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:        ttnpb.Class_CLASS_B,
 					RxWindowsAvailable: true,
 					RecentUplinks:      ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 			ExpectedSlot: classA,
@@ -224,37 +235,39 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class B/MAC diff/RX windows closed/no application downlink",
 			EarliestAt: rx1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
+					DesiredParameters: &ttnpb.MACParameters{},
 					PingSlotPeriodicity: &ttnpb.PingSlotPeriodValue{
-						Value: ttnpb.PING_EVERY_2S,
+						Value: ttnpb.PingSlotPeriod_PING_EVERY_2S,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_B,
+					LorawanVersion: ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:    ttnpb.Class_CLASS_B,
 					RecentUplinks:  ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 		},
 		func() TestCase {
 			dev := &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
+					DesiredParameters: &ttnpb.MACParameters{},
 					PingSlotPeriodicity: &ttnpb.PingSlotPeriodValue{
-						Value: ttnpb.PING_EVERY_2S,
+						Value: ttnpb.PingSlotPeriod_PING_EVERY_2S,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_B,
+					LorawanVersion: ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:    ttnpb.Class_CLASS_B,
 					RecentUplinks:  ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{},
 					},
@@ -266,7 +279,7 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 				Device:     dev,
 				ExpectedSlot: &networkInitiatedDownlinkSlot{
 					Time:  nextPingSlotAt(log.NewContext(test.Context(), test.GetLogger(t)), dev, rx2),
-					Class: ttnpb.CLASS_B,
+					Class: ttnpb.Class_CLASS_B,
 				},
 				ExpectedOk: true,
 			}
@@ -275,17 +288,18 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/RX1,RX2 available",
 			EarliestAt: beforeRX1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion:     ttnpb.MAC_V1_0_3,
-					DeviceClass:        ttnpb.CLASS_C,
+					DesiredParameters:  &ttnpb.MACParameters{},
+					LorawanVersion:     ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:        ttnpb.Class_CLASS_C,
 					RxWindowsAvailable: true,
 					RecentUplinks:      ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 			ExpectedSlot: classA,
@@ -295,16 +309,17 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/RX windows closed",
 			EarliestAt: beforeRX1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_C,
-					RecentUplinks:  ups,
+					DesiredParameters: &ttnpb.MACParameters{},
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:       ttnpb.Class_CLASS_C,
+					RecentUplinks:     ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 		},
@@ -312,16 +327,17 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/RX windows closed/application downlink",
 			EarliestAt: rx1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_C,
-					RecentUplinks:  ups,
+					DesiredParameters: &ttnpb.MACParameters{},
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:       ttnpb.Class_CLASS_C,
+					RecentUplinks:     ups,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{},
 					},
@@ -329,7 +345,7 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			},
 			ExpectedSlot: &networkInitiatedDownlinkSlot{
 				Time:  rx2,
-				Class: ttnpb.CLASS_C,
+				Class: ttnpb.Class_CLASS_C,
 			},
 			ExpectedOk: true,
 		},
@@ -337,15 +353,16 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/no uplink/no application downlink",
 			EarliestAt: rx1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_C,
+					DesiredParameters: &ttnpb.MACParameters{},
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:       ttnpb.Class_CLASS_C,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 				},
 			},
 		},
@@ -353,22 +370,23 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/no uplink/application downlink",
 			EarliestAt: rx1,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_C,
+					DesiredParameters: &ttnpb.MACParameters{},
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:       ttnpb.Class_CLASS_C,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{
-								Gateways: []ttnpb.GatewayAntennaIdentifiers{
+								Gateways: []*ttnpb.ClassBCGatewayIdentifiers{
 									{
-										GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-											GatewayID: "test-gtw",
+										GatewayIds: &ttnpb.GatewayIdentifiers{
+											GatewayId: "test-gtw",
 										},
 									},
 								},
@@ -378,7 +396,7 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 				},
 			},
 			ExpectedSlot: &networkInitiatedDownlinkSlot{
-				Class: ttnpb.CLASS_C,
+				Class: ttnpb.Class_CLASS_C,
 			},
 			ExpectedOk: true,
 		},
@@ -386,23 +404,24 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/no uplink/absolute-time application downlink",
 			EarliestAt: absTime,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					DeviceClass:    ttnpb.CLASS_C,
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
+					DesiredParameters: &ttnpb.MACParameters{},
+					DeviceClass:       ttnpb.Class_CLASS_C,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{
-								AbsoluteTime: &absTime,
-								Gateways: []ttnpb.GatewayAntennaIdentifiers{
+								AbsoluteTime: timestamppb.New(absTime),
+								Gateways: []*ttnpb.ClassBCGatewayIdentifiers{
 									{
-										GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-											GatewayID: "test-gtw",
+										GatewayIds: &ttnpb.GatewayIdentifiers{
+											GatewayId: "test-gtw",
 										},
 									},
 								},
@@ -413,7 +432,7 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			},
 			ExpectedSlot: &networkInitiatedDownlinkSlot{
 				Time:              absTime,
-				Class:             ttnpb.CLASS_C,
+				Class:             ttnpb.Class_CLASS_C,
 				IsApplicationTime: true,
 			},
 			ExpectedOk: true,
@@ -422,23 +441,24 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/no uplink/expired absolute-time application downlink",
 			EarliestAt: absTime.Add(time.Nanosecond),
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
-					DeviceClass:    ttnpb.CLASS_C,
+					DesiredParameters: &ttnpb.MACParameters{},
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					DeviceClass:       ttnpb.Class_CLASS_C,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{
-								AbsoluteTime: &absTime,
-								Gateways: []ttnpb.GatewayAntennaIdentifiers{
+								AbsoluteTime: timestamppb.New(absTime),
+								Gateways: []*ttnpb.ClassBCGatewayIdentifiers{
 									{
-										GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-											GatewayID: "test-gtw",
+										GatewayIds: &ttnpb.GatewayIdentifiers{
+											GatewayId: "test-gtw",
 										},
 									},
 								},
@@ -452,19 +472,20 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name:       "unicast/class C/no uplink/absolute-time application downlink/no paths",
 			EarliestAt: absTime,
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					DeviceClass:    ttnpb.CLASS_C,
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
+					DesiredParameters: &ttnpb.MACParameters{},
+					DeviceClass:       ttnpb.Class_CLASS_C,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{
-								AbsoluteTime: &absTime,
+								AbsoluteTime: timestamppb.New(absTime),
 							},
 						},
 					},
@@ -476,19 +497,20 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			EarliestAt: absTime,
 			Device: &ttnpb.EndDevice{
 				Multicast: true,
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					DeviceClass:    ttnpb.CLASS_C,
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
+					DesiredParameters: &ttnpb.MACParameters{},
+					DeviceClass:       ttnpb.Class_CLASS_C,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{
-								AbsoluteTime: &absTime,
+								AbsoluteTime: timestamppb.New(absTime),
 							},
 						},
 					},
@@ -499,22 +521,23 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 			Name: "multicast/class C/no uplink/application downlink with forced gateways",
 			Device: &ttnpb.EndDevice{
 				Multicast: true,
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: rxDelay,
 					},
-					DeviceClass:    ttnpb.CLASS_C,
-					LoRaWANVersion: ttnpb.MAC_V1_0_3,
+					DesiredParameters: &ttnpb.MACParameters{},
+					DeviceClass:       ttnpb.Class_CLASS_C,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
 				},
 				Session: &ttnpb.Session{
-					DevAddr: test.DefaultDevAddr,
+					DevAddr: test.DefaultDevAddr.Bytes(),
 					QueuedApplicationDownlinks: []*ttnpb.ApplicationDownlink{
 						{
 							ClassBC: &ttnpb.ApplicationDownlink_ClassBC{
-								Gateways: []ttnpb.GatewayAntennaIdentifiers{
+								Gateways: []*ttnpb.ClassBCGatewayIdentifiers{
 									{
-										GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-											GatewayID: "test-gtw",
+										GatewayIds: &ttnpb.GatewayIdentifiers{
+											GatewayId: "test-gtw",
 										},
 									},
 								},
@@ -524,7 +547,7 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 				},
 			},
 			ExpectedSlot: &networkInitiatedDownlinkSlot{
-				Class: ttnpb.CLASS_C,
+				Class: ttnpb.Class_CLASS_C,
 			},
 			ExpectedOk: true,
 		},
@@ -537,7 +560,7 @@ func TestNextDataDownlinkSlot(t *testing.T) {
 				clock := test.NewMockClock(beaconTime.Add(time.Millisecond))
 				defer SetMockClock(clock)()
 
-				ret, ok := nextDataDownlinkSlot(ctx, tc.Device, LoRaWANBands[band.EU_863_870][ttnpb.PHY_V1_1_REV_B], ttnpb.MACSettings{}, tc.EarliestAt)
+				ret, ok := nextDataDownlinkSlot(ctx, tc.Device, LoRaWANBands[band.EU_863_870][ttnpb.PHYVersion_RP001_V1_1_REV_B], &ttnpb.MACSettings{}, tc.EarliestAt)
 				if a.So(ok, should.Equal, tc.ExpectedOk) {
 					a.So(ret, should.Resemble, tc.ExpectedSlot)
 				}

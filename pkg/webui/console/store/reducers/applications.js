@@ -12,31 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { EVENT_END_DEVICE_HEARTBEAT_FILTERS_REGEXP } from '@console/constants/event-filters'
+
 import { getApplicationId } from '@ttn-lw/lib/selectors/id'
+import getByPath from '@ttn-lw/lib/get-by-path'
 
 import {
   GET_APP,
   GET_APP_SUCCESS,
   GET_APP_DEV_COUNT_SUCCESS,
+  GET_APP_DEV_EUI_COUNT_SUCCESS,
   GET_APPS_LIST_SUCCESS,
   UPDATE_APP_SUCCESS,
   DELETE_APP_SUCCESS,
+  GET_APP_EVENT_MESSAGE_SUCCESS,
+  GET_MQTT_INFO_SUCCESS,
 } from '@console/store/actions/applications'
 
-const application = (state = {}, application) => {
-  return {
-    ...state,
-    ...application,
-  }
-}
+const application = (state = {}, application) => ({
+  ...state,
+  ...application,
+})
 
 const defaultState = {
   entities: {},
+  derived: {},
   selectedApplication: null,
-  applicationDeviceCount: undefined,
+  applicationDeviceCounts: {},
+  mqtt: {},
 }
 
-const applications = (state = defaultState, { type, payload }) => {
+const applications = (state = defaultState, { type, payload, event }) => {
   switch (type) {
     case GET_APP:
       return {
@@ -61,7 +67,10 @@ const applications = (state = defaultState, { type, payload }) => {
     case GET_APP_DEV_COUNT_SUCCESS:
       return {
         ...state,
-        applicationDeviceCount: payload.applicationDeviceCount,
+        applicationDeviceCounts: {
+          ...state.applicationDeviceCounts,
+          [payload.id]: payload.applicationDeviceCount,
+        },
       }
     case GET_APP_SUCCESS:
     case UPDATE_APP_SUCCESS:
@@ -74,12 +83,49 @@ const applications = (state = defaultState, { type, payload }) => {
           [id]: application(state.entities[id], payload),
         },
       }
+    case GET_APP_DEV_EUI_COUNT_SUCCESS:
+      return {
+        ...state,
+        entities: {
+          ...state.entities,
+          [payload.id]: {
+            ...state.entities[payload.id],
+            dev_eui_counter: payload.dev_eui_counter,
+          },
+        },
+      }
     case DELETE_APP_SUCCESS:
       const { [payload.id]: deleted, ...rest } = state.entities
 
       return {
-        selectedApplication: null,
+        ...defaultState,
         entities: rest,
+      }
+    case GET_APP_EVENT_MESSAGE_SUCCESS:
+      if (EVENT_END_DEVICE_HEARTBEAT_FILTERS_REGEXP.test(event.name)) {
+        const lastSeen = getByPath(event, 'data.received_at') || event.time
+        const id = getApplicationId(event.identifiers[0].device_ids)
+
+        // Update the application's derived last seen value, if the current
+        // heartbeat event is more recent than the currently stored one.
+        if (!(id in state.derived) || lastSeen > state.derived[id].lastSeen) {
+          return {
+            ...state,
+            derived: {
+              ...state.derived,
+              [id]: {
+                ...(state.derived[id] || {}),
+                lastSeen,
+              },
+            },
+          }
+        }
+      }
+      return state
+    case GET_MQTT_INFO_SUCCESS:
+      return {
+        ...state,
+        mqtt: payload,
       }
     default:
       return state

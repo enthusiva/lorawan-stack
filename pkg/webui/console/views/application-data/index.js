@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,52 +13,48 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
 import { defineMessages } from 'react-intl'
+import { useParams } from 'react-router-dom'
 
 import PageTitle from '@ttn-lw/components/page-title'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import WithRootClass from '@ttn-lw/lib/components/with-root-class'
 
 import ApplicationEvents from '@console/containers/application-events'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import style from '@console/views/app/app.styl'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
 import { mayViewApplicationEvents } from '@console/lib/feature-checks'
-
-import { selectSelectedApplicationId } from '@console/store/selectors/applications'
 
 const m = defineMessages({
   appData: 'Application data',
 })
 
-@connect(state => ({ appId: selectSelectedApplicationId(state) }))
-@withFeatureRequirement(mayViewApplicationEvents, {
-  redirect: ({ appId }) => `/applications/${appId}`,
-})
-@withBreadcrumb('apps.single.data', props => {
-  return <Breadcrumb path={`/applications/${props.appId}/data`} content={sharedMessages.liveData} />
-})
-export default class Data extends React.Component {
-  static propTypes = {
-    appId: PropTypes.string.isRequired,
-  }
+const ApplicationData = () => {
+  const { appId } = useParams()
 
-  render() {
-    const { appId } = this.props
+  useBreadcrumbs(
+    'apps.single.data',
+    <Breadcrumb path={`/applications/${appId}/data`} content={sharedMessages.liveData} />,
+  )
 
-    return (
+  return (
+    <Require
+      featureCheck={mayViewApplicationEvents}
+      otherwise={{ redirect: `/applications/${appId}` }}
+    >
       <WithRootClass className={style.stageFlex} id="stage">
         <PageTitle hideHeading title={m.appData} />
         <ApplicationEvents appId={appId} />
       </WithRootClass>
-    )
-  }
+    </Require>
+  )
 }
+
+export default ApplicationData

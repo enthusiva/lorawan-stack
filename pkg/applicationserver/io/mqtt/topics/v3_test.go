@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/TheThingsIndustries/mystique/pkg/topic"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/mqtt/topics"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
@@ -30,7 +30,8 @@ import (
 )
 
 func TestV3AcceptedTopic(t *testing.T) {
-	uid := unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "foo-app"})
+	t.Parallel()
+	uid := unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "foo-app"})
 	for i, tc := range []struct {
 		Requested,
 		Accepted string
@@ -63,7 +64,9 @@ func TestV3AcceptedTopic(t *testing.T) {
 			OK:        true,
 		},
 	} {
+		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
 			a := assertions.New(t)
 			actual, ok := topics.Default.AcceptedTopic(uid, topic.Split(tc.Requested))
 			if !a.So(ok, should.Equal, tc.OK) {
@@ -75,7 +78,8 @@ func TestV3AcceptedTopic(t *testing.T) {
 }
 
 func TestV3Topics(t *testing.T) {
-	appUID := unique.ID(test.Context(), ttnpb.ApplicationIdentifiers{ApplicationID: "foo-app"})
+	t.Parallel()
+	appUID := unique.ID(test.Context(), &ttnpb.ApplicationIdentifiers{ApplicationId: "foo-app"})
 	devID := "foo-device"
 
 	for _, tc := range []struct {
@@ -83,8 +87,12 @@ func TestV3Topics(t *testing.T) {
 		Expected string
 	}{
 		{
-			Fn:       topics.Default.UplinkTopic,
+			Fn:       topics.Default.UplinkMessageTopic,
 			Expected: fmt.Sprintf("v3/%s/devices/%s/up", appUID, devID),
+		},
+		{
+			Fn:       topics.Default.UplinkNormalizedTopic,
+			Expected: fmt.Sprintf("v3/%s/devices/%s/up/normalized", appUID, devID),
 		},
 		{
 			Fn:       topics.Default.JoinAcceptTopic,
@@ -131,7 +139,9 @@ func TestV3Topics(t *testing.T) {
 			Expected: fmt.Sprintf("v3/%s/devices/%s/down/replace", appUID, devID),
 		},
 	} {
+		tc := tc
 		t.Run(tc.Expected, func(t *testing.T) {
+			t.Parallel()
 			actual := strings.Join(tc.Fn(appUID, devID), "/")
 			assertions.New(t).So(actual, should.Equal, tc.Expected)
 		})

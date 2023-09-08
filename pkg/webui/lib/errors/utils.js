@@ -13,12 +13,27 @@
 // limitations under the License.
 
 import * as Sentry from '@sentry/browser'
-import { isPlainObject } from 'lodash'
+import { isPlainObject, isObject } from 'lodash'
 
-import { error as errorLog } from '@ttn-lw/lib/log'
+import { error as errorLog, warn } from '@ttn-lw/lib/log'
+import interpolate from '@ttn-lw/lib/interpolate'
 
 import errorMessages from './error-messages'
 import grpcErrToHttpErr from './grpc-error-map'
+import { TokenError } from './custom-errors'
+import sentryFilters from './sentry-filters'
+
+/**
+ * Returns whether the given object has a valid `details` prop.
+ *
+ * @param {object} object - The object to be tested.
+ * @returns {boolean} `true` if `object` has a valid `details` prop, `false` otherwise.
+ */
+export const hasValidDetails = object =>
+  'details' in object &&
+  object.details instanceof Array &&
+  object.details.length !== 0 &&
+  typeof object.details[0] === 'object'
 
 /**
  * Tests whether the error is a backend error object.
@@ -27,12 +42,10 @@ import grpcErrToHttpErr from './grpc-error-map'
  * @returns {boolean} `true` if `error` is a well known backend error object.
  */
 export const isBackend = error =>
-  Boolean(error) &&
-  typeof error === 'object' &&
+  isPlainObject(error) &&
   !('id' in error) &&
   error.message &&
-  error.details &&
-  (error.code || error.grpc_code)
+  (typeof error.code === 'number' || typeof error.grpc_code === 'number')
 
 /**
  * Returns whether the error is a frontend defined error object.
@@ -53,8 +66,7 @@ export const isBackendErrorDetails = details =>
   Boolean(details) &&
   Boolean(details.namespace) &&
   Boolean(details.name) &&
-  Boolean(details.message_format) &&
-  Boolean(details.code)
+  Boolean(details.message_format)
 
 /**
  * Returns whether the error has a shape that is not well-known.
@@ -62,7 +74,8 @@ export const isBackendErrorDetails = details =>
  * @param {object} error - The error to be tested.
  * @returns {boolean} `true` if `error` is not of a well known shape.
  */
-export const isUnknown = error => !isBackend(error) && !isFrontend(error)
+export const isUnknown = error =>
+  !isBackend(error) && !isFrontend(error) && !isTimeoutError(error) && !isNetworkError(error)
 
 /**
  * Returns a frontend error object, to be passed to error components.
@@ -107,6 +120,8 @@ export const httpStatusCode = error => {
     statusCode = error.statusCode
   } else if (Boolean(error.response) && Boolean(error.response.status)) {
     statusCode = error.response.status
+  } else if (isObject(error) && error.cause) {
+    return httpStatusCode(error.cause)
   }
 
   return Boolean(statusCode) ? parseInt(statusCode) : undefined
@@ -138,15 +153,24 @@ export const isNotFoundError = error => grpcStatusCode(error) === 5 || httpStatu
 export const isInternalError = error => grpcStatusCode(error) === 13 // NOTE: HTTP 500 can also be UnknownError.
 
 /**
- * Returns whether the grpc error represents an invalid argument or bad request
- * error.
+ * Returns whether the grpc error represents an invalid argument.
  *
  * @param {object} error - The error to be tested.
- * @returns {boolean} `true` if `error` represents an invalid argument or bad
- * request error, `false` otherwise.
+ * @returns {boolean} `true` if `error` represents an invalid argument error,
+ * `false` otherwise.
  */
 export const isInvalidArgumentError = error =>
   grpcStatusCode(error) === 3 || httpStatusCode(error) === 400
+
+/**
+ * Returns whether the grpc error represents a bad request error.
+ *
+ * @param {object} error - The error to be tested.
+ * @returns {boolean} `true` if `error` represents an bad request error,
+ * `false` otherwise.
+ */
+export const isBadRequestError = error =>
+  grpcStatusCode(error) === 9 || httpStatusCode(error) === 400
 
 /**
  * Returns whether the grpc error represents an already exists error.
@@ -194,7 +218,9 @@ export const isConflictError = error =>
  * @returns {boolean} `true` if `error` has translation ids, `false` otherwise.
  */
 export const isTranslated = error =>
-  isBackend(error) || isFrontend(error) || (typeof error === 'object' && error.id)
+  isBackend(error) ||
+  isFrontend(error) ||
+  (isPlainObject(error) && typeof error.id === 'string' && typeof error.defaultMessage === 'string')
 
 /**
  * Returns whether `error` is a 'network error' as JavaScript TypeError.
@@ -211,8 +237,38 @@ export const isNetworkError = error =>
  * @param {object} error - The error to be tested.
  * @returns {boolean} `true` if `error` is a timeout error, `false` otherwise.
  */
-export const isTimeoutError = error => error.code === 'ECONNABORTED'
+export const isTimeoutError = error =>
+  Boolean(error) && typeof error === 'object' && error.code === 'ECONNABORTED'
 
+/**
+ * Returns whether `error` is a connection failure error that happens on the
+ * proxy layer when the service is currently unavailable, e.g. When updating
+ * the server.
+ *
+ * @param {object} error - The error to be tested.
+ * @returns {boolean} `true` if `error` is a connection failure error, `false` otherwise.
+ */
+export const isConnectionFailureError = error =>
+  isPlainObject(error) &&
+  hasValidDetails(error) &&
+  Boolean(error.details[0]?.name?.startsWith('503_upstream_reset_before_response_started'))
+
+/**
+ * Returns whether `error` is a backend error with ID: 'pkg/web/oauthclient:refused'.
+ *
+ * @param {object} error - The error to be tested.
+ * @returns {boolean} `true` if `error` is a such error, `false` otherwise.
+ */
+export const isOAuthClientRefusedError = error =>
+  isBackend(error) && getBackendErrorId(error) === 'error:pkg/web/oauthclient:refused'
+/**
+ * Returns whether the `error` is a invalid state error with ID: 'pkg/web/oauthclient:invalid_state'.
+ *
+ * @param {object} error - The error to be tested.
+ * @returns {boolean} `true` if `error` is such error, `false` otherwise.
+ */
+export const isOAuthInvalidStateError = error =>
+  isBackend(error) && getBackendErrorId(error) === 'error:pkg/web/oauthclient:invalid_state'
 /**
  * Returns whether the error is worth being sent to Sentry.
  *
@@ -220,13 +276,41 @@ export const isTimeoutError = error => error.code === 'ECONNABORTED'
  * @returns {boolean} `true` if `error` should be forwarded to Sentry,
  * `false` otherwise.
  */
-export const isSentryWorthy = error =>
-  (isUnknown(error) && httpStatusCode(error) === undefined) ||
-  isInvalidArgumentError(error) ||
-  isInternalError(error) ||
-  httpStatusCode(error) >= 500 || // Server errors.
-  httpStatusCode(error) === 400 // Bad request.
+export const isSentryWorthy = error => {
+  const statusCode = httpStatusCode(error)
+  // Forward all server and bad request errors.
+  if (statusCode >= 500 || statusCode === 400) {
+    if (isBackend(error)) {
+      return !sentryFilters.includes(getBackendErrorId(error))
+    }
 
+    return true
+  }
+
+  // Forward token errors that are not network related.
+  if (error instanceof TokenError) {
+    if (isNetworkError(error.cause) || isTimeoutError(error.cause)) {
+      return false
+    }
+
+    return true
+  }
+
+  // Forward any other unknown errors without relevant status code,
+  // that are not network related.
+  if (isUnknown(error) && statusCode === undefined) {
+    if (typeof error === 'string' && /<html.*>|<!DOCTYPE/i.test(error)) {
+      // If the error is a string and resembles a HTML document, it is likely
+      // caused by a client side firewall or other security middleware.
+      // Such errors can be discarded.
+      return false
+    }
+    return true
+  }
+
+  // Discard all other errors.
+  return false
+}
 /**
  * Returns an appropriate error title that can be used for Sentry.
  *
@@ -234,12 +318,27 @@ export const isSentryWorthy = error =>
  * @returns {string} The Sentry error title.
  */
 export const getSentryErrorTitle = error => {
+  if (typeof error === 'string') {
+    return `invalid string error: "${error}"`
+  }
   if (typeof error !== 'object') {
     return `invalid error type: ${error}`
   }
 
   if (isBackend(error)) {
-    return error.message
+    const title = error.message || error.message_format
+    if (hasValidDetails(error) && hasCauses(getBackendErrorDetails(error))) {
+      const rootCause = getBackendErrorRootCause(getBackendErrorDetails(error))
+      if (isBackendErrorDetails(rootCause)) {
+        const message =
+          'attributes' in rootCause
+            ? interpolate(rootCause.message_format, rootCause.attributes)
+            : rootCause.message_format
+
+        return `${title}; error:${rootCause.namespace}:${rootCause.name} (${message})`
+      }
+    }
+    return title
   } else if (isFrontend(error)) {
     return error.errorTitle.defaultMessage
   } else if ('message' in error) {
@@ -248,18 +347,22 @@ export const getSentryErrorTitle = error => {
     return error.code
   } else if ('statusCode' in error) {
     return `status code: ${error.statusCode}`
+  } else if ('id' in error && 'defaultMessage' in error) {
+    return error.defaultMessage
   }
 
   return 'untitled or empty error'
 }
 
 /**
- * Returns the id of the error, used as message id.
+ * Returns the id of the error, used as message id,
+ * `undefined` otherwise.
  *
- * @param {object} error - The backend error object.
+ * @param {object} error - The error object.
  * @returns {string} The ID.
  */
-export const getBackendErrorId = error => error.message.split(' ')[0]
+export const getBackendErrorId = error =>
+  isBackend(error) ? error.message.split(' ')[0] : undefined
 
 /**
  * Returns the id of the error details, used as message id.
@@ -275,7 +378,30 @@ export const getBackendErrorDetailsId = details => `error:${details.namespace}:$
  * @param {object} error - The backend error object.
  * @returns {object} - The details of `error`.
  */
-export const getBackendErrorDetails = error => error.details[0]
+export const getBackendErrorDetails = error =>
+  isBackendErrorDetails(error) ? error : error.details[0]
+
+/**
+ * Returns the error details' first path error, if any.
+ *
+ * @param {object} details - The backend error details object.
+ * @returns {object} - The first path error if exists, `undefined` otherwise.
+ */
+export const getBackendErrorDetailsPathError = details => {
+  if (!isBackendErrorDetails(details) || !hasValidDetails(details)) {
+    return undefined
+  }
+  const detailsDetails = details.details[0]
+  if (
+    !('path_errors' in detailsDetails) ||
+    !(detailsDetails.path_errors instanceof Array) ||
+    detailsDetails.path_errors.length === 0
+  ) {
+    return undefined
+  }
+
+  return detailsDetails.path_errors[0]
+}
 
 /**
  * Returns the name of the error extracted from the details array.
@@ -284,9 +410,7 @@ export const getBackendErrorDetails = error => error.details[0]
  * @returns {string} - The error name.
  */
 export const getBackendErrorName = error =>
-  error && error.details instanceof Array && error.details[0] && error.details[0].name
-    ? error.details[0].name
-    : undefined
+  hasValidDetails(error) ? error.details[0].name : undefined
 /**
  * Returns the default message of the error, used as fallback translation.
  *
@@ -294,7 +418,9 @@ export const getBackendErrorName = error =>
  * @returns {string} The default message.
  */
 export const getBackendErrorDefaultMessage = error =>
-  error.details[0].message_format || error.message.replace(/^.*\s/, '')
+  hasValidDetails(error)
+    ? error.details[0].message_format || error.details[0].message
+    : error.message.replace(/^error:[a-z0-9-_.:/]*\s/, '')
 
 /**
  * Returns whether the error has one or more cause properties.
@@ -331,47 +457,106 @@ export const getBackendErrorRootCause = error => {
  * @param {object} error - The backend error object.
  * @returns {string} The attributes or undefined.
  */
-export const getBackendErrorMessageAttributes = error => error.details[0].attributes
+export const getBackendErrorMessageAttributes = error =>
+  hasValidDetails(error) ? error.details[0].attributes : undefined
+
+/**
+ * Returns the correlation ID of the backend error message if present,
+ * `undefined` otherwise.
+ *
+ * @param {object} error - The backend error object.
+ * @returns {string} The correlation ID.
+ */
+export const getCorrelationId = error =>
+  hasValidDetails(error) ? error.details[0].correlation_id : undefined
 
 /**
  * Adapts the error object to props of message object, if possible.
  *
  * @param {object} error - The backend error object.
- * @returns {object} Message props of the error object, or generic error object.
+ * @param {boolean} each - Whether to return an array of all messages contained
+ * in the error object, including causes and details.
+ * @returns {object|Array} Message props of the error object, or generic error object.
  */
-export const toMessageProps = error => {
-  let props
-  // Check if it is a error message and transform it to a intl message.
-  if (isBackend(error)) {
-    props = {
-      content: {
-        id: getBackendErrorId(error),
-        defaultMessage: getBackendErrorDefaultMessage(error),
-      },
-      values: getBackendErrorMessageAttributes(error),
-    }
-  } else if (isBackendErrorDetails(error)) {
-    props = {
-      content: {
-        id: getBackendErrorDetailsId(error),
-        defaultMessage: error.message_format,
-      },
-      values: error.attributes,
+export const toMessageProps = (error, each = false) => {
+  const props = []
+
+  // Check if it is an error message and transform it to a intl message.
+  if (isBackendErrorDetails(error) || isBackend(error)) {
+    const pathErrors = getBackendErrorDetailsPathError(error)
+    let errorDetails
+
+    if (
+      (hasValidDetails(error) && isBackendErrorDetails(error.details[0])) ||
+      isBackendErrorDetails(error)
+    ) {
+      if (isBackendErrorDetails(pathErrors)) {
+        errorDetails = pathErrors
+      } else if ('details' in error && isBackendErrorDetails(error.details[0])) {
+        errorDetails = error.details[0]
+      } else {
+        errorDetails = error
+      }
+
+      if (hasCauses(errorDetails)) {
+        // Use the root cause if any.
+        const rootCause = getBackendErrorRootCause(errorDetails)
+
+        // If the attributes are missing values, use the generated default values based on the message.
+        const messageValues = rootCause?.message_format?.match(/[^{}]+(?=})/g) || []
+        const values = messageValues.reduce(
+          (obj, val) => {
+            if (!(val in obj)) {
+              obj[val] = `{${val}}`
+            }
+
+            return obj
+          },
+          { ...rootCause.attributes },
+        )
+
+        props.push({
+          content: {
+            id: getBackendErrorDetailsId(rootCause),
+            defaultMessage: rootCause.message_format,
+          },
+          values,
+        })
+      }
+
+      props.push({
+        content: {
+          id: getBackendErrorDetailsId(errorDetails),
+          defaultMessage: errorDetails.message_format,
+        },
+        values: errorDetails.attributes,
+      })
+    } else {
+      props.push({
+        content: {
+          id: getBackendErrorId(error),
+          defaultMessage: getBackendErrorDefaultMessage(error),
+        },
+      })
     }
   } else if (isFrontend(error)) {
-    props = {
+    props.push({
       content: error.errorMessage,
       title: error.errorTitle,
-    }
+    })
   } else if (isTranslated(error)) {
     // Fall back to normal message.
-    props = { content: error }
-  } else {
-    // Fall back to generic error message.
-    props = { content: errorMessages.genericError }
+    props.push({ content: error })
+  } else if (isConnectionFailureError(error)) {
+    props.push({ content: errorMessages.connectionFailure })
   }
 
-  return props
+  if (props.length === 0) {
+    // Fall back to generic error message.
+    props.push({ content: errorMessages.genericError })
+  }
+
+  return each ? props : props[0]
 }
 
 /**
@@ -397,9 +582,9 @@ export const ingestError = (error, extras = {}, tags = {}) => {
       } else {
         scope.setExtras({ error, ...extras })
       }
-      Sentry.captureException(
-        error instanceof Error ? error : new Error(getSentryErrorTitle(error)),
-      )
+      const passedError = error instanceof Error ? error : new Error(getSentryErrorTitle(error))
+      warn('The above error was considered Sentry-worthy.', 'It was captured as:', passedError)
+      Sentry.captureException(passedError)
     })
   }
 }

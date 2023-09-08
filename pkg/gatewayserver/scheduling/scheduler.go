@@ -59,8 +59,7 @@ type TimeSource interface {
 	Now() time.Time
 }
 
-type systemTimeSource struct {
-}
+type systemTimeSource struct{}
 
 // Now implements TimeSource.
 func (systemTimeSource) Now() time.Time { return time.Now() }
@@ -80,7 +79,14 @@ var (
 
 // NewScheduler instantiates a new Scheduler for the given frequency plan.
 // If no time source is specified, the system time is used.
-func NewScheduler(ctx context.Context, fps map[string]*frequencyplans.FrequencyPlan, enforceDutyCycle bool, scheduleAnytimeDelay *time.Duration, timeSource TimeSource) (*Scheduler, error) {
+func NewScheduler(
+	ctx context.Context,
+	fps map[string]*frequencyplans.FrequencyPlan,
+	enforceDutyCycle bool,
+	dutyCycleStyle DutyCycleStyle,
+	scheduleAnytimeDelay *time.Duration,
+	timeSource TimeSource,
+) (*Scheduler, error) {
 	logger := log.FromContext(ctx)
 	if timeSource == nil {
 		timeSource = SystemTimeSource
@@ -96,21 +102,21 @@ func NewScheduler(ctx context.Context, fps map[string]*frequencyplans.FrequencyP
 		scheduleAnytimeDelay = &ScheduleTimeShort
 	}
 
-	var toa *frequencyplans.TimeOffAir
+	var timeOffAir *frequencyplans.TimeOffAir
 	for _, fp := range fps {
-		if toa != nil && fp.TimeOffAir != *toa {
+		if timeOffAir != nil && fp.TimeOffAir != *timeOffAir {
 			return nil, errFrequencyPlansTimeOffAir.New()
 		}
-		toa = &fp.TimeOffAir
+		timeOffAir = fp.TimeOffAir.Clone()
 	}
 
-	if toa.Duration < QueueDelay {
-		toa.Duration = QueueDelay
+	if timeOffAir.Duration < QueueDelay {
+		timeOffAir.Duration = QueueDelay
 	}
 
 	s := &Scheduler{
 		clock:                &RolloverClock{},
-		timeOffAir:           *toa,
+		timeOffAir:           *timeOffAir,
 		fps:                  fps,
 		timeSource:           timeSource,
 		scheduleAnytimeDelay: *scheduleAnytimeDelay,
@@ -124,7 +130,7 @@ func NewScheduler(ctx context.Context, fps map[string]*frequencyplans.FrequencyP
 						MaxFrequency: subBand.MaxFrequency,
 						DutyCycle:    subBand.DutyCycle,
 					}
-					sb := NewSubBand(params, s.clock, nil)
+					sb := NewSubBand(params, s.clock, nil, dutyCycleStyle)
 					var isIdentical bool
 					for _, subBand := range s.subBands {
 						if subBand.IsIdentical(sb) {
@@ -140,7 +146,7 @@ func NewScheduler(ctx context.Context, fps map[string]*frequencyplans.FrequencyP
 					}
 				}
 			} else {
-				band, err := band.GetByID(fp.BandID)
+				band, err := band.GetLatest(fp.BandID)
 				if err != nil {
 					return nil, err
 				}
@@ -150,7 +156,7 @@ func NewScheduler(ctx context.Context, fps map[string]*frequencyplans.FrequencyP
 						MaxFrequency: subBand.MaxFrequency,
 						DutyCycle:    subBand.DutyCycle,
 					}
-					sb := NewSubBand(params, s.clock, nil)
+					sb := NewSubBand(params, s.clock, nil, dutyCycleStyle)
 					var isIdentical bool
 					for _, subBand := range s.subBands {
 						if subBand.IsIdentical(sb) {
@@ -172,7 +178,7 @@ func NewScheduler(ctx context.Context, fps map[string]*frequencyplans.FrequencyP
 			MinFrequency: 0,
 			MaxFrequency: math.MaxUint64,
 		}
-		sb := NewSubBand(noDutyCycleParams, s.clock, nil)
+		sb := NewSubBand(noDutyCycleParams, s.clock, nil, dutyCycleStyle)
 		s.subBands = append(s.subBands, sb)
 	}
 	go s.gc(ctx)
@@ -211,7 +217,7 @@ func (s *Scheduler) gc(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			s.mu.RLock()
-			serverTime, ok := s.clock.FromServerTime(time.Now())
+			serverTime, ok := s.clock.FromServerTime(s.timeSource.Now())
 			s.mu.RUnlock()
 			if !ok {
 				continue
@@ -229,7 +235,7 @@ func (s *Scheduler) gc(ctx context.Context) error {
 
 var errDwellTime = errors.DefineFailedPrecondition("dwell_time", "packet exceeds dwell time restriction")
 
-func (s *Scheduler) newEmission(payloadSize int, settings ttnpb.TxSettings, starts ConcentratorTime) (Emission, error) {
+func (s *Scheduler) newEmission(payloadSize int, settings *ttnpb.TxSettings, starts ConcentratorTime) (Emission, error) {
 	d, err := toa.Compute(payloadSize, settings)
 	if err != nil {
 		return Emission{}, err
@@ -251,19 +257,21 @@ func (s *Scheduler) SubBandCount() int {
 // If the given token does not provide enough information or if the latest clock sync is more recent, this method returns false.
 // This method assumes that the mutex is held.
 func (s *Scheduler) syncWithUplinkToken(token *ttnpb.UplinkToken) bool {
-	if token.GetServerTime().IsZero() || token.GetConcentratorTime() == 0 {
+	if token.GetServerTime() == nil || token.GetConcentratorTime() == 0 {
 		return false
 	}
-	if lastSync, ok := s.clock.SyncTime(); ok && lastSync.After(token.ServerTime) {
+	if lastSync, ok := s.clock.SyncTime(); ok && lastSync.After(*ttnpb.StdTime(token.ServerTime)) {
 		return false
 	}
-	s.clock.SyncWithGatewayConcentrator(token.Timestamp, token.ServerTime, ConcentratorTime(token.ConcentratorTime))
+	s.clock.SyncWithGatewayConcentrator(token.Timestamp, *ttnpb.StdTime(token.ServerTime), ttnpb.StdTime(token.GatewayTime), ConcentratorTime(token.ConcentratorTime))
 	return true
 }
 
 var (
-	errConflict              = errors.DefineAlreadyExists("conflict", "scheduling conflict")
-	errTooLate               = errors.DefineFailedPrecondition("too_late", "too late to transmission scheduled time (delta is `{delta}`)")
+	errConflict = errors.DefineAlreadyExists("conflict", "scheduling conflict")
+	errTooLate  = errors.DefineFailedPrecondition(
+		"too_late", "too late to transmission scheduled time", "delay", "min",
+	)
 	errNoClockSync           = errors.DefineUnavailable("no_clock_sync", "no clock sync")
 	errNoAbsoluteGatewayTime = errors.DefineAborted("no_absolute_gateway_time", "no absolute gateway time")
 	errNoServerTime          = errors.DefineAborted("no_server_time", "no server time")
@@ -272,7 +280,7 @@ var (
 // Options define options for scheduling downlink.
 type Options struct {
 	PayloadSize int
-	ttnpb.TxSettings
+	*ttnpb.TxSettings
 	RTTs        RTTs
 	Priority    ttnpb.TxSchedulePriority
 	UplinkToken *ttnpb.UplinkToken
@@ -280,7 +288,7 @@ type Options struct {
 
 // ScheduleAt attempts to schedule the given Tx settings with the given priority.
 // If there are round-trip times available, the nth percentile (n = scheduleLateRTTPercentile) value will be used instead of ScheduleTimeShort.
-func (s *Scheduler) ScheduleAt(ctx context.Context, opts Options) (Emission, error) {
+func (s *Scheduler) ScheduleAt(ctx context.Context, opts Options) (res Emission, now ConcentratorTime, err error) {
 	defer trace.StartRegion(ctx, "schedule transmission").End()
 
 	s.mu.Lock()
@@ -289,7 +297,7 @@ func (s *Scheduler) ScheduleAt(ctx context.Context, opts Options) (Emission, err
 		s.syncWithUplinkToken(opts.UplinkToken)
 	}
 	if !s.clock.IsSynced() {
-		return Emission{}, errNoClockSync.New()
+		return Emission{}, 0, errNoClockSync.New()
 	}
 	minScheduleTime := ScheduleTimeShort
 	var medianRTT *time.Duration
@@ -299,54 +307,61 @@ func (s *Scheduler) ScheduleAt(ctx context.Context, opts Options) (Emission, err
 			medianRTT = &median
 		}
 	}
+	log.FromContext(ctx).WithFields(log.Fields(
+		"median_rtt", medianRTT,
+		"min_schedule_time", minScheduleTime,
+	)).Debug("Computed scheduling delays")
 	var starts ConcentratorTime
 	now, ok := s.clock.FromServerTime(s.timeSource.Now())
+	if !ok {
+		panic("clock is synced without server time")
+	}
 	if opts.Time != nil {
 		var ok bool
-		starts, ok = s.clock.FromGatewayTime(*opts.Time)
+		starts, ok = s.clock.FromGatewayTime(*ttnpb.StdTime(opts.Time))
 		if !ok {
-			if medianRTT != nil {
-				serverTime, ok := s.clock.FromServerTime(*opts.Time)
-				if !ok {
-					return Emission{}, errNoServerTime.New()
-				}
-				starts = serverTime - ConcentratorTime(*medianRTT/2)
-			} else {
-				return Emission{}, errNoAbsoluteGatewayTime.New()
+			if medianRTT == nil {
+				return Emission{}, 0, errNoAbsoluteGatewayTime.New()
 			}
+			serverTime, ok := s.clock.FromServerTime(*ttnpb.StdTime(opts.Time))
+			if !ok {
+				return Emission{}, 0, errNoServerTime.New()
+			}
+			starts = serverTime - ConcentratorTime(*medianRTT/2)
 		}
-		// Assume that the absolute time is the time of arrival, not time of transmission.
-		toa, err := toa.Compute(opts.PayloadSize, opts.TxSettings)
-		if err != nil {
-			return Emission{}, err
-		}
-		starts -= ConcentratorTime(toa)
 	} else {
 		starts = s.clock.FromTimestampTime(opts.Timestamp)
 	}
-	if ok {
-		if delta := time.Duration(starts - now); delta < minScheduleTime {
-			return Emission{}, errTooLate.WithAttributes("delta", delta)
-		}
+	delay := time.Duration(starts - now)
+	if delay < minScheduleTime {
+		return Emission{}, 0, errTooLate.WithAttributes(
+			"delay", delay,
+			"min", minScheduleTime,
+		)
 	}
+	log.FromContext(ctx).WithFields(log.Fields(
+		"now", now,
+		"starts", starts,
+		"delay", delay,
+	)).Debug("Computed downlink start timestamp")
 	sb, err := s.findSubBand(opts.Frequency)
 	if err != nil {
-		return Emission{}, err
+		return Emission{}, 0, err
 	}
 	em, err := s.newEmission(opts.PayloadSize, opts.TxSettings, starts)
 	if err != nil {
-		return Emission{}, err
+		return Emission{}, 0, err
 	}
 	for _, other := range s.emissions {
 		if em.OverlapsWithOffAir(other, s.timeOffAir) {
-			return Emission{}, errConflict.New()
+			return Emission{}, 0, errConflict.New()
 		}
 	}
 	if err := sb.Schedule(em, opts.Priority); err != nil {
-		return Emission{}, err
+		return Emission{}, 0, err
 	}
 	s.emissions = s.emissions.Insert(em)
-	return em, nil
+	return em, now, nil
 }
 
 // ScheduleAnytime attempts to schedule the given Tx settings with the given priority from the time in the settings.
@@ -357,7 +372,7 @@ func (s *Scheduler) ScheduleAt(ctx context.Context, opts Options) (Emission, err
 // immediately. The reason for this is that this scheduler cannot determine conflicts or enforce duty-cycle when the
 // emission time is unknown. Therefore, when the time is set to Immediate, the estimated current concentrator time plus
 // ScheduleDelayLong will be used.
-func (s *Scheduler) ScheduleAnytime(ctx context.Context, opts Options) (Emission, error) {
+func (s *Scheduler) ScheduleAnytime(ctx context.Context, opts Options) (res Emission, now ConcentratorTime, err error) {
 	defer trace.StartRegion(ctx, "schedule transmission at any time").End()
 
 	s.mu.Lock()
@@ -366,18 +381,18 @@ func (s *Scheduler) ScheduleAnytime(ctx context.Context, opts Options) (Emission
 		s.syncWithUplinkToken(opts.UplinkToken)
 	}
 	if !s.clock.IsSynced() {
-		return Emission{}, errNoClockSync.New()
+		return Emission{}, 0, errNoClockSync.New()
 	}
 	minScheduleTime := ScheduleTimeShort
 	if opts.RTTs != nil {
 		if _, _, _, np, n := opts.RTTs.Stats(scheduleLateRTTPercentile, s.timeSource.Now()); n >= scheduleMinRTTCount {
-			minScheduleTime = np + QueueDelay
+			minScheduleTime = np/2 + QueueDelay
 		}
 	}
 	var starts ConcentratorTime
 	now, ok := s.clock.FromServerTime(s.timeSource.Now())
 	if !ok {
-		return Emission{}, errNoServerTime.New()
+		panic("clock is synced without server time")
 	}
 	if opts.Timestamp == 0 {
 		starts = now + ConcentratorTime(s.scheduleAnytimeDelay)
@@ -391,11 +406,11 @@ func (s *Scheduler) ScheduleAnytime(ctx context.Context, opts Options) (Emission
 	}
 	sb, err := s.findSubBand(opts.Frequency)
 	if err != nil {
-		return Emission{}, err
+		return Emission{}, 0, err
 	}
 	em, err := s.newEmission(opts.PayloadSize, opts.TxSettings, starts)
 	if err != nil {
-		return Emission{}, err
+		return Emission{}, 0, err
 	}
 	i := 0
 	next := func() ConcentratorTime {
@@ -429,10 +444,10 @@ func (s *Scheduler) ScheduleAnytime(ctx context.Context, opts Options) (Emission
 	}
 	em, err = sb.ScheduleAnytime(em.d, next, opts.Priority)
 	if err != nil {
-		return Emission{}, err
+		return Emission{}, 0, err
 	}
 	s.emissions = s.emissions.Insert(em)
-	return em, nil
+	return em, now, nil
 }
 
 // Sync synchronizes the clock with the given concentrator time v and the server time.
@@ -452,18 +467,17 @@ func (s *Scheduler) SyncWithGatewayAbsolute(timestamp uint32, server, gateway ti
 
 // SyncWithGatewayConcentrator synchronizes the clock with the given concentrator timestamp, the server time and the
 // relative gateway time that corresponds to the given timestamp.
-func (s *Scheduler) SyncWithGatewayConcentrator(timestamp uint32, server time.Time, concentrator ConcentratorTime) ConcentratorTime {
+func (s *Scheduler) SyncWithGatewayConcentrator(timestamp uint32, server time.Time, gateway *time.Time, concentrator ConcentratorTime) ConcentratorTime {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.clock.SyncWithGatewayConcentrator(timestamp, server, concentrator)
+	return s.clock.SyncWithGatewayConcentrator(timestamp, server, gateway, concentrator)
 }
 
 // IsGatewayTimeSynced reports whether scheduler clock is synchronized with gateway time.
 func (s *Scheduler) IsGatewayTimeSynced() bool {
 	s.mu.RLock()
-	ret := s.clock.IsSynced() && s.clock.gateway != nil
-	s.mu.RUnlock()
-	return ret
+	defer s.mu.RUnlock()
+	return s.clock.IsSynced() && s.clock.gateway != nil
 }
 
 // Now returns an indication of the current concentrator time.
@@ -486,6 +500,17 @@ func (s *Scheduler) TimeFromTimestampTime(t uint32) (ConcentratorTime, bool) {
 		return 0, false
 	}
 	return s.clock.FromTimestampTime(t), true
+}
+
+// TimeFromServerTime returns an indication of the provided timestamp in concentrator time.
+// This method returns false if the clock is not synced with the server.
+func (s *Scheduler) TimeFromServerTime(t time.Time) (ConcentratorTime, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.clock.IsSynced() {
+		return 0, false
+	}
+	return s.clock.FromServerTime(t)
 }
 
 // SubBandStats returns a map with the usage stats of each sub band.

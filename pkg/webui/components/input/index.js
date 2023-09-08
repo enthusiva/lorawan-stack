@@ -13,14 +13,19 @@
 // limitations under the License.
 
 import React from 'react'
-import { injectIntl } from 'react-intl'
+import { injectIntl, defineMessages } from 'react-intl'
 import classnames from 'classnames'
 import bind from 'autobind-decorator'
 
 import Icon from '@ttn-lw/components/icon'
 import Spinner from '@ttn-lw/components/spinner'
 import Button from '@ttn-lw/components/button'
+import Tooltip from '@ttn-lw/components/tooltip'
 
+import Message from '@ttn-lw/lib/components/message'
+
+import { isSafariUserAgent } from '@ttn-lw/lib/navigator'
+import combineRefs from '@ttn-lw/lib/combine-refs'
 import PropTypes from '@ttn-lw/lib/prop-types'
 
 import ByteInput from './byte'
@@ -29,25 +34,18 @@ import Generate from './generate'
 
 import style from './input.styl'
 
-/**
- * Merges multiple refs.
- *
- * @param {Array<object>} refs - A list of refs to be merged.
- * @returns {Function} - The ref callback with the DOM element that is assigned to every ref in `refs`.
- */
-const mergeRefs = refs => val => {
-  refs.forEach(ref => {
-    if (typeof ref === 'object') {
-      ref.current = val
-    }
-  })
-}
+const m = defineMessages({
+  showValue: 'Show value',
+  hideValue: 'Hide value',
+})
 
 class Input extends React.Component {
   static propTypes = {
     action: PropTypes.shape({
       ...Button.propTypes,
     }),
+    actionDisable: PropTypes.bool,
+    append: PropTypes.node,
     autoComplete: PropTypes.oneOf([
       'current-password',
       'email',
@@ -58,6 +56,7 @@ class Input extends React.Component {
       'url',
       'username',
     ]),
+    children: PropTypes.node,
     className: PropTypes.string,
     code: PropTypes.bool,
     component: PropTypes.oneOfType([PropTypes.string, PropTypes.node]),
@@ -79,6 +78,7 @@ class Input extends React.Component {
     onFocus: PropTypes.func,
     placeholder: PropTypes.message,
     readOnly: PropTypes.bool,
+    sensitive: PropTypes.bool,
     showPerChar: PropTypes.bool,
     title: PropTypes.message,
     type: PropTypes.string,
@@ -89,7 +89,10 @@ class Input extends React.Component {
 
   static defaultProps = {
     action: undefined,
+    actionDisable: false,
+    append: null,
     autoComplete: 'off',
+    children: undefined,
     className: undefined,
     code: false,
     component: 'input',
@@ -107,6 +110,7 @@ class Input extends React.Component {
     onEnter: () => null,
     placeholder: undefined,
     readOnly: false,
+    sensitive: false,
     showPerChar: false,
     title: undefined,
     type: 'text',
@@ -117,11 +121,42 @@ class Input extends React.Component {
     forwardedRef: null,
   }
 
-  state = {
-    focus: false,
+  constructor(props) {
+    super(props)
+
+    this.state = {
+      focus: false,
+      hidden: props.sensitive,
+    }
   }
 
   input = React.createRef(null)
+
+  _computeByteInputWidth() {
+    const { showPerChar, max, sensitive } = this.props
+    const isSafari = isSafariUserAgent()
+
+    const maxValue = showPerChar ? Math.ceil(max / 2) : max
+    const multiplier = isSafari ? 2.1 : 1.8
+
+    let width
+    if (maxValue === 16) {
+      width = isSafari ? 34 : 30
+    } else {
+      width = maxValue * multiplier + 0.65
+    }
+
+    if (sensitive) {
+      width += 2.3
+    }
+
+    return `${width}rem`
+  }
+
+  @bind
+  handleHideToggleClick() {
+    this.setState(({ hidden }) => ({ hidden: !hidden }))
+  }
 
   focus() {
     if (this.input.current) {
@@ -141,36 +176,40 @@ class Input extends React.Component {
 
   render() {
     const {
-      icon,
-      value,
-      error,
-      warning,
-      valid,
-      placeholder,
-      readOnly,
-      type,
-      disabled,
-      onChange,
-      onFocus,
-      onBlur,
-      onEnter,
+      action,
+      actionDisable,
+      append,
+      autoComplete,
+      children,
       className,
-      label,
+      code,
       component,
-      loading,
-      title,
+      disabled,
+      error,
+      forwardedRef,
+      icon,
+      inputRef,
       inputWidth,
       intl,
-      code,
-      action,
-      autoComplete,
+      label,
+      loading,
+      onBlur,
+      onChange,
+      onEnter,
+      onFocus,
+      placeholder,
+      readOnly,
+      sensitive,
       showPerChar,
-      forwardedRef,
-      inputRef,
+      title,
+      type,
+      valid,
+      value,
+      warning,
       ...rest
     } = this.props
 
-    const { focus } = this.state
+    const { focus, hidden } = this.state
     const inputWidthValue = inputWidth || (type === 'byte' ? undefined : 'm')
 
     let Component = component
@@ -179,8 +218,7 @@ class Input extends React.Component {
       Component = ByteInput
       const { max } = this.props
       if (!inputWidthValue && max) {
-        const maxValue = showPerChar ? Math.ceil(max / 2) : max
-        inputStyle = { maxWidth: maxValue === 16 ? '30rem' : `${maxValue * 1.8 + 0.65}rem` }
+        inputStyle = { maxWidth: this._computeByteInputWidth() }
       }
     } else if (type === 'textarea') {
       Component = 'textarea'
@@ -210,11 +248,12 @@ class Input extends React.Component {
       [style.actionable]: hasAction,
       [style.textarea]: type === 'textarea',
     })
+    const inputElemCls = classnames(style.input, { [style.hidden]: hidden })
 
     const passedProps = {
       ...rest,
       ...(type === 'byte' ? { showPerChar } : {}),
-      ref: inputRef ? mergeRefs([this.input, inputRef]) : this.input,
+      ref: inputRef ? combineRefs([this.input, inputRef]) : this.input,
     }
 
     return (
@@ -223,7 +262,7 @@ class Input extends React.Component {
           {icon && <Icon className={style.icon} icon={icon} />}
           <Component
             key="i"
-            className={style.input}
+            className={inputElemCls}
             type={type}
             value={value}
             onFocus={this.onFocus}
@@ -239,12 +278,31 @@ class Input extends React.Component {
           />
           {v && <Valid show={v} />}
           {loading && <Spinner className={style.spinner} small />}
+          {sensitive && value.length !== 0 && (
+            <Tooltip
+              delay={[1250, 200]}
+              hideOnClick={false}
+              content={<Message content={hidden ? m.showValue : m.hideValue} />}
+              trigger="mouseenter"
+              small
+            >
+              <Button
+                icon={hidden ? 'visibility' : 'visibility_off'}
+                className={style.hideToggle}
+                onClick={this.handleHideToggleClick}
+                naked
+                type="button"
+              />
+            </Tooltip>
+          )}
+          {append && <div className={style.append}>{append}</div>}
         </div>
         {hasAction && (
           <div className={style.actions}>
-            <Button className={style.button} disabled={disabled} {...action} />
+            <Button className={style.button} {...action} disabled={disabled || actionDisable} />
           </div>
         )}
+        {children}
       </div>
     )
   }

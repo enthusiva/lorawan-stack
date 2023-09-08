@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/jinzhu/gorm"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth"
 	clusterauth "go.thethings.network/lorawan-stack/v3/pkg/auth/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
@@ -31,6 +29,7 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpclog"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/warning"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -40,6 +39,7 @@ var (
 	errInvalidAuthorization     = errors.DefineUnauthenticated("invalid_authorization", "invalid authorization")
 	errTokenNotFound            = errors.DefineUnauthenticated("token_not_found", "token not found")
 	errTokenExpired             = errors.DefineUnauthenticated("token_expired", "token expired")
+	errAPIKeyExpired            = errors.DefineUnauthenticated("api_key_expired", "api key expired")
 	errUserRejected             = errors.DefinePermissionDenied("user_rejected", "user account was rejected", "description")
 	errUserRequested            = errors.DefinePermissionDenied("user_requested", "user account approval is pending", "description")
 	errUserSuspended            = errors.DefinePermissionDenied("user_suspended", "user account was suspended", "description")
@@ -54,7 +54,7 @@ var requestAccessKey requestAccessKeyType
 
 type requestAccess struct {
 	authInfo     *ttnpb.AuthInfoResponse
-	entityRights map[ttnpb.Identifiers]*ttnpb.Rights
+	entityRights map[*ttnpb.EntityIdentifiers]*ttnpb.Rights
 }
 
 func (is *IdentityServer) withRequestAccessCache(ctx context.Context) context.Context {
@@ -77,6 +77,7 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 	if md.AuthType == "" {
 		return &ttnpb.AuthInfoResponse{}, nil
 	}
+
 	if md.AuthType == clusterauth.AuthType {
 		if err := clusterauth.Authorized(ctx); err != nil {
 			return nil, err
@@ -95,17 +96,17 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 		return nil, err
 	}
 
-	var fetch func(db *gorm.DB) error
+	var fetch func(ctx context.Context, st store.Store) error
 	res := &ttnpb.AuthInfoResponse{}
-	userFieldMask := &types.FieldMask{Paths: []string{"admin", "state", "state_description", "primary_email_address_validated_at"}}
-	clientFieldMask := &types.FieldMask{Paths: []string{"state", "state_description"}}
+	userFieldMask := []string{"admin", "state", "state_description", "primary_email_address_validated_at"}
+	clientFieldMask := []string{"state", "state_description"}
 	var user *ttnpb.User
 	var userRights *ttnpb.Rights
 
 	switch tokenType {
 	case auth.APIKey:
-		fetch = func(db *gorm.DB) error {
-			ids, apiKey, err := store.GetAPIKeyStore(db).GetAPIKey(ctx, tokenID)
+		fetch = func(ctx context.Context, st store.Store) error {
+			ids, apiKey, err := st.GetAPIKeyByID(ctx, tokenID)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return errAPIKeyNotFound.WithCause(err)
@@ -121,16 +122,19 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 			if !valid {
 				return errInvalidAuthorization.New()
 			}
+			if expiresAt := ttnpb.StdTime(apiKey.ExpiresAt); expiresAt != nil && expiresAt.Before(time.Now()) {
+				return errAPIKeyExpired.New()
+			}
 			apiKey.Key = ""
 			apiKey.Rights = ttnpb.RightsFrom(apiKey.Rights...).Implied().GetRights()
-			res.AccessMethod = &ttnpb.AuthInfoResponse_APIKey{
-				APIKey: &ttnpb.AuthInfoResponse_APIKeyAccess{
-					APIKey:    *apiKey,
-					EntityIDs: *ids.EntityIdentifiers(),
+			res.AccessMethod = &ttnpb.AuthInfoResponse_ApiKey{
+				ApiKey: &ttnpb.AuthInfoResponse_APIKeyAccess{
+					ApiKey:    apiKey,
+					EntityIds: ids.GetEntityIdentifiers(),
 				},
 			}
 			if ids.EntityType() == "user" {
-				user, err = store.GetUserStore(db).GetUser(ctx, ids.Identifiers().(*ttnpb.UserIdentifiers), userFieldMask)
+				user, err = st.GetUser(ctx, ids.GetUserIds(), userFieldMask)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						return errAPIKeyNotFound.WithCause(err)
@@ -142,8 +146,8 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 			return nil
 		}
 	case auth.AccessToken:
-		fetch = func(db *gorm.DB) error {
-			accessToken, err := store.GetOAuthStore(db).GetAccessToken(ctx, tokenID)
+		fetch = func(ctx context.Context, st store.Store) error {
+			accessToken, err := st.GetAccessToken(ctx, tokenID)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return errTokenNotFound.WithCause(err)
@@ -159,22 +163,22 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 			if !valid {
 				return errInvalidAuthorization.New()
 			}
-			if accessToken.ExpiresAt.Before(time.Now()) {
+			if expiresAt := ttnpb.StdTime(accessToken.ExpiresAt); expiresAt != nil && expiresAt.Before(time.Now()) {
 				return errTokenExpired.New()
 			}
 			accessToken.AccessToken, accessToken.RefreshToken = "", ""
 			accessToken.Rights = ttnpb.RightsFrom(accessToken.Rights...).Implied().GetRights()
-			res.AccessMethod = &ttnpb.AuthInfoResponse_OAuthAccessToken{
-				OAuthAccessToken: accessToken,
+			res.AccessMethod = &ttnpb.AuthInfoResponse_OauthAccessToken{
+				OauthAccessToken: accessToken,
 			}
-			user, err = store.GetUserStore(db).GetUser(ctx, &accessToken.UserIDs, userFieldMask)
+			user, err = st.GetUser(ctx, accessToken.UserIds, userFieldMask)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return errTokenNotFound.WithCause(err)
 				}
 				return err
 			}
-			client, err := store.GetClientStore(db).GetClient(ctx, &accessToken.ClientIDs, clientFieldMask)
+			client, err := st.GetClient(ctx, accessToken.ClientIds, clientFieldMask)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return errTokenNotFound.WithCause(err)
@@ -182,18 +186,18 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 				return err
 			}
 			switch client.State {
-			case ttnpb.STATE_REQUESTED:
+			case ttnpb.State_STATE_REQUESTED:
 				// OAuth authorization only passes for collaborators, so this is ok.
-			case ttnpb.STATE_APPROVED:
+			case ttnpb.State_STATE_APPROVED:
 				// Normal OAuth client.
-			case ttnpb.STATE_REJECTED:
+			case ttnpb.State_STATE_REJECTED:
 				if client.StateDescription != "" {
 					return errOAuthClientRejected.WithAttributes("description", client.StateDescription)
 				}
 				return errOAuthClientRejected.New()
-			case ttnpb.STATE_FLAGGED:
+			case ttnpb.State_STATE_FLAGGED:
 				// Innocent until proven guilty.
-			case ttnpb.STATE_SUSPENDED:
+			case ttnpb.State_STATE_SUSPENDED:
 				if client.StateDescription != "" {
 					return errOAuthClientSuspended.WithAttributes("description", client.StateDescription)
 				}
@@ -205,8 +209,8 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 			return nil
 		}
 	case auth.SessionToken:
-		fetch = func(db *gorm.DB) error {
-			session, err := store.GetUserSessionStore(db).GetSessionByID(ctx, tokenID)
+		fetch = func(ctx context.Context, st store.Store) error {
+			session, err := st.GetSessionByID(ctx, tokenID)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return errTokenNotFound.WithCause(err)
@@ -222,14 +226,14 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 			if !valid {
 				return errInvalidAuthorization.New()
 			}
-			if session.ExpiresAt != nil && session.ExpiresAt.Before(time.Now()) {
+			if expiresAt := ttnpb.StdTime(session.ExpiresAt); expiresAt != nil && expiresAt.Before(time.Now()) {
 				return errTokenExpired.New()
 			}
 			session.SessionSecret = ""
 			res.AccessMethod = &ttnpb.AuthInfoResponse_UserSession{
 				UserSession: session,
 			}
-			user, err = store.GetUserStore(db).GetUser(ctx, &session.UserIdentifiers, userFieldMask)
+			user, err = st.GetUser(ctx, session.GetUserIds(), userFieldMask)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return errTokenNotFound.WithCause(err)
@@ -241,32 +245,32 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 			// current and future rights. When using this auth type, the respective
 			// handlers need to ensure thorough CSRF and CORS protection using
 			// appropriate middleware.
-			userRights = ttnpb.RightsFrom(ttnpb.RIGHT_ALL).Implied()
+			userRights = ttnpb.RightsFrom(ttnpb.Right_RIGHT_ALL).Implied()
 			return nil
 		}
 	default:
 		return nil, errUnsupportedAuthorization.New()
 	}
 
-	if err = is.withDatabase(ctx, fetch); err != nil {
+	if err = is.store.Transact(ctx, fetch); err != nil {
 		return nil, err
 	}
 
 	if user != nil {
-		rpclog.AddField(ctx, "auth.user_id", user.UserIdentifiers.UserID)
+		rpclog.AddField(ctx, "auth.user_id", user.GetIds().GetUserId())
 
 		if is.configFromContext(ctx).UserRegistration.ContactInfoValidation.Required && user.PrimaryEmailAddressValidatedAt == nil {
 			// Go to profile page, edit basic settings (such as email), delete account.
-			restrictRights(res, ttnpb.RightsFrom(ttnpb.RIGHT_USER_INFO, ttnpb.RIGHT_USER_SETTINGS_BASIC, ttnpb.RIGHT_USER_DELETE))
+			restrictRights(res, ttnpb.RightsFrom(ttnpb.Right_RIGHT_USER_INFO, ttnpb.Right_RIGHT_USER_SETTINGS_BASIC, ttnpb.Right_RIGHT_USER_DELETE))
 			warning.Add(ctx, "Restricted rights until email address validated")
 		}
 
 		switch user.State {
-		case ttnpb.STATE_REQUESTED:
+		case ttnpb.State_STATE_REQUESTED:
 			// Go to profile page, edit basic settings (such as email), delete account.
-			restrictRights(res, ttnpb.RightsFrom(ttnpb.RIGHT_USER_INFO, ttnpb.RIGHT_USER_SETTINGS_BASIC, ttnpb.RIGHT_USER_DELETE))
+			restrictRights(res, ttnpb.RightsFrom(ttnpb.Right_RIGHT_USER_INFO, ttnpb.Right_RIGHT_USER_SETTINGS_BASIC, ttnpb.Right_RIGHT_USER_DELETE))
 			warning.Add(ctx, "Restricted rights while account pending")
-		case ttnpb.STATE_APPROVED:
+		case ttnpb.State_STATE_APPROVED:
 			// Normal user.
 			if user.Admin {
 				res.IsAdmin = true
@@ -276,19 +280,19 @@ func (is *IdentityServer) authInfo(ctx context.Context) (info *ttnpb.AuthInfoRes
 					res.UniversalRights = ttnpb.AllAdminRights.Implied().Intersect(userRights)
 				}
 			}
-		case ttnpb.STATE_REJECTED:
+		case ttnpb.State_STATE_REJECTED:
 			// Go to profile page, delete account.
-			restrictRights(res, ttnpb.RightsFrom(ttnpb.RIGHT_USER_INFO, ttnpb.RIGHT_USER_DELETE))
+			restrictRights(res, ttnpb.RightsFrom(ttnpb.Right_RIGHT_USER_INFO, ttnpb.Right_RIGHT_USER_DELETE))
 			if user.StateDescription != "" {
 				warning.Add(ctx, fmt.Sprintf("Restricted rights after account rejection: %s", user.StateDescription))
 			} else {
 				warning.Add(ctx, "Restricted rights after account rejection")
 			}
-		case ttnpb.STATE_FLAGGED:
+		case ttnpb.State_STATE_FLAGGED:
 			// Innocent until proven guilty.
-		case ttnpb.STATE_SUSPENDED:
+		case ttnpb.State_STATE_SUSPENDED:
 			// Go to profile page.
-			restrictRights(res, ttnpb.RightsFrom(ttnpb.RIGHT_USER_INFO))
+			restrictRights(res, ttnpb.RightsFrom(ttnpb.Right_RIGHT_USER_INFO))
 			if user.StateDescription != "" {
 				warning.Add(ctx, fmt.Sprintf("Restricted rights after account suspension: %s", user.StateDescription))
 			} else {
@@ -315,32 +319,30 @@ func (is *IdentityServer) RequireAuthenticated(ctx context.Context) error {
 		return err
 	}
 
-	if userID := authInfo.GetEntityIdentifiers().GetUserIDs(); userID != nil {
-		err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-			user, err := store.GetUserStore(db).GetUser(ctx, userID, &types.FieldMask{Paths: []string{
-				"state",
-			}})
+	if userID := authInfo.GetEntityIdentifiers().GetUserIds(); userID != nil {
+		err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+			user, err := st.GetUser(ctx, userID, []string{"state"})
 			if err != nil {
 				return err
 			}
 
 			switch user.State {
-			case ttnpb.STATE_APPROVED:
+			case ttnpb.State_STATE_APPROVED:
 				return nil
-			case ttnpb.STATE_FLAGGED:
+			case ttnpb.State_STATE_FLAGGED:
 				// Flagged users have the same authentication presence as approved users until proven guilty.
 				return nil
-			case ttnpb.STATE_REQUESTED:
+			case ttnpb.State_STATE_REQUESTED:
 				if user.StateDescription != "" {
 					return errUserRequested.WithAttributes("description", user.StateDescription)
 				}
 				return errUserRequested.New()
-			case ttnpb.STATE_REJECTED:
+			case ttnpb.State_STATE_REJECTED:
 				if user.StateDescription != "" {
 					return errUserRejected.WithAttributes("description", user.StateDescription)
 				}
 				return errUserRejected.New()
-			case ttnpb.STATE_SUSPENDED:
+			case ttnpb.State_STATE_SUSPENDED:
 				if user.StateDescription != "" {
 					return errUserSuspended.WithAttributes("description", user.StateDescription)
 				}
@@ -353,13 +355,14 @@ func (is *IdentityServer) RequireAuthenticated(ctx context.Context) error {
 			return err
 		}
 	}
-	if apiKey := authInfo.GetAPIKey(); apiKey != nil {
+	if apiKey := authInfo.GetApiKey(); apiKey != nil {
 		return nil
-	} else if accessToken := authInfo.GetOAuthAccessToken(); accessToken != nil {
+	} else if accessToken := authInfo.GetOauthAccessToken(); accessToken != nil {
 		return nil
 	} else if userSession := authInfo.GetUserSession(); userSession != nil {
 		return nil
 	}
+
 	if len(authInfo.UniversalRights.GetRights()) > 0 {
 		return nil
 	}
@@ -394,19 +397,44 @@ func (is *IdentityServer) RequireAdmin(ctx context.Context) error {
 	return nil
 }
 
+var errUpdateAdminField = errors.DefinePermissionDenied("update_admin_field", "only admins can update the `{field}` field")
+
+// RequireAdminForFieldUpdate returns an error when the caller tries to update an admin-only field.
+func (is *IdentityServer) RequireAdminForFieldUpdate(ctx context.Context, fields, adminFields []string) error {
+	if is.IsAdmin(ctx) {
+		return nil
+	}
+	isAdminField := func(field string) bool {
+		for _, adminField := range adminFields {
+			if field == adminField {
+				return true
+			}
+		}
+		return false
+	}
+	for _, field := range fields {
+		if isAdminField(field) {
+			return errUpdateAdminField.WithAttributes("field", field)
+		}
+	}
+	return nil
+}
+
 func restrictRights(info *ttnpb.AuthInfoResponse, rights *ttnpb.Rights) {
-	if apiKey := info.GetAPIKey(); apiKey != nil {
+	if apiKey := info.GetApiKey().GetApiKey(); apiKey != nil {
 		apiKey.Rights = ttnpb.RightsFrom(apiKey.Rights...).Intersect(rights).GetRights()
-	} else if token := info.GetOAuthAccessToken(); token != nil {
+	} else if token := info.GetOauthAccessToken(); token != nil {
 		token.Rights = ttnpb.RightsFrom(token.Rights...).Intersect(rights).GetRights()
 	}
 	info.UniversalRights = info.UniversalRights.Intersect(rights)
 }
 
 type entityAccess struct {
+	ttnpb.UnimplementedEntityAccessServer
+
 	*IdentityServer
 }
 
-func (ea *entityAccess) AuthInfo(ctx context.Context, _ *types.Empty) (*ttnpb.AuthInfoResponse, error) {
+func (ea *entityAccess) AuthInfo(ctx context.Context, _ *emptypb.Empty) (*ttnpb.AuthInfoResponse, error) {
 	return ea.authInfo(ctx)
 }

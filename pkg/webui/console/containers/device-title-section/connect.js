@@ -16,8 +16,8 @@ import { connect } from 'react-redux'
 
 import {
   selectDeviceByIds,
-  selectDeviceUplinkFrameCount,
-  selectDeviceDownlinkFrameCount,
+  selectDeviceDerivedUplinkFrameCount,
+  selectDeviceDerivedDownlinkFrameCount,
   selectDeviceLastSeen,
 } from '@console/store/selectors/devices'
 
@@ -28,8 +28,8 @@ const mapStateToProps = (state, props) => {
     devId,
     appId,
     device: selectDeviceByIds(state, appId, devId),
-    uplinkFrameCount: selectDeviceUplinkFrameCount(state, appId, devId),
-    downlinkFrameCount: selectDeviceDownlinkFrameCount(state, appId, devId),
+    uplinkFrameCount: selectDeviceDerivedUplinkFrameCount(state, appId, devId),
+    downlinkFrameCount: selectDeviceDerivedDownlinkFrameCount(state, appId, devId),
     lastSeen: selectDeviceLastSeen(state, appId, devId),
   }
 }

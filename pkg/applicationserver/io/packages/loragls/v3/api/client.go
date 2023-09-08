@@ -24,8 +24,8 @@ import (
 	"net/url"
 	"path"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	urlutil "go.thethings.network/lorawan-stack/v3/pkg/util/url"
-	"go.thethings.network/lorawan-stack/v3/pkg/version"
 )
 
 // Option is an option for the API client.
@@ -38,7 +38,7 @@ type OptionFunc func(*Client)
 
 func (f OptionFunc) apply(c *Client) { f(c) }
 
-// Client is an API client for the LoRa Cloud Device Management v1 service.
+// Client is an API client for the LoRa Cloud Geolocation service.
 type Client struct {
 	token   string
 	baseURL *url.URL
@@ -47,33 +47,48 @@ type Client struct {
 
 const (
 	contentType      = "application/json"
-	defaultServerURL = "https://gls.loracloud.com"
-	basePath         = "/api/v3"
+	defaultServerURL = "https://mgs.loracloud.com"
+	basePath         = "/api"
+	authHeader       = "Authorization"
 )
 
-var (
-	userAgent        = "ttn-lw-application-server/" + version.TTN
-	DefaultServerURL *url.URL
-)
+// DefaultServerURL is the default server URL for LoRa Cloud Geolocation.
+var DefaultServerURL = func() *url.URL {
+	parsed, err := url.Parse(defaultServerURL)
+	if err != nil {
+		panic(fmt.Sprintf("loragls: failed to parse base URL: %v", err))
+	}
+	return parsed
+}()
 
-func (c *Client) newRequest(ctx context.Context, method, category, operation string, body io.Reader) (*http.Request, error) {
+func (c *Client) newRequest(ctx context.Context, method, version, category, operation string, body io.Reader) (*http.Request, error) {
 	u := urlutil.CloneURL(c.baseURL)
-	u.Path = path.Join(basePath, category, operation)
+	u.Path = path.Join(basePath, version, category, operation)
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("User-Agent", userAgent)
 	if c.token != "" {
-		req.Header.Set("Ocp-Apim-Subscription-Key", c.token)
+		req.Header.Set(authHeader, c.token)
 	}
 	return req, nil
 }
 
 // Do executes a new HTTP request with the given parameters and body and returns the response.
-func (c *Client) Do(ctx context.Context, method, category, operation string, body io.Reader) (*http.Response, error) {
-	req, err := c.newRequest(ctx, method, category, operation, body)
+func (c *Client) Do(ctx context.Context, method, version, category, operation string, body any) (*http.Response, error) {
+	buffer := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(buffer).Encode(body); err != nil {
+		return nil, err
+	}
+	log.FromContext(ctx).WithFields(log.Fields(
+		"method", method,
+		"version", version,
+		"category", category,
+		"operation", operation,
+		"body", buffer.String(),
+	)).Debug("Run GLS request")
+	req, err := c.newRequest(ctx, method, version, category, operation, buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -94,17 +109,55 @@ func WithBaseURL(baseURL *url.URL) Option {
 	})
 }
 
-// SolveSingleFrame attempts to solve the location of the end-device using the provided request.
-func (c *Client) SolveSingleFrame(ctx context.Context, request *SingleFrameRequest) (*ExtendedSingleFrameResponse, error) {
-	buffer := bytes.NewBuffer(nil)
-	if err := json.NewEncoder(buffer).Encode(request); err != nil {
-		return nil, err
-	}
-	resp, err := c.Do(ctx, http.MethodPost, "solve", "singleframe", buffer)
+// SolveSingleFrame attempts to solve the location of the end-device using the provided single frame request.
+func (c *Client) SolveSingleFrame(ctx context.Context, request *SingleFrameRequest) (*ExtendedLocationSolverResponse, error) {
+	resp, err := c.Do(ctx, http.MethodPost, "v1", "solve", "singleframe", request)
 	if err != nil {
 		return nil, err
 	}
-	response := &ExtendedSingleFrameResponse{}
+	response := &ExtendedLocationSolverResponse{}
+	err = parse(&response, resp)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// SolveMultiFrame attempts to solve the location of the end-device using the provided multi frame request.
+func (c *Client) SolveMultiFrame(ctx context.Context, request *MultiFrameRequest) (*ExtendedLocationSolverResponse, error) {
+	resp, err := c.Do(ctx, http.MethodPost, "v1", "solve", "multiframe", request)
+	if err != nil {
+		return nil, err
+	}
+	response := &ExtendedLocationSolverResponse{}
+	err = parse(&response, resp)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// SolveGNSS attempts to solve the location of the end-device using the provided GNSS request.
+func (c *Client) SolveGNSS(ctx context.Context, request *GNSSRequest) (*ExtendedGNSSLocationSolverResponse, error) {
+	resp, err := c.Do(ctx, http.MethodPost, "v1", "solve", "gnss_lr1110_singleframe", request)
+	if err != nil {
+		return nil, err
+	}
+	response := &ExtendedGNSSLocationSolverResponse{}
+	err = parse(&response, resp)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// SolveWiFi attempts to solve the location of the end-device using the provided WiFi request.
+func (c *Client) SolveWiFi(ctx context.Context, request *WiFiRequest) (*ExtendedWiFiLocationSolverResponse, error) {
+	resp, err := c.Do(ctx, http.MethodPost, "v1", "solve", "loraWifi", request)
+	if err != nil {
+		return nil, err
+	}
+	response := &ExtendedWiFiLocationSolverResponse{}
 	err = parse(&response, resp)
 	if err != nil {
 		return nil, err
@@ -122,12 +175,4 @@ func New(cl *http.Client, opts ...Option) (*Client, error) {
 		opt.apply(client)
 	}
 	return client, nil
-}
-
-func init() {
-	var err error
-	DefaultServerURL, err = url.Parse(defaultServerURL)
-	if err != nil {
-		panic(fmt.Sprintf("loragls: failed to parse base URL: %v", err))
-	}
 }

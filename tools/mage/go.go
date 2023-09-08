@@ -19,14 +19,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/blang/semver"
 	"github.com/magefile/mage/mg"
-	"github.com/magefile/mage/sh"
 )
 
 // Go namespace.
@@ -40,6 +38,13 @@ var goModuleEnv = map[string]string{
 
 var goTags = os.Getenv("GO_TAGS")
 
+const (
+	gofumpt      = "mvdan.cc/gofumpt@v0.4.0"
+	golangciLint = "github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1"
+	goveralls    = "github.com/mattn/goveralls@v0.0.11"
+	bufCLI       = "github.com/bufbuild/buf/cmd/buf@v1.25.1"
+)
+
 func buildGoArgs(cmd string, args ...string) []string {
 	if goTags != "" {
 		args = append([]string{fmt.Sprintf("-tags=%s", goTags)}, args...)
@@ -48,8 +53,7 @@ func buildGoArgs(cmd string, args ...string) []string {
 }
 
 func execGoFrom(dir string, stdout, stderr io.Writer, cmd string, args ...string) error {
-	_, err := sh.ExecFrom(dir, goModuleEnv, stdout, stderr, "go", buildGoArgs(cmd, args...)...)
-	return err
+	return execFrom(dir, goModuleEnv, stdout, stderr, "go", buildGoArgs(cmd, args...)...)
 }
 
 func execGo(stdout, stderr io.Writer, cmd string, args ...string) error {
@@ -65,7 +69,7 @@ func runGoFrom(dir string, args ...string) error {
 }
 
 func writeToFile(filename string, value []byte) error {
-	return ioutil.WriteFile(filename, value, 0644)
+	return os.WriteFile(filename, value, 0o644)
 }
 
 func outputGo(cmd string, args ...string) (string, error) {
@@ -98,10 +102,6 @@ func runGoTool(args ...string) error {
 	return runGoFrom("tools", append([]string{"-exec", "go run exec_from.go -dir .."}, args...)...)
 }
 
-func runUnconvert(pkgs ...string) error {
-	return runGoTool(append([]string{"github.com/mdempsky/unconvert", "-apply", "-safe"}, pkgs...)...)
-}
-
 // CheckVersion checks the installed Go version against the minimum version we support.
 func (Go) CheckVersion() error {
 	if mg.Verbose() {
@@ -121,7 +121,8 @@ func (Go) CheckVersion() error {
 	current := semver.Version{Major: uint64(major), Minor: uint64(minor), Patch: uint64(patch)}
 	min, _ := semver.Parse(minGoVersion)
 	if current.LT(min) {
-		return fmt.Errorf("Your version of Go (%s) is not supported. Please install Go %s or later", versionStr, minGoVersion)
+		return fmt.Errorf("Your version of Go (%s) is not supported. Please install Go %s or later",
+			versionStr, minGoVersion)
 	}
 	return nil
 }
@@ -165,7 +166,7 @@ func (g Go) Fmt() error {
 	if mg.Verbose() {
 		fmt.Printf("Formatting and simplifying %d Go packages\n", len(dirs))
 	}
-	return sh.RunCmd("gofmt", "-w", "-s")(dirs...)
+	return runGoTool(append([]string{gofumpt, "-w"}, dirs...)...)
 }
 
 // Lint lints all Go files.
@@ -180,32 +181,13 @@ func (g Go) Lint() error {
 	if mg.Verbose() {
 		fmt.Printf("Linting %d Go packages\n", len(dirs))
 	}
-	return runGoTool(append([]string{"github.com/mgechev/revive", "-config=.revive.toml", "-formatter=stylish"}, dirs...)...)
-}
-
-// Unconvert removes unnecessary type conversions from Go files.
-func (g Go) Unconvert() error {
-	dirs, err := g.packageDirs()
-	if err != nil {
-		return err
-	}
-	if len(dirs) == 0 {
-		return nil
-	}
-	if mg.Verbose() {
-		fmt.Printf("Removing unnecessary type conversions from %d Go packages\n", len(dirs))
-	}
-	var args []string
-	if goTags != "" {
-		args = append(args, "-tags", strings.Join(strings.Split(goTags, ","), " "))
-	}
-	return runUnconvert(append(args, dirs...)...)
+	return runGoTool(append([]string{golangciLint, "run"}, dirs...)...)
 }
 
 // Quality runs code quality checks on Go files.
 func (g Go) Quality() {
-	mg.Deps(g.Fmt, g.Unconvert)
-	g.Lint() // Errors are allowed.
+	mg.Deps(g.Fmt)
+	_ = g.Lint() // Errors are allowed.
 }
 
 func init() {
@@ -232,7 +214,7 @@ func (Go) TestBinaries() error {
 		fmt.Println("Testing Go binaries")
 	}
 	for _, binary := range goBinaries {
-		_, err := outputGo("run", binary, "--help")
+		_, err := outputGo("run", binary, "config")
 		if err != nil {
 			return err
 		}
@@ -267,7 +249,7 @@ func (g Go) Coveralls() error {
 	if err != nil {
 		return err
 	}
-	outFile, err := os.OpenFile("coveralls_"+goCoverageFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	outFile, err := os.OpenFile("coveralls_"+goCoverageFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
@@ -298,10 +280,15 @@ nextLine:
 	if mg.Verbose() {
 		fmt.Println("Sending Go coverage to Coveralls")
 	}
-	return runGoTool("github.com/mattn/goveralls", "-coverprofile=coveralls_"+goCoverageFile, "-service="+service)
+	return runGoTool(goveralls, "-coverprofile=coveralls_"+goCoverageFile, "-service="+service)
+}
+
+// Generate runs go generate.
+func (Go) Generate() error {
+	return execGo(os.Stdout, os.Stderr, "generate", "./...")
 }
 
 // Messages builds the file with translatable messages in Go code.
-func (g Go) Messages() error {
+func (Go) Messages() error {
 	return runGoTool("generate_i18n.go")
 }

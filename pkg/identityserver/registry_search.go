@@ -17,7 +17,6 @@ package identityserver
 import (
 	"context"
 
-	"github.com/jinzhu/gorm"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
@@ -25,35 +24,45 @@ import (
 )
 
 type registrySearch struct {
+	ttnpb.UnimplementedEntityRegistrySearchServer
+	ttnpb.UnimplementedEndDeviceRegistrySearchServer
+
 	*IdentityServer
 }
 
 var errSearchForbidden = errors.DefinePermissionDenied("search_forbidden", "search is forbidden")
 
-func (rs *registrySearch) memberForSearch(ctx context.Context) (*ttnpb.OrganizationOrUserIdentifiers, error) {
+func (rs *registrySearch) SearchApplications(ctx context.Context, req *ttnpb.SearchApplicationsRequest) (*ttnpb.Applications, error) {
 	authInfo, err := rs.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if authInfo.IsAdmin {
-		return nil, nil
-	}
 	member := authInfo.GetOrganizationOrUserIdentifiers()
-	if member != nil {
-		return member, nil
+	if member == nil {
+		return nil, errSearchForbidden.New()
 	}
-	return nil, errSearchForbidden.New()
-}
+	if authInfo.IsAdmin {
+		member = nil
+	}
 
-func (rs *registrySearch) SearchApplications(ctx context.Context, req *ttnpb.SearchApplicationsRequest) (*ttnpb.Applications, error) {
-	member, err := rs.memberForSearch(ctx)
-	if err != nil {
-		return nil, err
+	var searchFields []string
+	if req.IdContains != "" {
+		searchFields = append(searchFields, "ids")
 	}
-	req.FieldMask.Paths = cleanFieldMaskPaths(ttnpb.ApplicationFieldPathsNested, req.FieldMask.Paths, getPaths, nil)
+	if req.NameContains != "" {
+		searchFields = append(searchFields, "name")
+	}
+	if req.DescriptionContains != "" {
+		searchFields = append(searchFields, "description")
+	}
+	if len(req.AttributesContain) > 0 {
+		searchFields = append(searchFields, "attributes")
+	}
+	req.FieldMask = cleanFieldMaskPaths(ttnpb.ApplicationFieldPathsNested, req.FieldMask, append(getPaths, searchFields...), nil)
 	if req.Deleted {
 		ctx = store.WithSoftDeleted(ctx, true)
 	}
+
 	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
@@ -62,24 +71,30 @@ func (rs *registrySearch) SearchApplications(ctx context.Context, req *ttnpb.Sea
 			setTotalHeader(ctx, total)
 		}
 	}()
+
 	res := &ttnpb.Applications{}
-	err = rs.withDatabase(ctx, func(db *gorm.DB) error {
-		entityIDs, err := store.GetEntitySearch(db).FindApplications(ctx, member, req)
+	var callerMemberships store.MembershipChains
+
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		entityIDs, err := st.SearchApplications(ctx, member, req)
 		if err != nil {
 			return err
 		}
-		var ids []*ttnpb.ApplicationIdentifiers
-		for _, id := range entityIDs {
-			id := id.Identifiers().(*ttnpb.ApplicationIdentifiers)
-			if rights.RequireApplication(ctx, *id, ttnpb.RIGHT_APPLICATION_INFO) == nil {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
+		if len(entityIDs) == 0 {
 			return nil
 		}
+		if member != nil {
+			idStrings := make([]string, len(entityIDs))
+			for i, entityID := range entityIDs {
+				idStrings[i] = entityID.IDString()
+			}
+			callerMemberships, err = st.FindAccountMembershipChains(ctx, member, "application", idStrings...)
+			if err != nil {
+				return err
+			}
+		}
 		ctx = store.WithPagination(ctx, 0, 0, nil) // Reset pagination (already done in EntitySearch.FindApplications).
-		res.Applications, err = store.GetApplicationStore(db).FindApplications(ctx, ids, &req.FieldMask)
+		res.Applications, err = st.FindApplications(ctx, entityIDs, req.FieldMask.GetPaths())
 		if err != nil {
 			return err
 		}
@@ -88,18 +103,51 @@ func (rs *registrySearch) SearchApplications(ctx context.Context, req *ttnpb.Sea
 	if err != nil {
 		return nil, err
 	}
+
+	for i, app := range res.Applications {
+		entityRights := callerMemberships.GetRights(member, app.GetIds()).Union(authInfo.GetUniversalRights())
+		if !entityRights.IncludesAll(ttnpb.Right_RIGHT_APPLICATION_INFO) {
+			res.Applications[i] = app.PublicSafe()
+		}
+	}
+
 	return res, nil
 }
 
 func (rs *registrySearch) SearchClients(ctx context.Context, req *ttnpb.SearchClientsRequest) (*ttnpb.Clients, error) {
-	member, err := rs.memberForSearch(ctx)
+	authInfo, err := rs.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	req.FieldMask.Paths = cleanFieldMaskPaths(ttnpb.ClientFieldPathsNested, req.FieldMask.Paths, getPaths, nil)
+	member := authInfo.GetOrganizationOrUserIdentifiers()
+	if member == nil {
+		return nil, errSearchForbidden.New()
+	}
+	if authInfo.IsAdmin {
+		member = nil
+	}
+
+	var searchFields []string
+	if req.IdContains != "" {
+		searchFields = append(searchFields, "ids")
+	}
+	if req.NameContains != "" {
+		searchFields = append(searchFields, "name")
+	}
+	if req.DescriptionContains != "" {
+		searchFields = append(searchFields, "description")
+	}
+	if len(req.AttributesContain) > 0 {
+		searchFields = append(searchFields, "attributes")
+	}
+	if len(req.State) > 0 {
+		searchFields = append(searchFields, "state")
+	}
+	req.FieldMask = cleanFieldMaskPaths(ttnpb.ClientFieldPathsNested, req.FieldMask, append(getPaths, searchFields...), nil)
 	if req.Deleted {
 		ctx = store.WithSoftDeleted(ctx, true)
 	}
+
 	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
@@ -108,24 +156,30 @@ func (rs *registrySearch) SearchClients(ctx context.Context, req *ttnpb.SearchCl
 			setTotalHeader(ctx, total)
 		}
 	}()
+
 	res := &ttnpb.Clients{}
-	err = rs.withDatabase(ctx, func(db *gorm.DB) error {
-		entityIDs, err := store.GetEntitySearch(db).FindClients(ctx, member, req)
+	var callerMemberships store.MembershipChains
+
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		entityIDs, err := st.SearchClients(ctx, member, req)
 		if err != nil {
 			return err
 		}
-		var ids []*ttnpb.ClientIdentifiers
-		for _, id := range entityIDs {
-			id := id.Identifiers().(*ttnpb.ClientIdentifiers)
-			if rights.RequireClient(ctx, *id, ttnpb.RIGHT_CLIENT_ALL) == nil {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
+		if len(entityIDs) == 0 {
 			return nil
 		}
+		if member != nil {
+			idStrings := make([]string, len(entityIDs))
+			for i, entityID := range entityIDs {
+				idStrings[i] = entityID.IDString()
+			}
+			callerMemberships, err = st.FindAccountMembershipChains(ctx, member, "client", idStrings...)
+			if err != nil {
+				return err
+			}
+		}
 		ctx = store.WithPagination(ctx, 0, 0, nil) // Reset pagination (already done in EntitySearch.FindClients).
-		res.Clients, err = store.GetClientStore(db).FindClients(ctx, ids, &req.FieldMask)
+		res.Clients, err = st.FindClients(ctx, entityIDs, req.FieldMask.GetPaths())
 		if err != nil {
 			return err
 		}
@@ -134,24 +188,54 @@ func (rs *registrySearch) SearchClients(ctx context.Context, req *ttnpb.SearchCl
 	if err != nil {
 		return nil, err
 	}
+
+	for i, cli := range res.Clients {
+		entityRights := callerMemberships.GetRights(member, cli.GetIds()).Union(authInfo.GetUniversalRights())
+		if !entityRights.IncludesAll(ttnpb.Right_RIGHT_CLIENT_INFO) {
+			res.Clients[i] = cli.PublicSafe()
+		}
+	}
+
 	return res, nil
 }
 
 func (rs *registrySearch) SearchGateways(ctx context.Context, req *ttnpb.SearchGatewaysRequest) (*ttnpb.Gateways, error) {
-	member, err := rs.memberForSearch(ctx)
+	authInfo, err := rs.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
+	member := authInfo.GetOrganizationOrUserIdentifiers()
+	if member == nil {
+		return nil, errSearchForbidden.New()
+	}
+	if authInfo.IsAdmin {
+		member = nil
+	}
+
 	// Backwards compatibility for frequency_plan_id field.
-	if ttnpb.HasAnyField(req.FieldMask.Paths, "frequency_plan_id") {
-		if !ttnpb.HasAnyField(req.FieldMask.Paths, "frequency_plan_ids") {
-			req.FieldMask.Paths = append(req.FieldMask.Paths, "frequency_plan_ids")
+	if ttnpb.HasAnyField(req.FieldMask.GetPaths(), "frequency_plan_id") {
+		if !ttnpb.HasAnyField(req.FieldMask.GetPaths(), "frequency_plan_ids") {
+			req.FieldMask.Paths = append(req.FieldMask.GetPaths(), "frequency_plan_ids")
 		}
 	}
-	req.FieldMask.Paths = cleanFieldMaskPaths(ttnpb.GatewayFieldPathsNested, req.FieldMask.Paths, getPaths, []string{"frequency_plan_id"})
+	var searchFields []string
+	if req.IdContains != "" {
+		searchFields = append(searchFields, "ids")
+	}
+	if req.NameContains != "" {
+		searchFields = append(searchFields, "name")
+	}
+	if req.DescriptionContains != "" {
+		searchFields = append(searchFields, "description")
+	}
+	if len(req.AttributesContain) > 0 {
+		searchFields = append(searchFields, "attributes")
+	}
+	req.FieldMask = cleanFieldMaskPaths(ttnpb.GatewayFieldPathsNested, req.FieldMask, append(getPaths, searchFields...), []string{"frequency_plan_id"})
 	if req.Deleted {
 		ctx = store.WithSoftDeleted(ctx, true)
 	}
+
 	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
@@ -160,24 +244,30 @@ func (rs *registrySearch) SearchGateways(ctx context.Context, req *ttnpb.SearchG
 			setTotalHeader(ctx, total)
 		}
 	}()
+
 	res := &ttnpb.Gateways{}
-	err = rs.withDatabase(ctx, func(db *gorm.DB) error {
-		entityIDs, err := store.GetEntitySearch(db).FindGateways(ctx, member, req)
+	var callerMemberships store.MembershipChains
+
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		entityIDs, err := st.SearchGateways(ctx, member, req)
 		if err != nil {
 			return err
 		}
-		var ids []*ttnpb.GatewayIdentifiers
-		for _, id := range entityIDs {
-			id := id.Identifiers().(*ttnpb.GatewayIdentifiers)
-			if rights.RequireGateway(ctx, *id, ttnpb.RIGHT_GATEWAY_INFO) == nil {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
+		if len(entityIDs) == 0 {
 			return nil
 		}
+		if member != nil {
+			idStrings := make([]string, len(entityIDs))
+			for i, entityID := range entityIDs {
+				idStrings[i] = entityID.IDString()
+			}
+			callerMemberships, err = st.FindAccountMembershipChains(ctx, member, "gateway", idStrings...)
+			if err != nil {
+				return err
+			}
+		}
 		ctx = store.WithPagination(ctx, 0, 0, nil) // Reset pagination (already done in EntitySearch.FindGateways).
-		res.Gateways, err = store.GetGatewayStore(db).FindGateways(ctx, ids, &req.FieldMask)
+		res.Gateways, err = st.FindGateways(ctx, entityIDs, req.FieldMask.GetPaths())
 		if err != nil {
 			return err
 		}
@@ -186,24 +276,57 @@ func (rs *registrySearch) SearchGateways(ctx context.Context, req *ttnpb.SearchG
 	if err != nil {
 		return nil, err
 	}
-	for _, gtw := range res.Gateways {
-		// Backwards compatibility for frequency_plan_id field.
-		if len(gtw.FrequencyPlanIDs) > 0 {
-			gtw.FrequencyPlanID = gtw.FrequencyPlanIDs[0]
+
+	if member != nil {
+		for i, gtw := range res.Gateways {
+			entityRights := callerMemberships.GetRights(member, gtw.GetIds()).Union(authInfo.GetUniversalRights())
+			if !entityRights.IncludesAll(ttnpb.Right_RIGHT_GATEWAY_INFO) {
+				res.Gateways[i] = gtw.PublicSafe()
+			}
 		}
 	}
+
+	for _, gtw := range res.Gateways {
+		// Backwards compatibility for frequency_plan_id field.
+		if len(gtw.FrequencyPlanIds) > 0 {
+			gtw.FrequencyPlanId = gtw.FrequencyPlanIds[0]
+		}
+	}
+
 	return res, nil
 }
 
 func (rs *registrySearch) SearchOrganizations(ctx context.Context, req *ttnpb.SearchOrganizationsRequest) (*ttnpb.Organizations, error) {
-	member, err := rs.memberForSearch(ctx)
+	authInfo, err := rs.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	req.FieldMask.Paths = cleanFieldMaskPaths(ttnpb.OrganizationFieldPathsNested, req.FieldMask.Paths, getPaths, nil)
+	member := authInfo.GetOrganizationOrUserIdentifiers()
+	if member == nil {
+		return nil, errSearchForbidden.New()
+	}
+	if authInfo.IsAdmin {
+		member = nil
+	}
+
+	var searchFields []string
+	if req.IdContains != "" {
+		searchFields = append(searchFields, "ids")
+	}
+	if req.NameContains != "" {
+		searchFields = append(searchFields, "name")
+	}
+	if req.DescriptionContains != "" {
+		searchFields = append(searchFields, "description")
+	}
+	if len(req.AttributesContain) > 0 {
+		searchFields = append(searchFields, "attributes")
+	}
+	req.FieldMask = cleanFieldMaskPaths(ttnpb.OrganizationFieldPathsNested, req.FieldMask, append(getPaths, searchFields...), nil)
 	if req.Deleted {
 		ctx = store.WithSoftDeleted(ctx, true)
 	}
+
 	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
@@ -212,24 +335,30 @@ func (rs *registrySearch) SearchOrganizations(ctx context.Context, req *ttnpb.Se
 			setTotalHeader(ctx, total)
 		}
 	}()
+
 	res := &ttnpb.Organizations{}
-	err = rs.withDatabase(ctx, func(db *gorm.DB) error {
-		entityIDs, err := store.GetEntitySearch(db).FindOrganizations(ctx, member, req)
+	var callerMemberships store.MembershipChains
+
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		entityIDs, err := st.SearchOrganizations(ctx, member, req)
 		if err != nil {
 			return err
 		}
-		var ids []*ttnpb.OrganizationIdentifiers
-		for _, id := range entityIDs {
-			id := id.Identifiers().(*ttnpb.OrganizationIdentifiers)
-			if rights.RequireOrganization(ctx, *id, ttnpb.RIGHT_ORGANIZATION_INFO) == nil {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
+		if len(entityIDs) == 0 {
 			return nil
 		}
+		if member != nil {
+			idStrings := make([]string, len(entityIDs))
+			for i, entityID := range entityIDs {
+				idStrings[i] = entityID.IDString()
+			}
+			callerMemberships, err = st.FindAccountMembershipChains(ctx, member, "organization", idStrings...)
+			if err != nil {
+				return err
+			}
+		}
 		ctx = store.WithPagination(ctx, 0, 0, nil) // Reset pagination (already done in EntitySearch.FindOrganizations).
-		res.Organizations, err = store.GetOrganizationStore(db).FindOrganizations(ctx, ids, &req.FieldMask)
+		res.Organizations, err = st.FindOrganizations(ctx, entityIDs, req.FieldMask.GetPaths())
 		if err != nil {
 			return err
 		}
@@ -238,21 +367,49 @@ func (rs *registrySearch) SearchOrganizations(ctx context.Context, req *ttnpb.Se
 	if err != nil {
 		return nil, err
 	}
+
+	if member != nil {
+		for i, org := range res.Organizations {
+			entityRights := callerMemberships.GetRights(member, org.GetIds()).Union(authInfo.GetUniversalRights())
+			if !entityRights.IncludesAll(ttnpb.Right_RIGHT_CLIENT_INFO) {
+				res.Organizations[i] = org.PublicSafe()
+			}
+		}
+	}
+
 	return res, nil
 }
 
 func (rs *registrySearch) SearchUsers(ctx context.Context, req *ttnpb.SearchUsersRequest) (*ttnpb.Users, error) {
-	member, err := rs.memberForSearch(ctx)
+	authInfo, err := rs.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if member != nil {
+	if !authInfo.IsAdmin {
 		return nil, errSearchForbidden.New()
 	}
-	req.FieldMask.Paths = cleanFieldMaskPaths(ttnpb.UserFieldPathsNested, req.FieldMask.Paths, getPaths, nil)
+
+	var searchFields []string
+	if req.IdContains != "" {
+		searchFields = append(searchFields, "ids")
+	}
+	if req.NameContains != "" {
+		searchFields = append(searchFields, "name")
+	}
+	if req.DescriptionContains != "" {
+		searchFields = append(searchFields, "description")
+	}
+	if len(req.AttributesContain) > 0 {
+		searchFields = append(searchFields, "attributes")
+	}
+	if len(req.State) > 0 {
+		searchFields = append(searchFields, "state")
+	}
+	req.FieldMask = cleanFieldMaskPaths(ttnpb.UserFieldPathsNested, req.FieldMask, append(getPaths, searchFields...), nil)
 	if req.Deleted {
 		ctx = store.WithSoftDeleted(ctx, true)
 	}
+
 	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
@@ -261,24 +418,26 @@ func (rs *registrySearch) SearchUsers(ctx context.Context, req *ttnpb.SearchUser
 			setTotalHeader(ctx, total)
 		}
 	}()
+
 	res := &ttnpb.Users{}
-	err = rs.withDatabase(ctx, func(db *gorm.DB) error {
-		entityIDs, err := store.GetEntitySearch(db).FindUsers(ctx, nil, req)
+
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		entityIDs, err := st.SearchUsers(ctx, req)
 		if err != nil {
 			return err
 		}
+		if len(entityIDs) == 0 {
+			return nil
+		}
 		var ids []*ttnpb.UserIdentifiers
 		for _, id := range entityIDs {
-			id := id.Identifiers().(*ttnpb.UserIdentifiers)
-			if rights.RequireUser(ctx, *id, ttnpb.RIGHT_USER_INFO) == nil {
-				ids = append(ids, id)
-			}
+			ids = append(ids, id)
 		}
 		if len(ids) == 0 {
 			return nil
 		}
 		ctx = store.WithPagination(ctx, 0, 0, nil) // Reset pagination (already done in EntitySearch.FindUsers).
-		res.Users, err = store.GetUserStore(db).FindUsers(ctx, ids, &req.FieldMask)
+		res.Users, err = st.FindUsers(ctx, ids, req.FieldMask.GetPaths())
 		if err != nil {
 			return err
 		}
@@ -290,12 +449,67 @@ func (rs *registrySearch) SearchUsers(ctx context.Context, req *ttnpb.SearchUser
 	return res, nil
 }
 
-func (rs *registrySearch) SearchEndDevices(ctx context.Context, req *ttnpb.SearchEndDevicesRequest) (*ttnpb.EndDevices, error) {
-	err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_DEVICES_READ)
+func (rs *registrySearch) SearchAccounts(
+	ctx context.Context, req *ttnpb.SearchAccountsRequest,
+) (*ttnpb.SearchAccountsResponse, error) {
+	authInfo, err := rs.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	req.FieldMask.Paths = cleanFieldMaskPaths(ttnpb.EndDeviceFieldPathsNested, req.FieldMask.Paths, getPaths, nil)
+
+	// Limit the amount of data we provide to non-admin users when searching across all accounts.
+	if req.CollaboratorOf == nil && !authInfo.IsAdmin {
+		// Require a search query of at least 2 characters.
+		if len(req.Query) < 2 {
+			return &ttnpb.SearchAccountsResponse{}, nil
+		}
+
+		// Limit the number of results to 10.
+		var total uint64
+		ctx = store.WithPagination(ctx, 10, 1, &total)
+		defer func() {
+			if err == nil {
+				setTotalHeader(ctx, total)
+			}
+		}()
+	}
+
+	res := &ttnpb.SearchAccountsResponse{}
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		ids, err := st.SearchAccounts(ctx, req)
+		if err != nil {
+			return err
+		}
+		res.AccountIds = ids
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (rs *registrySearch) SearchEndDevices(ctx context.Context, req *ttnpb.SearchEndDevicesRequest) (*ttnpb.EndDevices, error) {
+	err := rights.RequireApplication(ctx, req.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ)
+	if err != nil {
+		return nil, err
+	}
+	var searchFields []string
+	if req.IdContains != "" {
+		searchFields = append(searchFields, "ids")
+	}
+	if req.NameContains != "" {
+		searchFields = append(searchFields, "name")
+	}
+	if req.DescriptionContains != "" {
+		searchFields = append(searchFields, "description")
+	}
+	if len(req.AttributesContain) > 0 {
+		searchFields = append(searchFields, "attributes")
+	}
+	req.FieldMask = cleanFieldMaskPaths(ttnpb.EndDeviceFieldPathsNested, req.FieldMask, append(getPaths, searchFields...), nil)
+
 	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
@@ -304,9 +518,10 @@ func (rs *registrySearch) SearchEndDevices(ctx context.Context, req *ttnpb.Searc
 			setTotalHeader(ctx, total)
 		}
 	}()
+
 	res := &ttnpb.EndDevices{}
-	err = rs.withDatabase(ctx, func(db *gorm.DB) error {
-		ids, err := store.GetEntitySearch(db).FindEndDevices(ctx, req)
+	err = rs.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		ids, err := st.SearchEndDevices(ctx, req)
 		if err != nil {
 			return err
 		}
@@ -314,7 +529,7 @@ func (rs *registrySearch) SearchEndDevices(ctx context.Context, req *ttnpb.Searc
 			return nil
 		}
 		ctx = store.WithPagination(ctx, 0, 0, nil) // Reset pagination (already done in EntitySearch.FindEndDevices).
-		res.EndDevices, err = store.GetEndDeviceStore(db).FindEndDevices(ctx, ids, &req.FieldMask)
+		res.EndDevices, err = st.FindEndDevices(ctx, ids, req.FieldMask.GetPaths())
 		if err != nil {
 			return err
 		}

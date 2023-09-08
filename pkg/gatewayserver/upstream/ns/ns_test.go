@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
@@ -39,7 +39,7 @@ func TestNSHandler(t *testing.T) {
 	ctx := log.NewContext(test.Context(), test.GetLogger(t))
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	gtwIDs := ttnpb.GatewayIdentifiers{GatewayID: "test-gateway"}
+	gtwIDs := ttnpb.GatewayIdentifiers{GatewayId: "test-gateway"}
 	ns, nsAddr := mock.StartNS(ctx)
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
@@ -55,57 +55,57 @@ func TestNSHandler(t *testing.T) {
 	componenttest.StartComponent(t, c)
 	defer c.Close()
 	mustHavePeer(ctx, c, ttnpb.ClusterRole_NETWORK_SERVER)
-	h := NewHandler(ctx, c, nil)
+	h := NewHandler(ctx, c, c, nil)
 
 	for _, tc := range []struct {
 		Name                 string
 		Message              *ttnpb.GatewayUplinkMessage
-		EndDeviceIdentifiers ttnpb.EndDeviceIdentifiers
+		EndDeviceIdentifiers *ttnpb.EndDeviceIdentifiers
 	}{
 		{
 			Name: "OneUplink",
 			Message: &ttnpb.GatewayUplinkMessage{
-				BandID: band.EU_863_870,
-				UplinkMessage: &ttnpb.UplinkMessage{
+				BandId: band.EU_863_870,
+				Message: &ttnpb.UplinkMessage{
 					Payload: &ttnpb.Message{
-						MHDR: ttnpb.MHDR{MType: ttnpb.MType_JOIN_REQUEST, Major: ttnpb.Major_LORAWAN_R1},
-						MIC:  []byte{0x4E, 0x61, 0xBC, 0x00},
+						MHdr: &ttnpb.MHDR{MType: ttnpb.MType_JOIN_REQUEST, Major: ttnpb.Major_LORAWAN_R1},
+						Mic:  []byte{0x4E, 0x61, 0xBC, 0x00},
 						Payload: &ttnpb.Message_JoinRequestPayload{JoinRequestPayload: &ttnpb.JoinRequestPayload{
-							JoinEUI:  types.EUI64{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22},
-							DevEUI:   types.EUI64{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11},
-							DevNonce: [2]byte{0x46, 0x50},
+							JoinEui:  types.EUI64{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22}.Bytes(),
+							DevEui:   types.EUI64{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}.Bytes(),
+							DevNonce: []byte{0x46, 0x50},
 						}},
 					},
 					RxMetadata: []*ttnpb.RxMetadata{{
-						GatewayIdentifiers: gtwIDs,
-						RSSI:               89,
-						ChannelRSSI:        89,
-						SNR:                9.25,
+						GatewayIds:  &gtwIDs,
+						Rssi:        89,
+						ChannelRssi: 89,
+						Snr:         9.25,
 					}},
-					Settings: ttnpb.TxSettings{
-						Frequency:  868300000,
-						CodingRate: "4/5",
-						DataRate: ttnpb.DataRate{Modulation: &ttnpb.DataRate_LoRa{LoRa: &ttnpb.LoRaDataRate{
+					Settings: &ttnpb.TxSettings{
+						Frequency: 868300000,
+						DataRate: &ttnpb.DataRate{Modulation: &ttnpb.DataRate_Lora{Lora: &ttnpb.LoRaDataRate{
 							SpreadingFactor: 11,
 							Bandwidth:       125000,
+							CodingRate:      band.Cr4_5,
 						}}},
 					},
 				},
 			},
-			EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-				DeviceID: "test-device",
+			EndDeviceIdentifiers: &ttnpb.EndDeviceIdentifiers{
+				DeviceId: "test-device",
 			},
 		},
 	} {
 		t.Run(tc.Name, func(t *testing.T) {
 			a := assertions.New(t)
-			err := h.HandleUplink(ctx, ttnpb.GatewayIdentifiers{}, tc.EndDeviceIdentifiers, tc.Message)
+			err := h.HandleUplink(ctx, nil, tc.EndDeviceIdentifiers, tc.Message)
 			if !a.So(err, should.BeNil) {
 				t.Fatalf("Error sending upstream message: %v", err)
 			}
 			select {
 			case msg := <-ns.Up():
-				if !a.So(msg, should.Resemble, tc.Message.UplinkMessage) {
+				if !a.So(msg, should.Resemble, tc.Message.Message) {
 					t.Fatalf("Unexpected upstream message: %v", msg)
 				}
 			case <-time.After(timeout):

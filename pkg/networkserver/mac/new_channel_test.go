@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/encoding/lorawan"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -41,27 +41,27 @@ func TestNewChannelReq(t *testing.T) {
 			CurrentChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				nil,
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 			},
 			DesiredChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				nil,
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 			},
 		},
@@ -69,35 +69,35 @@ func TestNewChannelReq(t *testing.T) {
 			CurrentChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  124,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_3,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 				},
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 			},
 			DesiredChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  124,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_3,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 				},
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 			},
 		},
@@ -105,42 +105,42 @@ func TestNewChannelReq(t *testing.T) {
 			CurrentChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  124,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_3,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 				},
 				nil,
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  129,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					UplinkFrequency:  150,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 			},
 			DesiredChannels: []*ttnpb.MACParameters_Channel{
 				nil,
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  130,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 			},
 			Commands: []*ttnpb.MACCommand_NewChannelReq{
@@ -148,14 +148,14 @@ func TestNewChannelReq(t *testing.T) {
 				{
 					ChannelIndex:     1,
 					Frequency:        128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					ChannelIndex:     3,
 					Frequency:        130,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					ChannelIndex: 4,
@@ -166,42 +166,42 @@ func TestNewChannelReq(t *testing.T) {
 			CurrentChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  124,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_3,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 				},
 				nil,
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  129,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					UplinkFrequency:  150,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 			},
 			DesiredChannels: []*ttnpb.MACParameters_Channel{
 				nil,
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  130,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 			},
 			Commands: []*ttnpb.MACCommand_NewChannelReq{
@@ -209,8 +209,8 @@ func TestNewChannelReq(t *testing.T) {
 				{
 					ChannelIndex:     1,
 					Frequency:        128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					ChannelIndex: 4,
@@ -222,50 +222,50 @@ func TestNewChannelReq(t *testing.T) {
 			CurrentChannels: []*ttnpb.MACParameters_Channel{
 				{
 					UplinkFrequency:  124,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_3,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 				},
 				nil,
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  129,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					UplinkFrequency:  150,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 			},
 			DesiredChannels: []*ttnpb.MACParameters_Channel{
 				nil,
 				{
 					UplinkFrequency:  128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 				{
 					UplinkFrequency:  123,
-					MinDataRateIndex: ttnpb.DATA_RATE_1,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_1,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 				{
 					UplinkFrequency:  130,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_5,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_5,
 				},
 			},
 			Commands: []*ttnpb.MACCommand_NewChannelReq{
 				{
 					ChannelIndex:     1,
 					Frequency:        128,
-					MinDataRateIndex: ttnpb.DATA_RATE_2,
-					MaxDataRateIndex: ttnpb.DATA_RATE_4,
+					MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+					MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_4,
 				},
 			},
 			RejectedFrequencies: []uint64{130},
@@ -282,7 +282,7 @@ func TestNewChannelReq(t *testing.T) {
 		test.RunSubtest(t, test.SubtestConfig{
 			Name: func() string {
 				formatChannels := func(chs ...*ttnpb.MACParameters_Channel) string {
-					return fmt.Sprintf("[%s]", test.JoinStringsMap(func(_, v interface{}) string {
+					return fmt.Sprintf("[%s]", test.JoinStringsMap(func(_, v any) string {
 						ch := v.(*ttnpb.MACParameters_Channel)
 						if ch == nil {
 							return "nil"
@@ -294,10 +294,10 @@ func TestNewChannelReq(t *testing.T) {
 					formatChannels(tc.CurrentChannels...),
 					formatChannels(tc.DesiredChannels...),
 					test.JoinStringsf("%d", ",", false, tc.RejectedFrequencies),
-					test.JoinStringsMap(func(freq, rs interface{}) string {
+					test.JoinStringsMap(func(freq, rs any) string {
 						return fmt.Sprintf("%d:[%s]",
 							freq,
-							test.JoinStringsMap(func(_, v interface{}) string {
+							test.JoinStringsMap(func(_, v any) string {
 								r := v.(*ttnpb.MACState_DataRateRange)
 								return fmt.Sprintf("%d-%d", r.MinDataRateIndex, r.MaxDataRateIndex)
 							}, "", rs.(*ttnpb.MACState_DataRateRanges).Ranges),
@@ -307,12 +307,12 @@ func TestNewChannelReq(t *testing.T) {
 			}(),
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 				makeDevice := func() *ttnpb.EndDevice {
-					return CopyEndDevice(&ttnpb.EndDevice{
-						MACState: &ttnpb.MACState{
-							CurrentParameters: ttnpb.MACParameters{
+					return ttnpb.Clone(&ttnpb.EndDevice{
+						MacState: &ttnpb.MACState{
+							CurrentParameters: &ttnpb.MACParameters{
 								Channels: tc.CurrentChannels,
 							},
-							DesiredParameters: ttnpb.MACParameters{
+							DesiredParameters: &ttnpb.MACParameters{
 								Channels: tc.DesiredChannels,
 							},
 							RejectedFrequencies:    tc.RejectedFrequencies,
@@ -326,8 +326,8 @@ func TestNewChannelReq(t *testing.T) {
 					Parallel: true,
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						dev := makeDevice()
-						max := len(dev.MACState.CurrentParameters.Channels)
-						if n := len(dev.MACState.DesiredParameters.Channels); n > max {
+						max := len(dev.MacState.CurrentParameters.Channels)
+						if n := len(dev.MacState.DesiredParameters.Channels); n > max {
 							max = n
 						}
 						needs := make(map[int]struct{}, max)
@@ -335,7 +335,7 @@ func TestNewChannelReq(t *testing.T) {
 							needs[int(cmd.ChannelIndex)] = struct{}{}
 						}
 						for i := 0; i <= max+1; i++ {
-							a.So(DeviceNeedsNewChannelReqAtIndex(dev, i), func() func(interface{}, ...interface{}) string {
+							a.So(DeviceNeedsNewChannelReqAtIndex(dev, i), func() func(any, ...any) string {
 								if _, ok := needs[i]; ok {
 									return should.BeTrue
 								}
@@ -345,12 +345,13 @@ func TestNewChannelReq(t *testing.T) {
 					},
 				})
 
+				phy := &band.Band{CFListType: ttnpb.CFListType_FREQUENCIES}
 				test.RunSubtestFromContext(ctx, test.SubtestConfig{
 					Name:     "DeviceNeedsNewChannelReq",
 					Parallel: true,
 					Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 						dev := makeDevice()
-						a.So(DeviceNeedsNewChannelReq(dev), func() func(interface{}, ...interface{}) string {
+						a.So(DeviceNeedsNewChannelReq(dev, phy), func() func(any, ...any) string {
 							if len(tc.Commands) > 0 {
 								return should.BeTrue
 							}
@@ -371,19 +372,19 @@ func TestNewChannelReq(t *testing.T) {
 					}
 				}() {
 					cmdsFit := n >= len(tc.Commands)
-					cmdLen := (1 + lorawan.DefaultMACCommands[ttnpb.CID_NEW_CHANNEL].DownlinkLength) * uint16(n)
+					cmdLen := (1 + lorawan.DefaultMACCommands[ttnpb.MACCommandIdentifier_CID_NEW_CHANNEL].DownlinkLength) * uint16(n)
 					cmds := tc.Commands[:n]
-					answerLen := (1 + lorawan.DefaultMACCommands[ttnpb.CID_NEW_CHANNEL].UplinkLength) * uint16(n)
+					answerLen := (1 + lorawan.DefaultMACCommands[ttnpb.MACCommandIdentifier_CID_NEW_CHANNEL].UplinkLength) * uint16(n)
 					test.RunSubtestFromContext(ctx, test.SubtestConfig{
 						Name:     fmt.Sprintf("EnqueueNewChannelReq/max_down_len:%d", cmdLen),
 						Parallel: true,
 						Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
 							dev := makeDevice()
-							st := EnqueueNewChannelReq(ctx, dev, cmdLen, answerLen)
+							st := EnqueueNewChannelReq(ctx, dev, cmdLen, answerLen, phy)
 							expectedDevice := makeDevice()
 							var expectedEventBuilders []events.Builder
 							for _, cmd := range cmds {
-								expectedDevice.MACState.PendingRequests = append(expectedDevice.MACState.PendingRequests, cmd.MACCommand())
+								expectedDevice.MacState.PendingRequests = append(expectedDevice.MacState.PendingRequests, cmd.MACCommand())
 								expectedEventBuilders = append(expectedEventBuilders, EvtEnqueueNewChannelRequest.BindData(cmd))
 							}
 							a.So(st.QueuedEvents, should.ResembleEventBuilders, events.Builders(expectedEventBuilders))
@@ -412,10 +413,16 @@ func TestHandleNewChannelAns(t *testing.T) {
 		{
 			Name: "nil payload",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Payload: nil,
 			Error:   ErrNoPayload,
@@ -423,10 +430,16 @@ func TestHandleNewChannelAns(t *testing.T) {
 		{
 			Name: "no request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Payload: &ttnpb.MACCommand_NewChannelAns{
 				FrequencyAck: true,
@@ -438,26 +451,30 @@ func TestHandleNewChannelAns(t *testing.T) {
 					DataRateAck:  true,
 				})),
 			},
-			Error: ErrRequestNotFound,
+			Error: ErrRequestNotFound.WithAttributes("cid", ttnpb.MACCommandIdentifier_CID_NEW_CHANNEL),
 		},
 		{
 			Name: "frequency nack/data rate ack/no rejections",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_NewChannelReq{
 							ChannelIndex:     4,
 							Frequency:        42,
-							MinDataRateIndex: ttnpb.DATA_RATE_2,
-							MaxDataRateIndex: ttnpb.DATA_RATE_3,
+							MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+							MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests:     []*ttnpb.MACCommand{},
 					RejectedFrequencies: []uint64{42},
+					CurrentParameters:   &ttnpb.MACParameters{},
+					DesiredParameters:   &ttnpb.MACParameters{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_NewChannelAns{
@@ -472,32 +489,36 @@ func TestHandleNewChannelAns(t *testing.T) {
 		{
 			Name: "frequency nack/data rate nack/rejected frequencies:(1,2,100)",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_NewChannelReq{
 							ChannelIndex:     4,
 							Frequency:        42,
-							MinDataRateIndex: ttnpb.DATA_RATE_2,
-							MaxDataRateIndex: ttnpb.DATA_RATE_3,
+							MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+							MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 						}).MACCommand(),
 					},
 					RejectedFrequencies: []uint64{1, 2, 100},
+					CurrentParameters:   &ttnpb.MACParameters{},
+					DesiredParameters:   &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests:     []*ttnpb.MACCommand{},
 					RejectedFrequencies: []uint64{1, 2, 42, 100},
 					RejectedDataRateRanges: map[uint64]*ttnpb.MACState_DataRateRanges{
 						42: {
 							Ranges: []*ttnpb.MACState_DataRateRange{
 								{
-									MinDataRateIndex: ttnpb.DATA_RATE_2,
-									MaxDataRateIndex: ttnpb.DATA_RATE_3,
+									MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+									MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 								},
 							},
 						},
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_NewChannelAns{},
@@ -508,20 +529,22 @@ func TestHandleNewChannelAns(t *testing.T) {
 		{
 			Name: "both ack",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_NewChannelReq{
 							ChannelIndex:     4,
 							Frequency:        42,
-							MinDataRateIndex: ttnpb.DATA_RATE_2,
-							MaxDataRateIndex: ttnpb.DATA_RATE_3,
+							MinDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_2,
+							MaxDataRateIndex: ttnpb.DataRateIndex_DATA_RATE_3,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Channels: []*ttnpb.MACParameters_Channel{
 							nil,
 							nil,
@@ -536,7 +559,8 @@ func TestHandleNewChannelAns(t *testing.T) {
 							},
 						},
 					},
-					PendingRequests: []*ttnpb.MACCommand{},
+					DesiredParameters: &ttnpb.MACParameters{},
+					PendingRequests:   []*ttnpb.MACCommand{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_NewChannelAns{
@@ -556,7 +580,7 @@ func TestHandleNewChannelAns(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				evs, err := HandleNewChannelAns(ctx, dev, tc.Payload)
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||

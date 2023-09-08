@@ -21,7 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -31,18 +31,22 @@ import (
 	"github.com/spf13/cobra"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/commands"
 	cmdio "go.thethings.network/lorawan-stack/v3/cmd/internal/io"
+	"go.thethings.network/lorawan-stack/v3/cmd/internal/shared"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/shared/version"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
 	conf "go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/experimental"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/exporter/cli"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/io"
+	pkgversion "go.thethings.network/lorawan-stack/v3/pkg/version"
 	"golang.org/x/oauth2"
 )
 
 var (
-	logger       *log.Logger
+	logger       log.Stack
 	name         = "ttn-lw-cli"
 	mgr          = conf.InitializeWithDefaults(name, "ttn_lw", DefaultConfig)
 	config       = &Config{}
@@ -52,16 +56,49 @@ var (
 
 	inputDecoder io.Decoder
 
+	versionUpdate       chan *pkgversion.Update
+	versionCheckTimeout = time.Second
+
+	telemetrySubmission chan struct{}
+	telemetryTimeout    = time.Second
+
 	// Root command is the entrypoint of the program
 	Root = &cobra.Command{
-		Use:               name,
-		SilenceErrors:     true,
-		SilenceUsage:      true,
-		Short:             "The Things Network Command-line Interface",
-		PersistentPreRunE: preRun(checkAuth, refreshToken, requireAuth),
+		Use:           name,
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		Short:         "The Things Network Command-line Interface",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Name() == "__complete" {
+				return nil
+			}
+
+			return preRun(checkAuth, refreshToken, requireAuth)(cmd, args)
+		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Name() == "__complete" {
+				return nil
+			}
+
 			// clean up the API
 			api.CloseAll()
+
+			select {
+			case <-ctx.Done():
+			case <-time.After(versionCheckTimeout):
+				logger.Warn("Version check timed out")
+			case versionUpdate, ok := <-versionUpdate:
+				if ok {
+					pkgversion.LogUpdate(ctx, versionUpdate)
+				}
+			}
+
+			select {
+			case <-ctx.Done():
+			case <-time.After(telemetryTimeout):
+				logger.Warn("Telemetry submission timed out")
+			case <-telemetrySubmission:
+			}
 
 			err := util.SaveAuthCache(cache)
 			if err != nil {
@@ -72,6 +109,8 @@ var (
 		},
 	}
 )
+
+func runNoop(cmd *cobra.Command, args []string) error { return nil }
 
 func preRun(tasks ...func() error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
@@ -85,6 +124,9 @@ func preRun(tasks ...func() error) func(cmd *cobra.Command, args []string) error
 		if err = mgr.Unmarshal(config); err != nil {
 			return err
 		}
+
+		// enable configured experimental features
+		experimental.EnableFeatures(config.Experimental.Features...)
 
 		// create input decoder on Stdin
 		if rd, ok := cmdio.BufferedPipe(os.Stdin); ok {
@@ -102,24 +144,84 @@ func preRun(tasks ...func() error) func(cmd *cobra.Command, args []string) error
 		cache = cache.ForID(config.CredentialsID)
 
 		// create logger
-		logger = log.NewLogger(
-			log.WithLevel(config.Log.Level),
-			log.WithHandler(log.NewCLI(os.Stderr)),
-		)
+		logger, err = shared.InitializeLogger(&config.Log)
+		if err != nil {
+			return err
+		}
 
 		ctx = log.NewContext(ctx, logger)
+
+		// Start the version check in background.
+		// The result is waited in the post run.
+		versionUpdate = make(chan *pkgversion.Update)
+		if config.SkipVersionCheck {
+			close(versionUpdate)
+		} else {
+			go func(ctx context.Context) {
+				defer close(versionUpdate)
+				update, err := pkgversion.CheckUpdate(ctx)
+				if err != nil {
+					log.FromContext(ctx).WithError(err).Warn("Failed to check version update")
+				} else if update != nil {
+					versionUpdate <- update
+				} else {
+					log.FromContext(ctx).Debug("No new version available")
+				}
+			}(ctx)
+		}
+
+		// Start the telemetry submission in the background.
+		// The result is waited in the post run.
+		telemetrySubmission = make(chan struct{})
+		if config.Telemetry.Enable {
+			logger.
+				WithField("documentation_url", "https://www.thethingsindustries.com/docs/reference/telemetry/cli").
+				Info("Telemetry is enabled. Check the documentation for more information on what is collected and how to disable it") // nolint:lll
+			go func(ctx context.Context) {
+				defer close(telemetrySubmission)
+				cli.NewCLITelemetry(
+					cli.WithCLITarget(config.Telemetry.Target),
+				).Run(ctx)
+			}(ctx)
+		} else {
+			close(telemetrySubmission)
+		}
+
+		// Drop default HTTP port numbers from OAuth server address if present.
+		// Causes issues with `--http.redirect-to-tls` stack option.
+		u, err := url.Parse(config.OAuthServerAddress)
+		if err != nil {
+			return err
+		}
+		if u.Port() == "443" && u.Scheme == "https" || u.Port() == "80" && u.Scheme == "http" {
+			u.Host = u.Hostname()
+			config.OAuthServerAddress = u.String()
+		}
+		if u.Scheme == "http" {
+			logger.Warn("Using insecure connection to OAuth server")
+		}
 
 		// prepare the API
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{}
 		api.SetLogger(logger)
 		if config.Insecure {
 			api.SetInsecure(true)
+			logger.Warn("Using insecure connection to API")
 		}
 		if config.DumpRequests {
 			api.SetDumpRequests(true)
 		}
+
+		// initializes seed for random related operations
+		rand.Seed(time.Now().UnixNano())
+
+		api.SetRetryMax(config.Retry.Max)
+		api.SetRetryDefaultTimeout(config.Retry.DefaultTimeout)
+		api.SetRetryEnableMetadata(config.Retry.EnableMetadata)
+		api.SetRetryJitter(config.Retry.Jitter)
+
 		if config.CA != "" {
-			pemBytes, err := ioutil.ReadFile(config.CA)
+			pemBytes, err := os.ReadFile(config.CA)
 			if err != nil {
 				return err
 			}
@@ -136,14 +238,6 @@ func preRun(tasks ...func() error) func(cmd *cobra.Command, args []string) error
 			}
 		}
 
-		// Drop default HTTP port numbers from OAuth server address if present.
-		// Causes issues with `--http.redirect-to-tls` stack option.
-		u, err := url.Parse(config.OAuthServerAddress)
-		if u.Port() == "443" && u.Scheme == "https" || u.Port() == "80" && u.Scheme == "http" {
-			u.Host = u.Hostname()
-			config.OAuthServerAddress = u.String()
-		}
-
 		// OAuth
 		oauth2Config = &oauth2.Config{
 			ClientID: "cli",
@@ -152,6 +246,12 @@ func preRun(tasks ...func() error) func(cmd *cobra.Command, args []string) error
 				TokenURL:  fmt.Sprintf("%s/token", config.OAuthServerAddress),
 				AuthStyle: oauth2.AuthStyleInParams,
 			},
+		}
+
+		if wantAll, err := cmd.Flags().GetBool("all"); err == nil && wantAll {
+			logger.Warn("The --all flag is not covered by our compatibility commitment.")
+			logger.Warn("This means that it may not work (or behave differently) with future versions of The Things Stack.")
+			logger.Warn("Only use the --all flag for development.")
 		}
 
 		for _, task := range tasks {
@@ -258,28 +358,38 @@ func requireAuth() error {
 		}
 		logger.Warnf("Access token expired at %s", friendlyExpiry)
 	}
-	return errUnauthenticated
+	return errUnauthenticated.New()
 }
 
 var (
 	versionCommand     = version.Print(Root)
 	genManPagesCommand = commands.GenManPages(Root)
 	genMDDocCommand    = commands.GenMDDoc(Root)
-	ganYAMLDocCommand  = commands.GenYAMLDoc(Root)
+	genJSONTreeCommand = commands.GenJSONTree(Root)
 	completeCommand    = commands.Complete()
 )
 
 func init() {
 	Root.SetGlobalNormalizationFunc(util.NormalizeFlags)
 	Root.PersistentFlags().AddFlagSet(mgr.Flags())
-	versionCommand.PersistentPreRunE = preRun()
+
+	versionCommand.PersistentPreRunE = runNoop
+	versionCommand.PersistentPostRunE = runNoop
 	Root.AddCommand(versionCommand)
-	genManPagesCommand.PersistentPreRunE = preRun()
+
+	genManPagesCommand.PersistentPreRunE = runNoop
+	genManPagesCommand.PersistentPostRunE = runNoop
 	Root.AddCommand(genManPagesCommand)
-	genMDDocCommand.PersistentPreRunE = preRun()
+
+	genMDDocCommand.PersistentPreRunE = runNoop
+	genMDDocCommand.PersistentPostRunE = runNoop
 	Root.AddCommand(genMDDocCommand)
-	ganYAMLDocCommand.PersistentPreRunE = preRun()
-	Root.AddCommand(ganYAMLDocCommand)
-	completeCommand.PersistentPreRunE = preRun()
+
+	genJSONTreeCommand.PersistentPreRunE = runNoop
+	genJSONTreeCommand.PersistentPostRunE = runNoop
+	Root.AddCommand(genJSONTreeCommand)
+
+	completeCommand.PersistentPreRunE = runNoop
+	completeCommand.PersistentPostRunE = runNoop
 	Root.AddCommand(completeCommand)
 }

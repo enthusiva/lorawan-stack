@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
-import bind from 'autobind-decorator'
+import React, { useCallback, useMemo } from 'react'
 import { defineMessages } from 'react-intl'
+import classnames from 'classnames'
 
-import Input from '@ttn-lw/components/input'
 import Button from '@ttn-lw/components/button'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
@@ -27,113 +26,119 @@ const m = defineMessages({
   deleteEntry: 'Delete entry',
 })
 
-class Entry extends React.Component {
-  _getKeyInputName() {
-    const { name, index } = this.props
+const Entry = ({
+  readOnly,
+  name,
+  value,
+  index,
+  onRemoveButtonClick,
+  onChange,
+  onBlur,
+  inputElement: InputElement,
+  indexAsKey,
+  valuePlaceholder,
+  keyPlaceholder,
+  additionalInputProps,
+}) => {
+  const _getKeyInputName = useMemo(() => `${name}[${index}].key`, [index, name])
 
-    return `${name}[${index}].key`
-  }
+  const _getValueInputName = useMemo(() => `${name}[${index}].value`, [index, name])
 
-  _getValueInputName() {
-    const { name, index } = this.props
+  const handleRemoveButtonClicked = useCallback(
+    event => {
+      onRemoveButtonClick(index, event)
+    },
+    [index, onRemoveButtonClick],
+  )
 
-    return `${name}[${index}].value`
-  }
+  const handleKeyChanged = useCallback(
+    newKey => {
+      onChange(index, { key: newKey })
+    },
+    [index, onChange],
+  )
 
-  @bind
-  handleRemoveButtonClicked(event) {
-    const { onRemoveButtonClick, index } = this.props
+  const handleValueChanged = useCallback(
+    newValue => {
+      onChange(index, { value: newValue })
+    },
+    [index, onChange],
+  )
 
-    onRemoveButtonClick(index, event)
-  }
+  const handleBlur = useCallback(
+    event => {
+      const { relatedTarget } = event
+      const nextTarget = relatedTarget || {}
 
-  @bind
-  handleKeyChanged(newKey) {
-    const { onChange, index } = this.props
+      if (nextTarget.name !== _getKeyInputName && nextTarget.name !== _getValueInputName) {
+        onBlur({
+          target: {
+            name,
+            value,
+          },
+        })
+      }
+    },
+    [onBlur, name, value, _getKeyInputName, _getValueInputName],
+  )
 
-    onChange(index, { key: newKey })
-  }
-
-  @bind
-  handleValueChanged(newValue) {
-    const { onChange, index } = this.props
-
-    onChange(index, { value: newValue })
-  }
-
-  @bind
-  handleBlur(event) {
-    const { name, onBlur, value } = this.props
-
-    const { relatedTarget } = event
-    const nextTarget = relatedTarget || {}
-
-    if (
-      nextTarget.name !== this._getKeyInputName() &&
-      nextTarget.name !== this._getValueInputName()
-    ) {
-      onBlur({
-        target: {
-          name,
-          value,
-        },
-      })
-    }
-  }
-
-  render() {
-    const { keyPlaceholder, valuePlaceholder, value, indexAsKey } = this.props
-
-    return (
-      <div className={style.entriesRow}>
-        {!indexAsKey && (
-          <Input
-            data-test-id={this._getKeyInputName()}
-            className={style.input}
-            name={this._getKeyInputName()}
-            placeholder={keyPlaceholder}
-            type="text"
-            onChange={this.handleKeyChanged}
-            onBlur={this.handleBlur}
-            value={value.key}
-            code
-          />
-        )}
-        <Input
-          data-test-id={this._getValueInputName()}
+  return (
+    <div className={style.entriesRow}>
+      {!indexAsKey && (
+        <InputElement
+          data-test-id={_getKeyInputName}
           className={style.input}
-          name={this._getValueInputName()}
-          placeholder={valuePlaceholder}
+          name={_getKeyInputName}
+          placeholder={keyPlaceholder}
           type="text"
-          onChange={this.handleValueChanged}
-          onBlur={this.handleBlur}
-          value={indexAsKey ? value : value.value}
+          onChange={handleKeyChanged}
+          onBlur={handleBlur}
+          value={value.key}
+          readOnly={readOnly}
           code
+          {...additionalInputProps}
         />
-        <Button
-          type="button"
-          onClick={this.handleRemoveButtonClicked}
-          icon="delete"
-          title={m.deleteEntry}
-          danger
-        />
-      </div>
-    )
-  }
+      )}
+      <InputElement
+        data-test-id={_getValueInputName}
+        className={classnames(style.input, { [style.inputIndexAsKey]: indexAsKey })}
+        name={_getValueInputName}
+        placeholder={valuePlaceholder}
+        type="text"
+        onChange={handleValueChanged}
+        onBlur={handleBlur}
+        value={indexAsKey ? value : value.value}
+        readOnly={readOnly}
+        code
+        {...additionalInputProps}
+      />
+      <Button
+        type="button"
+        onClick={handleRemoveButtonClicked}
+        icon="delete"
+        title={m.deleteEntry}
+        disabled={readOnly}
+        danger
+      />
+    </div>
+  )
 }
 
 Entry.propTypes = {
+  additionalInputProps: PropTypes.shape({}).isRequired,
   index: PropTypes.number.isRequired,
   indexAsKey: PropTypes.bool.isRequired,
+  inputElement: PropTypes.elementType.isRequired,
   keyPlaceholder: PropTypes.message.isRequired,
   name: PropTypes.string.isRequired,
   onBlur: PropTypes.func.isRequired,
   onChange: PropTypes.func.isRequired,
   onRemoveButtonClick: PropTypes.func.isRequired,
+  readOnly: PropTypes.bool,
   value: PropTypes.oneOfType([
     PropTypes.shape({
       key: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-      value: PropTypes.any,
+      value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     }),
     PropTypes.string,
   ]),
@@ -142,6 +147,7 @@ Entry.propTypes = {
 
 Entry.defaultProps = {
   value: undefined,
+  readOnly: false,
 }
 
 export default Entry

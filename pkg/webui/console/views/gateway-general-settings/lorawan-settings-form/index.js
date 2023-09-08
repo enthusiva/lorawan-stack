@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import UnitInput from '@ttn-lw/components/unit-input'
 
 import { GsFrequencyPlansSelect } from '@console/containers/freq-plans-select'
 
+import tooltipIds from '@ttn-lw/lib/constants/tooltip-ids'
 import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 
@@ -65,7 +66,7 @@ const isNotValidDuration = value => {
 }
 
 const LorawanSettingsForm = React.memo(props => {
-  const { gateway, onSubmit, onSubmitSuccess } = props
+  const { gateway, onSubmit } = props
 
   const [error, setError] = React.useState(undefined)
 
@@ -85,12 +86,13 @@ const LorawanSettingsForm = React.memo(props => {
     setShowFrequencyPlanWarning(isEmptyFrequencyPlan(freqPlan.value))
   }, [])
 
-  const initialValues = React.useMemo(() => {
-    return {
+  const initialValues = React.useMemo(
+    () => ({
       ...validationSchema.cast(gateway),
       frequency_plan_id: gateway.frequency_plan_id || frequencyPlans.EMPTY_FREQ_PLAN,
-    }
-  }, [gateway])
+    }),
+    [gateway],
+  )
 
   const onFormSubmit = React.useCallback(
     async (values, { resetForm, setSubmitting }) => {
@@ -104,13 +106,12 @@ const LorawanSettingsForm = React.memo(props => {
       try {
         await onSubmit(castedValues)
         resetForm({ values: castedValues })
-        onSubmitSuccess()
       } catch (err) {
         setSubmitting(false)
         setError(err)
       }
     },
-    [onSubmit, onSubmitSuccess],
+    [onSubmit],
   )
 
   return (
@@ -126,25 +127,27 @@ const LorawanSettingsForm = React.memo(props => {
         menuPlacement="top"
         onChange={onFrequencyPlanChange}
         warning={showFrequencyPlanWarning ? sharedMessages.frequencyPlanWarning : undefined}
+        tooltipId={tooltipIds.FREQUENCY_PLAN}
       />
       <Form.Field
         title={sharedMessages.gatewayScheduleDownlinkLate}
         name="schedule_downlink_late"
         component={Checkbox}
         description={sharedMessages.scheduleDownlinkLateDescription}
+        tooltipId={tooltipIds.SCHEDULE_DOWNLINK_LATE}
       />
       <Form.Field
-        title={sharedMessages.dutyCycle}
         name="enforce_duty_cycle"
         component={Checkbox}
-        label={sharedMessages.enforced}
+        label={sharedMessages.enforceDutyCycle}
         description={sharedMessages.enforceDutyCycleDescription}
+        tooltipId={tooltipIds.ENFORCE_DUTY_CYCLE}
       />
       <Form.Field
         title={sharedMessages.scheduleAnyTimeDelay}
         name="schedule_anytime_delay"
-        inputWidth="s"
-        component={UnitInput}
+        component={UnitInput.Duration}
+        unitSelector={['ms', 's']}
         description={{
           ...sharedMessages.scheduleAnyTimeDescription,
           values: {
@@ -168,6 +171,7 @@ const LorawanSettingsForm = React.memo(props => {
             : undefined
         }
         required
+        tooltipId={tooltipIds.SCHEDULE_ANYTIME_DELAY}
       />
       <SubmitBar>
         <Form.Submit component={SubmitButton} message={sharedMessages.saveChanges} />
@@ -179,7 +183,6 @@ const LorawanSettingsForm = React.memo(props => {
 LorawanSettingsForm.propTypes = {
   gateway: PropTypes.gateway.isRequired,
   onSubmit: PropTypes.func.isRequired,
-  onSubmitSuccess: PropTypes.func.isRequired,
 }
 
 export default LorawanSettingsForm

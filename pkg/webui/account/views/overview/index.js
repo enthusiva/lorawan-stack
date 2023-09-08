@@ -34,9 +34,7 @@ import style from './overview.styl'
 
 const m = defineMessages({
   accountAppInfoTitle: 'Welcome, {userId}! 👋',
-  accountAppInfoMessage: `<p>You have successfully logged into the Account App. The Account App is the official user account management application of The Things Stack. In the near future, you will additionally be able to use this application to</p>
-<ul><li>Manage your active sessions</li><li>Manage your OAuth authorizations</li></ul>
-  `,
+  accountAppInfoMessage: `<p>You have successfully logged into the Account App. The Account App is the official user account management application of The Things Stack.</p>`,
   accountAppConsoleInfo:
     'If you wish to manage your applications, end devices and/or gateways, you can use the button below to head over to the Console.',
   goToConsole: 'Go to the Console',
@@ -68,13 +66,13 @@ const Overview = () => {
           <Message
             content={m.accountAppInfoMessage}
             values={{
-              p: msg => <p>{msg}</p>,
+              p: msg => <p key={msg}>{msg}</p>,
               ul: msg => <ol key="list">{msg}</ol>,
               li: msg => <li>{msg}</li>,
             }}
           />
           <Message component="p" content={m.accountAppConsoleInfo} />
-          <Button.AnchorLink href={consoleUrl} message={m.goToConsole} />
+          <Button.AnchorLink primary href={consoleUrl} message={m.goToConsole} />
         </Col>
       </Row>
     </Container>

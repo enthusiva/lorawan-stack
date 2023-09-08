@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,158 +13,72 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
-import bind from 'autobind-decorator'
 import { Container, Col, Row } from 'react-grid-system'
-import { replace } from 'connected-react-router'
+import { useParams } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 
-import api from '@console/api'
+import { GATEWAY } from '@console/constants/entities'
 
 import PageTitle from '@ttn-lw/components/page-title'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import toast from '@ttn-lw/components/toast'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
-import withRequest from '@ttn-lw/lib/components/with-request'
+import RequireRequest from '@ttn-lw/lib/components/require-request'
 
-import CollaboratorForm from '@console/components/collaborator-form'
+import ConsoleCollaboratorsForm from '@console/containers/collaborators-form'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
+import { getCollaborator, getCollaboratorsList } from '@ttn-lw/lib/store/actions/collaborators'
+import { selectCollaboratorById } from '@ttn-lw/lib/store/selectors/collaborators'
 
-import { getCollaborator } from '@console/store/actions/collaborators'
+const GatewayCollaboratorEditInner = () => {
+  const { gtwId, collaboratorId, collaboratorType } = useParams()
 
-import {
-  selectSelectedGatewayId,
-  selectGatewayRights,
-  selectGatewayPseudoRights,
-  selectGatewayRightsFetching,
-  selectGatewayRightsError,
-} from '@console/store/selectors/gateways'
-import {
-  selectUserCollaborator,
-  selectOrganizationCollaborator,
-  selectCollaboratorFetching,
-  selectCollaboratorError,
-} from '@console/store/selectors/collaborators'
-
-@connect(
-  (state, props) => {
-    const gtwId = selectSelectedGatewayId(state, props)
-
-    const { collaboratorId, collaboratorType } = props.match.params
-
-    const collaborator =
-      collaboratorType === 'user'
-        ? selectUserCollaborator(state)
-        : selectOrganizationCollaborator(state)
-
-    const fetching = selectGatewayRightsFetching(state) || selectCollaboratorFetching(state)
-    const error = selectGatewayRightsError(state) || selectCollaboratorError(state)
-
-    return {
-      collaboratorId,
-      collaboratorType,
-      collaborator,
-      gtwId,
-      rights: selectGatewayRights(state),
-      pseudoRights: selectGatewayPseudoRights(state),
-      fetching,
-      error,
-    }
-  },
-  dispatch => ({
-    getCollaborator: (gtwId, collaboratorId, isUser) => {
-      dispatch(getCollaborator('gateway', gtwId, collaboratorId, isUser))
-    },
-    redirectToList: gtwId => {
-      dispatch(replace(`/gateways/${gtwId}/collaborators`))
-    },
-  }),
-  (stateProps, dispatchProps, ownProps) => ({
-    ...stateProps,
-    ...dispatchProps,
-    ...ownProps,
-    getGatewayCollaborator: () =>
-      dispatchProps.getCollaborator(
-        stateProps.gtwId,
-        stateProps.collaboratorId,
-        stateProps.collaboratorType === 'user',
-      ),
-    redirectToList: () => dispatchProps.redirectToList(stateProps.gtwId),
-  }),
-)
-@withRequest(
-  ({ getGatewayCollaborator }) => getGatewayCollaborator(),
-  ({ fetching, collaborator }) => fetching || !Boolean(collaborator),
-)
-@withBreadcrumb('gtws.single.collaborators.edit', props => {
-  const { gtwId, collaboratorId, collaboratorType } = props
-
-  return (
+  useBreadcrumbs(
+    'gtws.single.collaborators.edit',
     <Breadcrumb
       path={`/gateways/${gtwId}/collaborators/${collaboratorType}/${collaboratorId}`}
       content={sharedMessages.edit}
-    />
+    />,
   )
-})
-export default class GatewayCollaboratorEdit extends React.Component {
-  static propTypes = {
-    collaborator: PropTypes.collaborator.isRequired,
-    collaboratorId: PropTypes.string.isRequired,
-    gtwId: PropTypes.string.isRequired,
-    pseudoRights: PropTypes.rights.isRequired,
-    redirectToList: PropTypes.func.isRequired,
-    rights: PropTypes.rights.isRequired,
-  }
 
-  state = {
-    error: '',
-  }
-
-  @bind
-  handleSubmit(updatedCollaborator) {
-    const { gtwId } = this.props
-
-    return api.gateway.collaborators.update(gtwId, updatedCollaborator)
-  }
-
-  handleSubmitSuccess() {
-    toast({
-      message: sharedMessages.collaboratorUpdateSuccess,
-      type: toast.types.SUCCESS,
-    })
-  }
-
-  @bind
-  async handleDelete(updatedCollaborator) {
-    const { gtwId } = this.props
-
-    return api.gateway.collaborators.remove(gtwId, updatedCollaborator)
-  }
-
-  render() {
-    const { collaborator, collaboratorId, rights, redirectToList, pseudoRights } = this.props
-
-    return (
-      <Container>
-        <PageTitle title={sharedMessages.collaboratorEdit} values={{ collaboratorId }} />
-        <Row>
-          <Col lg={8} md={12}>
-            <CollaboratorForm
-              error={this.state.error}
-              onSubmit={this.handleSubmit}
-              onSubmitSuccess={this.handleSubmitSuccess}
-              onDelete={this.handleDelete}
-              onDeleteSuccess={redirectToList}
-              collaborator={collaborator}
-              pseudoRights={pseudoRights}
-              rights={rights}
-              update
-            />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Container>
+      <PageTitle title={sharedMessages.collaboratorEdit} values={{ collaboratorId }} />
+      <Row>
+        <Col lg={8} md={12}>
+          <ConsoleCollaboratorsForm
+            entity={GATEWAY}
+            entityId={gtwId}
+            collaboratorId={collaboratorId}
+            collaboratorType={collaboratorType}
+            update
+          />
+        </Col>
+      </Row>
+    </Container>
+  )
 }
+
+const GatewayCollaboratorEdit = () => {
+  const { gtwId, collaboratorId, collaboratorType } = useParams()
+
+  const isUser = collaboratorType === 'user'
+
+  // Check if collaborator still exists after being possibly deleted.
+  const collaborator = useSelector(state => selectCollaboratorById(state, collaboratorId))
+  const hasCollaborator = Boolean(collaborator)
+
+  return (
+    <RequireRequest
+      requestAction={[
+        getCollaborator('gateway', gtwId, collaboratorId, isUser),
+        getCollaboratorsList('gateway', gtwId),
+      ]}
+    >
+      {hasCollaborator && <GatewayCollaboratorEditInner collaboratorType={collaboratorType} />}
+    </RequireRequest>
+  )
+}
+
+export default GatewayCollaboratorEdit

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import React from 'react'
-import { storiesOf } from '@storybook/react'
 import { action } from '@storybook/addon-actions'
 
 import Wizard, { WizardContext } from '@ttn-lw/components/wizard'
@@ -59,7 +58,11 @@ const Debug = () => (
 const stepSubmit = desc => data => action(desc)(data)
 const onComplete = data => action('OnComplete')(data)
 
-storiesOf('Wizard', module).add('Basic', () => (
+export default {
+  title: 'Wizard',
+}
+
+export const Basic = () => (
   <Wizard onComplete={onComplete} completeMessage="Create account" initialStepId="1">
     <Wizard.Stepper>
       <Wizard.Stepper.Step title="Account settings" description="E-mail and password" />
@@ -70,9 +73,7 @@ storiesOf('Wizard', module).add('Basic', () => (
       <Wizard.Step title="Account settings" id="1">
         <Wizard.Form
           validationSchema={Yup.object({
-            email: Yup.string()
-              .email()
-              .required(),
+            email: Yup.string().email().required(),
             password: Yup.string().required(),
           }).noUnknown()}
           initialValues={{ email: '', password: '' }}
@@ -86,10 +87,7 @@ storiesOf('Wizard', module).add('Basic', () => (
         <Wizard.Form
           onSubmit={stepSubmit('step2')}
           validationSchema={Yup.object({
-            year: Yup.number()
-              .min(1900)
-              .max(1999)
-              .required(),
+            year: Yup.number().min(1900).max(1999).required(),
             gender: Yup.string().required(),
           }).noUnknown()}
           initialValues={{ year: 0, gender: '' }}
@@ -122,4 +120,4 @@ storiesOf('Wizard', module).add('Basic', () => (
     </Wizard.Steps>
     <Debug />
   </Wizard>
-))
+)

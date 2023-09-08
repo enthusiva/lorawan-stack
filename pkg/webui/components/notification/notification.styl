@@ -33,7 +33,7 @@ left-border($color)
     border-left-width: $border-width
 
     .icon
-      margin-right: $cs.l - $border-width
+      margin-right: $cs.m - $border-width
       margin-left: 0
 
     .container
@@ -58,6 +58,12 @@ left-border($color)
   &.success
     left-border($c-success)
     color: $c-success
+
+  .message
+    display: flex
+    align-items: flex-start
+    flex-direction: column
+    gap: $cs.xs
 
   .title
     text-margin-bottom($cs.s)

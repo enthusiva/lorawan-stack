@@ -12,18 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package goproto
+package goproto_test
 
 import (
 	"bytes"
 	"reflect"
 	"testing"
 
-	"github.com/golang/protobuf/ptypes/struct"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"github.com/spf13/cast"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type jsonMarshaler struct {
@@ -43,7 +44,7 @@ func TestStructProto(t *testing.T) {
 	a := assertions.New(t)
 
 	ptr := "ptr"
-	m := map[string]interface{}{
+	m := map[string]any{
 		"foo":            "bar",
 		"ptr":            &ptr,
 		"answer":         42,
@@ -55,9 +56,9 @@ func TestStructProto(t *testing.T) {
 		"eui":            types.EUI64{1, 2, 3, 4, 5, 6, 7, 8},
 		"jsonMarshaler":  &jsonMarshaler{Text: "testtext"},
 	}
-	s, err := Struct(m)
+	s, err := goproto.Struct(m)
 	a.So(err, should.BeNil)
-	sm, err := Map(s)
+	sm, err := goproto.Map(s)
 	a.So(err, should.BeNil)
 	for k, v := range m {
 		a.So(s.Fields, should.ContainKey, k)
@@ -93,7 +94,7 @@ func TestStructProto(t *testing.T) {
 			a.So(sm[k], should.Equal, rv.String())
 
 		case reflect.Slice, reflect.Array:
-			var vt []interface{}
+			var vt []any
 			a.So(s.Fields[k].Kind, should.HaveSameTypeAs, &structpb.Value_ListValue{})
 			a.So(sm[k], should.HaveSameTypeAs, vt)
 			if a.So(sm[k], should.HaveLength, rv.Len()) {
@@ -105,7 +106,7 @@ func TestStructProto(t *testing.T) {
 			}
 
 		case reflect.Struct, reflect.Map:
-			var vt map[string]interface{}
+			var vt map[string]any
 			a.So(s.Fields[k].Kind, should.HaveSameTypeAs, &structpb.Value_StructValue{})
 			a.So(sm[k], should.HaveSameTypeAs, vt)
 			if kind == reflect.Map {
@@ -115,14 +116,105 @@ func TestStructProto(t *testing.T) {
 		default:
 			panic("Unmatched kind: " + rv.Kind().String())
 		}
-		pv, err := Value(rv.Interface())
+		pv, err := goproto.Value(rv.Interface())
 		if a.So(err, should.BeNil) {
 			a.So(s.Fields[k], should.Resemble, pv)
 
-			gv, err := Interface(pv)
+			gv, err := goproto.Interface(pv)
 			if a.So(err, should.BeNil) {
 				a.So(sm[k], should.Resemble, gv)
 			}
 		}
 	}
+}
+
+func TestRecursiveStructures(t *testing.T) {
+	t.Parallel()
+
+	recursiveStruct := &structpb.Struct{Fields: make(map[string]*structpb.Value)}
+	recursiveStruct.Fields["test"] = &structpb.Value{
+		Kind: &structpb.Value_StructValue{
+			StructValue: recursiveStruct,
+		},
+	}
+	recursiveList := &structpb.ListValue{Values: make([]*structpb.Value, 1)}
+	recursiveList.Values[0] = &structpb.Value{
+		Kind: &structpb.Value_ListValue{
+			ListValue: recursiveList,
+		},
+	}
+	recursiveValueStruct := &structpb.Value{
+		Kind: &structpb.Value_StructValue{
+			StructValue: recursiveStruct,
+		},
+	}
+	recursiveValueList := &structpb.Value{
+		Kind: &structpb.Value_ListValue{
+			ListValue: recursiveList,
+		},
+	}
+
+	recursiveMap := make(map[string]any)
+	recursiveMap["test"] = recursiveMap
+	recursiveSlice := make([]any, 1)
+	recursiveSlice[0] = recursiveSlice
+	type recursiveGoStruct struct {
+		self *recursiveGoStruct
+	}
+	recursiveGoStructValue := &recursiveGoStruct{}
+	recursiveGoStructValue.self = recursiveGoStructValue
+
+	t.Run("Map", func(t *testing.T) {
+		t.Parallel()
+
+		a := assertions.New(t)
+		_, err := goproto.Map(recursiveStruct)
+		a.So(err, should.NotBeNil)
+	})
+
+	t.Run("Slice", func(t *testing.T) {
+		t.Parallel()
+
+		a := assertions.New(t)
+		_, err := goproto.Slice(recursiveList)
+		a.So(err, should.NotBeNil)
+	})
+
+	t.Run("Interface", func(t *testing.T) {
+		t.Parallel()
+
+		a := assertions.New(t)
+		_, err := goproto.Interface(recursiveValueStruct)
+		a.So(err, should.NotBeNil)
+		_, err = goproto.Interface(recursiveValueList)
+		a.So(err, should.NotBeNil)
+	})
+
+	t.Run("Struct", func(t *testing.T) {
+		t.Parallel()
+
+		a := assertions.New(t)
+		_, err := goproto.Struct(recursiveMap)
+		a.So(err, should.NotBeNil)
+	})
+
+	t.Run("List", func(t *testing.T) {
+		t.Parallel()
+
+		a := assertions.New(t)
+		_, err := goproto.List(recursiveSlice)
+		a.So(err, should.NotBeNil)
+	})
+
+	t.Run("Value", func(t *testing.T) {
+		t.Parallel()
+
+		a := assertions.New(t)
+		_, err := goproto.Value(recursiveSlice)
+		a.So(err, should.NotBeNil)
+		_, err = goproto.Value(recursiveMap)
+		a.So(err, should.NotBeNil)
+		_, err = goproto.Value(recursiveGoStructValue)
+		a.So(err, should.NotBeNil)
+	})
 }

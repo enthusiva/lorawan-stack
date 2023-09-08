@@ -155,6 +155,9 @@ var ListEndDeviceModelsRequestFieldPathsTopLevel = []string{
 var GetTemplateRequestFieldPathsNested = []string{
 	"application_ids",
 	"application_ids.application_id",
+	"end_device_profile_ids",
+	"end_device_profile_ids.vendor_id",
+	"end_device_profile_ids.vendor_profile_id",
 	"version_ids",
 	"version_ids.band_id",
 	"version_ids.brand_id",
@@ -165,11 +168,13 @@ var GetTemplateRequestFieldPathsNested = []string{
 
 var GetTemplateRequestFieldPathsTopLevel = []string{
 	"application_ids",
+	"end_device_profile_ids",
 	"version_ids",
 }
 var GetPayloadFormatterRequestFieldPathsNested = []string{
 	"application_ids",
 	"application_ids.application_id",
+	"field_mask",
 	"version_ids",
 	"version_ids.band_id",
 	"version_ids.brand_id",
@@ -180,6 +185,7 @@ var GetPayloadFormatterRequestFieldPathsNested = []string{
 
 var GetPayloadFormatterRequestFieldPathsTopLevel = []string{
 	"application_ids",
+	"field_mask",
 	"version_ids",
 }
 var ListEndDeviceBrandsResponseFieldPathsNested = []string{
@@ -196,12 +202,53 @@ var ListEndDeviceModelsResponseFieldPathsNested = []string{
 var ListEndDeviceModelsResponseFieldPathsTopLevel = []string{
 	"models",
 }
-var MessagePayloadFormatterFieldPathsNested = []string{
+var EncodedMessagePayloadFieldPathsNested = []string{
+	"errors",
+	"f_port",
+	"frm_payload",
+	"warnings",
+}
+
+var EncodedMessagePayloadFieldPathsTopLevel = []string{
+	"errors",
+	"f_port",
+	"frm_payload",
+	"warnings",
+}
+var DecodedMessagePayloadFieldPathsNested = []string{
+	"data",
+	"errors",
+	"warnings",
+}
+
+var DecodedMessagePayloadFieldPathsTopLevel = []string{
+	"data",
+	"errors",
+	"warnings",
+}
+var MessagePayloadDecoderFieldPathsNested = []string{
+	"codec_id",
+	"examples",
 	"formatter",
 	"formatter_parameter",
 }
 
-var MessagePayloadFormatterFieldPathsTopLevel = []string{
+var MessagePayloadDecoderFieldPathsTopLevel = []string{
+	"codec_id",
+	"examples",
+	"formatter",
+	"formatter_parameter",
+}
+var MessagePayloadEncoderFieldPathsNested = []string{
+	"codec_id",
+	"examples",
+	"formatter",
+	"formatter_parameter",
+}
+
+var MessagePayloadEncoderFieldPathsTopLevel = []string{
+	"codec_id",
+	"examples",
 	"formatter",
 	"formatter_parameter",
 }
@@ -306,12 +353,14 @@ var EndDeviceModel_FirmwareVersion_ProfileFieldPathsNested = []string{
 	"codec_id",
 	"lorawan_certified",
 	"profile_id",
+	"vendor_id",
 }
 
 var EndDeviceModel_FirmwareVersion_ProfileFieldPathsTopLevel = []string{
 	"codec_id",
 	"lorawan_certified",
 	"profile_id",
+	"vendor_id",
 }
 var EndDeviceModel_OperatingConditions_LimitsFieldPathsNested = []string{
 	"max",
@@ -334,4 +383,49 @@ var EndDeviceModel_Compliances_ComplianceFieldPathsTopLevel = []string{
 	"norm",
 	"standard",
 	"version",
+}
+var GetTemplateRequest_EndDeviceProfileIdentifiersFieldPathsNested = []string{
+	"vendor_id",
+	"vendor_profile_id",
+}
+
+var GetTemplateRequest_EndDeviceProfileIdentifiersFieldPathsTopLevel = []string{
+	"vendor_id",
+	"vendor_profile_id",
+}
+var MessagePayloadDecoder_ExampleFieldPathsNested = []string{
+	"description",
+	"input",
+	"input.errors",
+	"input.f_port",
+	"input.frm_payload",
+	"input.warnings",
+	"output",
+	"output.data",
+	"output.errors",
+	"output.warnings",
+}
+
+var MessagePayloadDecoder_ExampleFieldPathsTopLevel = []string{
+	"description",
+	"input",
+	"output",
+}
+var MessagePayloadEncoder_ExampleFieldPathsNested = []string{
+	"description",
+	"input",
+	"input.data",
+	"input.errors",
+	"input.warnings",
+	"output",
+	"output.errors",
+	"output.f_port",
+	"output.frm_payload",
+	"output.warnings",
+}
+
+var MessagePayloadEncoder_ExampleFieldPathsTopLevel = []string{
+	"description",
+	"input",
+	"output",
 }

@@ -1,0 +1,31 @@
+{
+  "end_device":{
+    "frequency_plan_id": "EU_863_870_TTN",
+    "lorawan_phy_version": "PHY_V1_0_2_REV_B",
+    "multicast": false,
+    "supports_join": true,
+    "lorawan_version":"MAC_V1_0_2",
+    "ids":{
+      "device_id":"device-all-components",
+      "join_eui": "0000000000000000",
+      "dev_eui":"70B3D57ED8000019"
+    },
+    "supports_class_c":false,
+    "supports_class_b":false
+  },
+  "field_mask":{
+    "paths":[
+      "frequency_plan_id",
+      "lorawan_phy_version",
+      "multicast",
+      "supports_join",
+      "lorawan_version",
+      "ids.device_id",
+      "ids.dev_eui",
+      "session.keys.f_nwk_s_int_key.key",
+      "session.dev_addr",
+      "supports_class_c",
+      "supports_class_b"
+    ]
+  }
+}

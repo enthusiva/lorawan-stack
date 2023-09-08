@@ -18,7 +18,6 @@ import classnames from 'classnames'
 import hamburgerMenuNormal from '@assets/misc/hamburger-menu-normal.svg'
 import hamburgerMenuClose from '@assets/misc/hamburger-menu-close.svg'
 
-import Icon from '@ttn-lw/components/icon'
 import NavigationBar from '@ttn-lw/components/navigation/bar'
 import ProfileDropdown from '@ttn-lw/components/profile-dropdown'
 import MobileMenu from '@ttn-lw/components/mobile-menu'
@@ -76,7 +75,6 @@ const Header = ({
               {dropdownItems}
             </ProfileDropdown>
             <button onClick={handleMobileMenuClick} className={style.mobileMenuButton}>
-              <Icon className={style.preloadIcons} icon="." />
               <div className={style.hamburger}>
                 <img src={hamburgerGraphic} alt="Open Mobile Menu" />
               </div>
@@ -102,15 +100,15 @@ Header.propTypes = {
   /** The classname applied to the component. */
   className: PropTypes.string,
   /** The child node of the dropdown component. */
-  dropdownItems: ProfileDropdown.propTypes.children,
+  dropdownItems: PropTypes.node,
   /** The logo component. */
   logo: PropTypes.node.isRequired,
   /** The child node of the mobile dropdown. */
-  mobileDropdownItems: PropTypes.node.isRequired,
+  mobileDropdownItems: PropTypes.node,
   /** The Child node of the navigation bar. */
-  navigationEntries: NavigationBar.propTypes.children,
+  navigationEntries: PropTypes.node,
   /** A handler for when the user used the search input. */
-  onLogout: PropTypes.func.isRequired,
+  onLogout: PropTypes.func,
   /** Handler of the search function. */
   onSearchRequest: PropTypes.func,
   /* A flag indicating whether the header has a search input. */
@@ -126,7 +124,9 @@ Header.defaultProps = {
   className: undefined,
   dropdownItems: undefined,
   navigationEntries: undefined,
+  mobileDropdownItems: null,
   onSearchRequest: () => null,
+  onLogout: () => null,
   searchable: false,
   user: undefined,
 }

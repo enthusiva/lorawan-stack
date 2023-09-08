@@ -13,6 +13,9 @@ For details about compatibility between different releases, see the **Commitment
 
 ### Added
 
+- Locations retrieved from gateway status messages are now be displayed in the gateway map in the Console, even when they are not received through a secure connection.
+- Button to switch cameras for device onboarding using mobile devices.
+
 ### Changed
 
 ### Deprecated
@@ -21,7 +24,1240 @@ For details about compatibility between different releases, see the **Commitment
 
 ### Fixed
 
+- Fix gateway connection stats being stuck at `Connecting` until the first uplink is processed in the Console.
+
 ### Security
+
+## [3.27.1] - 2023-08-29
+
+### Added
+
+- Add support for `administrative_contact` and `technical_contact` in the Console.
+- Reimplement move away prompt in payload formatter views in the Console.
+- Add telemetry collection for the CLI. A background process was added to the CLI in order to send the following information: Operating System, Architecture, Binary version and Golang version. The message is sent every 24 hours and it contains an unique random number as an identifier. It is enabled by default and in order to disable it, set `telemetry.enable` to false in the CLI configuration. For more information, consult the documentation [here](https://www.thethingsindustries.com/docs/reference/telemetry/cli).
+- Add telemetry collection for the IdentityServer. A background task was added in the Identity Server which is responsible for collecting information regarding the amount of each entity in the database, this has the purpose of allowing us to better understand how users are interacting with the system, an example being if tenants are using Organizations or just Users. All information is sent every 24 hours and it contains an identifier composed of the URLs present in the following configuration fields `console.ui.[is|gs|ns|as|js].base-url`. It is enabled by default and in order to disable it, set `telemetry.enable` to false in the Stack configuration. For more information, consult the documentation [here](https://www.thethingsindustries.com/docs/reference/telemetry/identity_server).
+
+### Fixed
+
+- OAuth clients created by an admin no longer trigger an email requesting approval from one of the tenant's admins.
+- Broken network routing policy links in the Packet Broker panel of the admin panel in the Console.
+- Application Server downlink related events now contain the complete set of end device identifiers, and the received at timestamp is now provided at all times.
+- Wrong order of breadcrumbs in the device views of the Console.
+
+## [3.27.0] - 2023-07-31
+
+### Added
+
+- The `as-db purge` command to purge unused data from the Application Server database.
+- RPCs and CLI command to delete a batch of end devices within an application.
+  - Check `ttn-lw-cli end-devices batch-delete` for more details.
+- Add `UserInput` component to the Console to handle user id input fields by implementing an autosuggest.
+- The Identity Server configuration has a new optional restriction regarding administrative and technical contacts of entities. This limits the action of an user or organization to set these contacts only to themselves, it is disabled by default but it is possible to enable it by setting `is.collaborator-rights.set-others-as-contacts` as false.
+- The Identity Server configuration has a new optional restriction regarding adminstrative and technical contacts of entities. This limits the action of an user or organization to set these contacts only to themselves, it is disabled by default but it is possible to enable it by setting `is.collaborator-rights.set-others-as-contacts` as false.
+- The page, tab, search query and sort order is now kept as query parameter and will hence persist throughout navigation. Likewise it is now possible to link to specific table results.
+
+### Changed
+
+- Instead of retrying application downlinks indefinitely, the Application Server now retries them for a configured number of times. Each `ApplicationDownlink` message contains the `attempt` and `max_attempts` fields to indicate the current and maximum number of attempts for a specific `application downlink`.
+- The Application Server configuration has the `as.downlinks.confirmation.default-retry-attempts` and `as.downlinks.confirmation.max-retry-attempts` fields that configure the allowed number of retries for application downlinks. The default values are `8` for the `as.downlinks.confirmation.default-retry-attempts` and `32` for the `as.downlinks.confirmation.max-retry-attempts`.
+- The `as.downlinks.confirmation.default-retry-attempts` field is used for all application downlinks that were scheduled before this change and for every application downlink that does not have the `max_attempts` field set. On the other hand, the `as.downlinks.confirmation.max-retry-attempts` field ensures that the `max_attempts` field's upper bound is contained and does not exceed its value.
+- The number of historical frames considered for the multi-frame query window size in the LoRaCloud Geolocation Services integration. The window size is now limited between 1 and 16 frames with 16 being the default value.
+- Packet Broker Agent now subscribes as Home Network to all DevAddr prefixes. This is to support NetID delegation where DevAddr blocks of other NetIDs should be routed to the cluster of a different NetID.
+
+### Deprecated
+
+- The `as.uplink-storage.limit` configuration option.
+
+### Removed
+
+- Command-line interface support for listing QR code formats and generating QR codes. This is considered the responsibility of a LoRaWAN Join Server.
+
+### Fixed
+
+- End device data stream not being closed when navigating away from end device pages, which could cause event streams stopping to work due to too many open connections.
+
+## [3.26.2] - 2023-07-11
+
+### Added
+
+- New Admin Panel in the Console.
+
+### Fixed
+
+- Removing user invitations not working in the user management panel for administrators.
+- Fix payload formatter page launching malformed requests in the Console.
+- Fix end device claiming issues in the Console and improve error messaging.
+- HTTP API routes for parsing QR codes for the QR Generator service. We exercise our right to break compatibility with third party HTTP clients since this is a bug.
+  - `/qr-code/end-devices/parse` is changed to `/qr-codes/end-devices/parse`.
+  - `/qr-code/end-devices/{format_id}/parse` is changed to `/qr-codes/end-devices/{format_id}/parse`.
+- Fixed authenticating with Packet Broker when gRPC dialer schemes are used in the address.
+
+## [3.26.1] - 2023-06-20
+
+### Added
+
+- Support claim in device import in the Console.
+
+## [3.26.0] - 2023-06-06
+
+### Added
+
+- Support for scanning a QR code that only contains the hexadecimal encoded DevEUI.
+- Experimental flag `ns.adr.auto_narrow_steer`. When enabled, end devices which do not have an explicit channel steering mode will be steered towards the LoRa narrow channels.
+
+### Fixed
+
+- Console not applying webhook field masks when creating a webhook from a template that has field masks set.
+- LoRa Basics Station `PONG` messages will now contain the application payload of the associated `PING`, as required by the WebSockets specification.
+  - This fix enables `PING`/`PONG` behavior for non reference implementations of the LNS protocol.
+- Fix crash of "Edit webhook" view due to invalid Authorization header encoding in the Console.
+
+## [3.25.2] - 2023-05-16
+
+### Added
+
+- Experimental channel steering API, which allows steering end devices from the wide (250kHz or 500kHz) channels towards the narrow (125kHz) channels.
+  - This API is mainly relevant for end devices operating in the US915 and AU915 regions, as they may join via a wide channel, but users may want to steer them towards the narrow channels.
+  - The new settings can be found under `mac-settings.adr.mode.dynamic.channel-steering`.
+  - `mac-settings.adr.mode.dynamic.channel-steering.mode.lora-narrow` steers the end devices towards the LoRa modulated narrow channels.
+  - `mac-settings.adr.mode.dynamic.channel-steering.mode.disabled` does not steer the end devices - end devices are left to operate in their currently active channels, wide or narrow.
+  - The default behavior is to avoid steering the end devices, but this is subject to change in future versions. Consider explicitly specifying a certain behavior (`lora-narrow` or `disabled`) if you depend on not steering the end devices.
+
+### Changed
+
+- Uplink and downlink message frequencies are now validated and zero values are dropped.
+  - Such traffic would have always been dropped by the Network Server, but it is now dropped in the Gateway Server.
+  - Simulated uplink traffic now requires a frequency value as well.
+
+### Fixed
+
+- Multiple ADR algorithm bugs:
+  - An off-by-one error which caused the ADR algorithm to not take into consideration the signal qualities of the uplink which confirmed a parameter change. In effect, this fix improves the quality of the link budget estimation.
+  - A flip-flop condition which caused the algorithm to swap back and forth between a higher and a lower transmission power index every 20 uplinks. In effect, this fix will cause the algorithm to change the transmission power index less often.
+  - A condition mistake which caused the algorithm to avoid increasing the transmission power if it would not completely fix the missing link budget. In effect, this will cause the algorithm to increase the transmission power in situations in which the link budget deteriorates rapidly.
+- In fixed channel plans such as US915 and AU915, the the associated wide (500kHz) channel is now enabled by default.
+
+## [3.25.1] - 2023-04-18
+
+### Added
+
+- Fallback end device version identifiers to be used while importing end devices using the Console.
+
+### Changed
+
+- The Things Stack is now built with Go 1.20.
+
+### Deprecated
+
+- `--with-claim-authentication-code` flag for the end device `create` command via the CLI. Users must use a valid claim authentication code that is registered on a Join Server instead of generating one during end device creation.
+
+### Fixed
+
+- Attempting to claim an end device with a generated DevEUI will now result in an error.
+- Claiming an end device using command line flags.
+- 24 hour stack components deadlock when the default clustering mode is used.
+
+## [3.25.0] - 2023-04-05
+
+### Added
+
+- Optional Network Server database migration that removes obsolete last invalidation keys is now available.
+- LoRaWAN Application Layer Clock Synchronization support.
+  - It is available using the `alcsync-v1` application package.
+  - Can be enabled using the Console by visiting the application settings and ticking the **Use Application Layer Clock Synchronization** checkbox. By default, the package will operate on FPort 202.
+- Drop uplink frames with CRC failure.
+
+### Deprecated
+
+- Returning special float values, such as `NaN` and `Infinity` as part of the decoded payloads.
+  - While the concepts of `NaN` and `Infinity` are part of JavaScript, JSON does not have a dedicated value for such values.
+  - Historically we have rendered them in their string form, i.e. `"NaN"` and `"Infinity"`, but this form is not standard nor accepted by the standard libraries of most programming languages (at least by default).
+  - Most usages of `NaN` are actually result of operations with the JavaScript concept of `undefined`, and are not intentional. Mathematical operations that interact with `undefined` return `NaN` - for example `undefined * 5` is `NaN`. It is not hard to reach `undefined` in JavaScript, as array access to undefined indices is `undefined`, and payload decoders generally work by consuming the frame payload bytes.
+  - Future The Things Stack versions may not render such values, or may discard the decoded payload completely. The deprecation discussion can be tracked [on GitHub](https://github.com/TheThingsNetwork/lorawan-stack/issues/6128).
+
+### Removed
+
+- Automatic migrations of the Network Server database using `ns-db migrate` from versions prior to v3.24 are removed. Migrating from prior versions should be done through v3.24 instead.
+
+## [3.24.2] - 2023-03-09
+
+### Deprecated
+
+- Device claiming that transfer devices between applications is now deprecated and will be removed in a future version of The Things Stack. Device claiming on Join Servers, including The Things Join Server, remains functional. This deprecates the following components:
+  - API for managing application claim authorization (`EndDeviceClaimingServer.AuthorizeApplication` and `EndDeviceClaimingServer.UnauthorizeApplication`)
+  - CLI commands to manage application claim settings (`ttn-lw-cli application claim [authorize|unauthorize]`)
+  - CLI command to claim end devices (`ttn-lw-cli devices claim`)
+
+### Fixed
+
+- The CLI now continues deleting devices when unclaiming from the Join Server fails. This resembles the behavior in the Console. This no longer stops devices from being deleted if the Join Server is unavailable or the claim is not held.
+- Organization API Keys' rights no longer are considered invalid during fetch operations. If the proper right is attached to said API key it is possible to fetch all fields of an entity, previous to this fix only public safe fields were fetchable.
+- Fix Sentry issue related to the component requests in the Console.
+
+## [3.24.1] - 2023-02-16
+
+### Added
+
+- Network Server ID (NSID) used for Backend Interfaces interoperability via the `ns.interop.id` and `dcs.edcs.ns-id` configuration options.
+  - In the Network Server, `ns.interop.id` acts as a fallback value for `sender-ns-id` in Join Server interoperability configuration.
+
+### Changed
+
+- Key vault cache time-to-live for errors configuration option `key-vault.cache.error-ttl`. This defaults to `key-vault.cache.ttl`.
+
+### Deprecated
+
+- Device Claiming Server configuration option `dcs.edcs.network-server.home-ns-id`. Use `dcs.edcs.ns-id` instead.
+
+### Fixed
+
+- Key unwrap caching.
+- Desired RX1 delay and desired beacon frequency not being possible to set for OTAA devices.
+
+### Security
+
+- Fix open redirect vulnerability for Console/Account App logins.
+
+## [3.24.0] - 2023-02-02
+
+### Added
+
+- List of end-devices can now be sorted by `last_seen_at` field. Unseen devices will be shown last.
+- End devices now contain `lora_alliance_profile_ids` field.
+- Add `source` config option for TLS certificates in LoRaWAN Backend Interfaces interop client and The Things Join Server device claiming configuration. This value can be `file` (existing behavior) or `key-vault`.
+
+### Changed
+
+- `serial_number` field is now moved to the root of the end device structure. `vendor_id` and `vendor_profile_id` are now moved to the `lora_alliance_profile_ids`.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of added columns and views.
+
+### Deprecated
+
+- Configuring certificate authorities per LoRaWAN Backend Interfaces SenderID (`interop.sender-client-ca`) is now deprecated and support will be removed in a future version of The Things Stack.
+
+### Removed
+
+- The device version identifiers no longer have the `serial_number`, `vendor_id` and `vendor_profile_id` fields.
+
+## [3.23.2] - 2023-01-18
+
+### Changed
+
+- Deletion of the last admin user or removal of its admin status via an update operation now returns an error.
+- Do not allow to remove the collaborator of an entity if it is the last collaborator (in the Console).
+
+### Fixed
+
+- When searching for end-devices, specifying `last_seen_at` as the field in which the devices will be sorted by no longer returns an error.
+- Errors during removal of collaborators the application collaborator form not being forwarded to the user in the Console.
+- Importing devices via CSV no longer skips the first header column when BOM bytes are present.
+
+## [3.23.1] - 2022-12-14
+
+### Added
+
+- List of end-devices can now be sorted by `last_seen_at` field. Unseen devices will be shown last.
+
+### Fixed
+
+- It is now allowed to set `0` for ping slot frequency and beacon frequency in the Network Layer Settings of the end device general settings in the Console.
+- MAC parameters that have the `desired_` will be hidden from the end device general settings for multicast end devices in the Console.
+
+## [3.23.0] - 2022-11-30
+
+### Added
+
+- The Things Join Server 2.0 (type `ttjsv2`) for claiming with Device Claiming Server.
+- All Join Servers with a `/64` JoinEUI prefix are contacted concurrently with LoRaWAN Backend Interfaces interoperability. This should only be used with ambiguous JoinEUIs and when migrating Join Servers.
+
+### Changed
+
+- Gateway EUI is no longer unset when deleting a gateway, meaning it could be recovered if no other gateway claimed it. This requires a schema migration (`ttn-lw-stack is-db migrate`) because of the change in the database's `gateway_eui_index`.
+- The new database driver is no longer specific to the Identity Server and is now activated using the `db.pgdriver` feature flag (instead of `is.pgdriver`).
+
+### Removed
+
+- The Things Join Server 1.0 (type `ttjs`) for claiming with Device Claiming Server. Use The Things Join Server 2.0 (type `ttjsv2`) instead.
+
+### Fixed
+
+- Devices with pending session and MAC state may now successfully be imported.
+- Client creation with an organization API key will no longer send an email without user information to the admins. Instead, the API key name will be used and if that is empty the API key ID will be the default.
+- Allow providing DevEUI for ABP end devices with a LoRaWAN specification lower or equal to 1.0.4 in the end device onboarding screen in the Console.
+- Faulty field validation for byte payloads in the uplink payload formatter panel in the Console.
+- `serial_number` field is now properly stored.
+
+## [3.22.2] - 2022-11-10
+
+### Added
+
+- The `is.gormstore` experimental flag has been added. Swaps the underlying Identity Server store implementation if set to true.
+
+### Changed
+
+- Class B and C downlinks will no longer be automatically retried indefinitely if none of the gateways are available at the scheduling moment, and the downlink paths come from the last uplink.
+  - This was already the behavior for downlinks which had their downlink path provided explicitly using the `class_b_c.gateways` field.
+  - The downlinks will be evicted from the downlink queue and a downlink failure event will be generated. The failure event can be observed by the application using the `downlink_failed` message, which is available in all integrations.
+- Event history and payload storage TTL has now 1% jitter.
+- The underlying store implementation has been changed to be by default based on `bun` instead of `gorm`. The previous store implementation can be reactivated using the `is.gormstore` experimental flag.
+
+### Removed
+
+- The `is.bunstore` experimental flag has been removed.
+
+### Fixed
+
+- Do not require AppKey when skipping Join Server registration in end device onboarding in the Console.
+- Fix auto generation of device ID when using DevEUI generator in the Console.
+- Fix several device onboarding issues with ABP in the Console.
+  - Do not ask for a JoinEUI.
+  - Reinitialize form properly when switching between ABP and OTAA.
+- Issue with pasting values into byte input at the wrong position in the Console.
+- Issue with updating field masks in the webhook edit form in the Console.
+
+## [3.22.1] - 2022-10-19
+
+### Changed
+
+- Option to ignore logs from selected gRPC methods now supports ignoring logs for selected errors on method.
+  Examples:
+  - `--grpc.log-ignore-methods="/ttn.lorawan.v3.GsNs/HandleUplink"`: log is skipped when no error occurs.
+  - `--grpc.log-ignore-methods="/ttn.lorawan.v3.GsNs/HandleUplink:pkg/networkserver:duplicate_uplink;pkg/networkserver:device_not_found"`: log is skipped when either `pkg/networkserver:duplicate_uplink` or `pkg/networkserver:device_not_found` error occurs (but not on success).
+  - `--grpc.log-ignore-methods="/ttn.lorawan.v3.GsNs/HandleUplink:;pkg/networkserver:duplicate_uplink"`: log is skipped on success or when `pkg/networkserver:duplicate_uplink` error occurs.
+- The Gateway Server now takes into consideration the extra duty cycle checks present in the LoRa Basics Station forwarder. Previously the Gateway Server may accept the scheduling of downlinks which the packet forwarder would silently drop.
+  - Note that in some rare cases in which the LoRa Basics Station duty cycle is stricter than the windowed approach used by The Things Stack, the scheduling will fail and this will be visible via `ns.down.data.schedule.fail` events. Note that this is actually a positive outcome - it allows the Network Server to schedule the downlink via another gateway, while previously the downlink would be scheduled but get silently dropped on the gateway.
+
+## [3.22.0] - 2022-10-06
+
+### Added
+
+- Add more specific rights for OAuth clients.
+
+### Changed
+
+- The flow for adding end devices has been updated in the Console.
+  - Device QR codes can now be scanned to speed up end device onboarding.
+  - Claiming end devices from external Join Servers is now possible seemlessly from the same onboarding flow.
+- LoRa coding rate now defined in `DataRate` instead of `Band`.
+- The Network Server will now schedule a potentially empty downlink in order to stop end devices from sending sticky MAC commands.
+- Factory preset frequencies may now be provided for bands with fixed channel plans, such as US915 or AU915. The factory preset frequencies are interpreted as the only channels which are enabled at boot time.
+- `TxParamSetupReq` MAC command priority has been increased.
+- `DevStatusReq` MAC command priority has been lowered.
+
+### Removed
+
+- Removed coding rate from `TxSettings` as it is now defined in `DataRate`.
+
+### Fixed
+
+- `--mac-settings.adr.mode.disabled`, `--mac-settings.adr.mode.dynamic` and `--mac-settings.adr.mode.static` flags of the `end-device update` command.
+- Pagination in `sessions` and `access tokens` tables in the Console.
+- `LinkADRReq` MAC command generation for LoRaWAN 1.0 and 1.0.1 end devices.
+- `LinkADRReq` no longer attempts to enable channels which have not yet been negotiated with the end device.
+- Downlink path selection for uplinks which are not LoRa modulated.
+- Issues with byte inputs in the Console.
+  - Pasting values into the input leading to issues in some cases.
+  - Values being typed double on android phones.
+- Console showing deleted collaborator after successful deletion in application collaborator list.
+- Console crashing after deleting an organization.
+
+## [3.21.2] - 2022-09-14
+
+### Added
+
+- New `ListBands` RPC on the `Configuration` service.
+  - Added support to CLI. Available via the `end-devices list-bands` command.
+- CLI support for listing PHY versions via the `end-devices list-phy-versions` CLI command.
+- New `NetID` and `DeviceAddressPrefixes` RPC on the `NS` service.
+  - Added support on CLI. Available via the `end-devices get-net-id` and `end-devices get-dev-addr-prefixes` commands.
+- Support for loading end device template from Device Repository when importing devices using a CSV file.
+- Experimental support for normalized payload.
+- Support management of deleted users in the Console.
+- Decoded payloads are now visible for downlinks in the Console.
+- Support for dynamic ping slot frequencies, as used by the US915 and AU915 bands.
+- Support for LoRa Basics Station beaconing.
+
+### Changed
+
+- Deprecated `attributes` from `GatewayAntenna` definition. While it was present in the API it was never stored in the database.
+- Absolute time downlinks (such as class B ping slots or class C absolute time downlinks) are now using the native class B downlink API of LoRa Basics Station.
+- Only gateways which are guaranteed to be GPS capable may now be used for absolute time downlinks. This ensures that gateways that have an unknown time source are not used for absolute time scheduling.
+- The static ADR mode may now steer the end device to use custom data rates such as SF7BW250, FSK and LR-FHSS.
+- The Console will try to resolve invalid state errors during login with an automatic refresh.
+- Error details are now displayed in a modal instead of within the notification element in the Console.
+
+### Removed
+
+- Experimental support for `LoRa Basics Station` gateway GPS timestamps which use the wrong precision (milliseconds instead of microseconds). Please ensure that your gateway has been updated to the latest firmware.
+
+### Fixed
+
+- The Gateway Server scheduler no longer considers the absolute time of a downlink to be the time of arrival.
+- The Network Server now correctly handles the command that may succeed a `LinkADRAns` response.
+- LR-FHSS data rate matching.
+- Console data rate rendering of non-LoRa modulations.
+
+### Security
+
+- End device network layer form crashing in some situations in the Console device general settings.
+- End device overview crashing in some situations in the Console.
+- Device import when using Join Server-only deployments.
+- QRG can generate QR Codes without the claim authentication code.
+
+## [3.21.1] - 2022-08-24
+
+### Added
+
+- New `SearchAccounts` RPC on the `EntityRegistrySearch` service.
+- Prompt user to confirm navigation when changes have not been saved in the payload formatter form to prevent big change-drafts from getting lost.
+- Event data pushed by webhooks can now be filtered with field masks.
+  - Support for the field mask setup was added for both CLI and Console.
+
+### Changed
+
+- Gateway registration in the Console has been updated to simplify the onboarding experience.
+
+### Fixed
+
+- CLI command `end-device template create` no longer breaks when providing field mask values.
+- Device repository services no longer require ApplicationID in its request URL.
+- Importing ABP devices via the CSV format now correctly handles the missing session key ID.
+
+## [3.21.0] - 2022-08-11
+
+### Added
+
+- Component selector for Join Server interoperability configuration. This allows administrators to declare separate Network Server and Application Server configuration for the same JoinEUI ranges in the same interoperability configuration. See [documentation](https://www.thethingsindustries.com/docs/reference/interop-repository/).
+- `BatchGetGatewayConnectionStats` RPC to fetch Gateway Connection Stats for a batch of gateways.
+- The ability to disable the downlink scheduling mechanism for individual end devices (`mac-settings.schedule-downlinks`).
+  - This option is useful during a migration procedure in order to force the end device to join the new network. The Network Server will no longer schedule any data downlinks or MAC commands, and will stop answering potential join requests.
+- A new implementation of the Identity Server storage layer. In v3.21.0 the new implementation is not yet used by default, but it can be enabled with the `is.bunstore` feature flag. A new database driver can be enabled with the `is.pgdriver` feature flag.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of added columns and views.
+- Support for comma-separated (`,`) values in The Things Stack CSV file format for importing end devices.
+- Support for the `RxParamSetup`, `RxTimingSetup`, `TxParamSetup`, and `DlChannel` sticky answer mechanism. The commands were supported previously, but subsequent sticky responses would cause the Network Server to drop the MAC command buffer in certain situations.
+
+### Changed
+
+- Deleted users are no longer included in primary email addresses uniqueness checks. This allows a user to create a new account which uses the email address of a deleted account.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) due to updated indices.
+- The CLI settings fields `retry-config.enable_metadata` and `retry-config.default_timeout` have been renamed to `retry.enable-metadata` and `retry.default-timeout` for consistency reasons.
+- Generated device ID based on a DevEUI from an imported CSV file is now prepended by `eui-`. This is consistent with generated device IDs by the Console.
+- The Claim Authentication Code (CAC) field is stored in the Identity Server instead of the Join Server.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+  - CAC values stored currently in the Join Server should be migrated to the Identity Server. One method is to run the following CLI commands on each device with a CAC.
+    - Read the current values using `ttn-lw-cli dev get <application-id> <device-id> --claim-authentication-code`. This will fetch the value stored in the Join Server as a fallback.
+    - Write back the value read `ttn-lw-cli dev set <application-id> <device-id> --claim-authentication-code.valid_from [xxx] --claim-authentication-code.valid_to [xxx] --claim-authentication-code.value <xxx>`. This will by default write to the Identity Server.
+    - Note that this requires a minimum CLI version of 3.21.0.
+- Device Repository no longer uses the `ApplicationID` for validating requests. Authentication is still necessary, but the `ApplicationID` field has been deprecated in the Device Repository API.
+
+### Fixed
+
+- Console showing `404 Not Found` errors for pages containing user IDs in the path, when the user ID has a length of two.
+- CLI no longer panics when deleting a device without JoinEUI, this scenario only occurred when deleting a device that uses ABP.
+- Console crashing when navigating to certain Packet Broker network configuration pages.
+- Packet Broker network pages becoming inaccessible until refreshing after a user navigates to a non-existing network.
+- The batch update query for `EndDevice.LastSeenAt` field now specifies the data type of the placeholders.
+  - This resolves an issue in the Console where `Last activity` values were inconsistent.
+
+## [3.20.2] - 2022-07-20
+
+### Added
+
+- More fields were added to the csv end-device migration procedure. The details on which fields were added can be found [here](https://www.thethingsindustries.com/docs/getting-started/migrating/device-csv/).
+- Authorization management in the Account app.
+- Gateway remote address to gateway connection statistics.
+
+### Fixed
+
+- Encoding of DevAddr, EUI and similar fields in `text/event-stream` responses.
+- GPS time leap second calculations taking a new leap second into consideration for 6th of July 2022.
+
+## [3.20.1] - 2022-06-29
+
+### Added
+
+- Support inviting users in the Console.
+
+### Changed
+
+- In AS923 frequency plans, the Network Server will skip the RX1 window if the data rate is ambiguous.
+  - This change occurs in old Regional Parameters versions in which the initial downlink dwell time setting of the end device is not specified. The end device may have the downlink dwell time setting either enabled or disabled, and due to this the data rate of the RX1 window is ambiguous.
+  - This ambiguity exists until the Network Server is successful in negotiating the dwell time limitations using the TxParamSetupReq MAC command. This will occur automatically and does not require any external input.
+  - If you already know the boot dwell time settings of your end device, you may provide them via the `--mac-settings.downlink-dwell-time` and `--mac-settings.uplink-dwell-time` MAC settings. This will ensure that RX1 transmissions are available from the first uplink of the session.
+
+### Removed
+
+- Sorting on associated rights in the API keys table.
+
+### Fixed
+
+- `last activity` not updating when an end device joins for the first time in the Console.
+- A bug that would show the "Status count periodicity"-field in the Console as `200` when actually set to `0`.
+- A bug causing map viewports to be set in odd locations when setting end device/gateway locations.
+- Console crashing when sorting by associated rights in the API keys table.
+
+## [3.20.0] - 2022-06-15
+
+### Added
+
+- OAuth client management in the account app.
+- Support claim protection when claiming end devices on The Things Join Server.
+- CLI commands `notifications list` and `notifications set-status` to manage user notifications.
+- Support for class B and C downlink transmissions through multiple gateways simultaneously.
+
+### Changed
+
+- Entities are now fully validated when updated in the stores.
+  - Previously only the updated paths where validated. This lead to situations in which a partial update could cause the entity as a whole to reach an invalid state.
+- Application, gateway, end device and organization-tables in the Console are now sorted by creation time by default (newest first).
+- Collaborator and API Key tables can now be sorted in the Console.
+- The application table in the Console now shows the amount of end devices.
+- The organizations table in the Console now shows the amount of collaborators.
+- Table layouts for several entities have been improved on the Console.
+
+### Fixed
+
+- End devices running on MAC versions higher or equal to 1.1 showing network downlink frame counters instead of application downlink frame counters.
+- Wrong representation of time values between midnight and 1am (eg. 24:04:11) in the Console in some cases.
+
+## [3.19.2] - 2022-05-25
+
+### Added
+
+- Allow setting an expiry date for API keys in the Console
+- New event type `gs.gateway.connection.stats` with connection statistics. A new event is sent at most every `gs.update-connection-stats-debounce-time` time and at least every `gs.update-connection-stats-interval` time.
+- Button to export as JSON end device `mac-settings` and `mac-state` in the Console.
+- Support for the `FOpts encryption, usage of FCntDwn` LoRaWAN 1.1 erratum.
+
+### Changed
+
+- Event type for `gs.up.receive` event to `GatewayUplinkMessage`.
+- Default debounce time for updating connection stats in de Gateway Server (configuration setting `gs.update-connection-stats-debounce-time`) is now 30 seconds.
+- Error code when importing CSV file with invalid LoRaWAN or Regional Parameters version.
+- Emails sent by the Identity Server now also contain HTML versions.
+  - For the images in these emails to work, an absolute `is.email.network.assets-base-url` (and optionally `is.email.network.branding-base-url`) needs to be set in configuration.
+- Notification emails are now sent through the Notification Service of the Identity Server.
+- "Last activity"-information in the Console is now sourced as a single aggregate from the Identity Server.
+- End device overview in the Console.
+  - Showing MAC/PHY versions and used frequency plan.
+  - Hiding the entity description if not set.
+  - Showing information of pending sessions.
+  - Automatically updating session info (no refresh necessary to schedule downlinks after a device has joined).
+  - Showing session start time.
+- The Things Stack is now built with Go 1.18.
+- Layout of webhook and Pub/Sub forms to improve UX.
+- The Network Server Address used for End Device Claiming is fetched from the configuration instead of client input.
+
+### Removed
+
+- The ability to create custom email templates.
+
+### Fixed
+
+- Support `app_eui` as alias for `join_eui` in CSV file import, per documentation.
+- End devices frame counts being displayed as `n/a` when event stream contained historical data message events.
+- Gateway general settings (Basic settings) not saving changes in some cases.
+- Contact info validation not possible when user is already logged in.
+- CLI not allowing devices to be created or updated.
+- End device creation no longer errors on missing application info rights.
+- Missing success notification when successfully deleting an application in the Console.
+- CLI create commands for applications, gateways and clients no longer have their decoded ID emptied when using the `--user-id` flag.
+- Metric `ttn_lw_events_channel_dropped_total` not getting updated.
+- Dropped events when calling the Stream RPC with a long tail.
+
+### Security
+
+- Security fix for an issue where the description and list of rights of arbitrary API keys could be retrieved by any logged-in user if the 24-bit random API key ID was known.
+
+## [3.19.1] - 2022-05-04
+
+### Changed
+
+- Application Server now decodes downlink if a downlink decoder is present and binary payload is scheduled.
+
+### Fixed
+
+- End devices frame counts being displayed as `n/a` when event stream contained historical data message events.
+- Gateway general settings (Basic settings) not saving changes in some cases.
+
+## [3.19.0] - 2022-04-21
+
+### Added
+
+- Session management page in Account App.
+- Status page references in the Console.
+- Notification Service API that will allow users to receive notifications about their registered entities.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added tables.
+- Add `network_server_address`, `application_server_address` and `join_server_address` to applications.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+- New ADR settings API, which allows stronger control over the ADR algorithm.
+  - The new settings fields can be found under `mac-settings.adr`, and are mutually exclusive with `use-adr` and `adr-margin`. The legacy settings need to be unset before the new API options may be used.
+  - `mac-settings.adr.mode.disabled` completely disables the ADR algorithm.
+  - `mac-settings.adr.mode.static.data-rate-index`, `mac-settings.adr.mode.static.nb-trans`, `mac-settings.adr.mode.static.tx-power-index` allow the user to provide static ADR parameters to be negotiated with the end device. These options persist over multiple sessions and do not require a session reset in order to be propagated to the current session.
+  - `mac-settings.adr.mode.dynamic.min-data-rate-index` and `mac-settings.adr.mode.dynamic.max-data-rate-index` control the data rate index range which the Network Server will attempt to negotiate with the end device. Note that if the provided interval is disjoint with the available data rate indices, no negotiation will take place.
+  - `mac-settings.adr.mode.dynamic.min-tx-power-index` and `mac-settings.adr.mode.dynamic.max-tx-power-index` have similar behavior, but for transmission power indices.
+  - `mac-settings.adr.mode.dynamic.min-nb-trans` and `mac-settings.adr.mode.dynamic.max-nb-trans` have similar behavior, but for NbTrans.
+  - `mac-settings.adr.mode.dynamic.margin` may be used to provide the margin of the ADR algorithm. It replaces the old `adr-margin` setting.
+  - `use-adr` and `adr-margin` are still supported, but deprecated. Any future API usage should instead use the `mac-settings.adr` settings.
+- Service to parse QR codes and return the data within.
+
+### Changed
+
+- Sortable tables are now sorted by default in the Console
+
+### Fixed
+
+- Console determining gateways as "Other cluster" even though using the same host if server addresses not matching exactly (e.g. due to using different host or scheme).
+- Inconsistency in setting gateway's LNS Auth key in the Console.
+- CLI no longer informs the user that is using the default JoinEUI when passing its value via flags.
+- Generating device ID from a DevEUI when importing a CSV file.
+- The `is-db migrate` command that failed when running on databases created by `v3.18`.
+- Some error messages being displayed as `error:undefined:undefined` in the Console, e.g. in the live data view.
+- Missing `query` flag on CLI search commands.
+
+## [3.18.2] - 2022-03-29
+
+### Added
+
+- Support for importing end devices using a CSV file. See [documentation](https://www.thethingsindustries.com/docs/reference/data-formats/#csv) for the data format.
+- Support claiming end devices in an external Join Server (ex: The Things Join Server).
+- Support to fetch LoRaWAN end device profiles using numeric identifiers.
+
+### Changed
+
+- Replace `as.down.data.forward` to `as.down.data.receive` in default event filter, so that decrypted and decoded dowlink payload can be examined in the Console.
+
+### Fixed
+
+- Join-accept scheduling if it took more than ~1.2 seconds to process the device activation with default configuration. These slow device activations can be observed when using external Join Servers.
+- Fix issues in the webhook forms causing webhooks to be created with all message types enabled and no way of deactivating message types.
+- Fix validation issue in the webhook form not detecting message type paths with more than 64 characters.
+- Fix "reactivate"-webhook button in the Console.
+- Port returned by the LBS LNS discovery message if standard 80/443 ports are used.
+
+## [3.18.1] - 2022-03-09
+
+### Added
+
+- Add HTTP basic authentication configuration to the webhooks form in the Console.
+- Show repository formatter code in the payload formatter form in the Console and allow pasting the application and payload formatter code when using the JavaScript option.
+- gRPC service to Gateway Configuration Server so that gateway configurations can be obtained via gRPC requests.
+- The option to configure the Redis idle connection pool timeout, using the `redis.idle-timeout` setting.
+- New RP002 regional parameters as options during device registration in the Console.
+- Default gateway visibility configuration in Packet Broker agent in the Console.
+
+### Changed
+
+- The custom webhook option is now shown at the top of the list in the Console when adding new webhooks.
+- Wording around webhook statuses to `Healthy`, `Requests failing` and `Pending`.
+- The uplink event preview in the Console now shows the highest SNR.
+- When scheduling downlink messages with decoded payload, the downlink queued event now contains the encoded, plain binary payload.
+- When Application Server forwards downlink messages to Network Server, the event payload now contains the encrypted LoRaWAN `FRMPayload`.
+- The Network Server will now match downlink acknowledgements on the `cache` redis cluster (previously the `general` cluster was used).
+- Gateway Connection statistics updates are now debounced. The debounce period occurs before the statistics are stored, and can be configured using the `gs.update-connection-stats-debounce-time` setting (default 5 seconds).
+- Payload formatter form layout in the Console.
+- Event publication when the Redis backend is used may no longer block the hot path. Instead, the events are now asynchronously published, which may render their ordering to change.
+  - The events are queued and published using the worker pool mechanism, under the `redis_events_transactions` pool.
+  - The length of the queue used by the pool may be configured using the `events.redis.publish.queue-size` setting.
+  - The maximum worker count used by the pool may be configured using the `events.redis.publish.max-workers` setting.
+
+### Removed
+
+- Ability to select the `Repository` payload formatter type for end devices that have no Device Repository association or have no associated repository payload formatter.
+
+### Fixed
+
+- Consistent ordering of entities with equal values for the sort field.
+- Fix `xtime` sent to LBS gateways for Class C downlinks.
+
+## [3.18.0] - 2022-02-23
+
+### Added
+
+- Retain at most 10 recent session keys in the Join Server. This avoids a slowly growing number of session keys in the Join Server's database.
+  - This requires a database migration (`ttn-lw-stack js-db migrate`).
+- Add TTL for gateway connection stats. Can be configured with the option `gs.connection-stats-ttl`.
+- Add `query` field to search requests, allowing to search for a string in any of ID, Name, Description and EUI (for entities that have EUIs).
+- Added fallback values for end device import in the Console.
+
+### Changed
+
+- The minimum required Redis version is now 6.2.
+- Applications on other cluster will be hidden in Applications list in the Console.
+
+### Deprecated
+
+- Gateway Server setting `gs.update-connection-stats-debounce-time` is no longer valid.
+
+### Fixed
+
+- Webhook statuses being shown as pending regardless of their actual condition.
+- Device activation flow with a LoRaWAN Backend Interfaces 1.1 capable Join Server.
+  - Join Servers using Backend Interfaces 1.1 (protocol `BI1.1`) must be configured with a `sender-ns-id` containing the EUI of the Network Server.
+- Fix `time.Duration` flags in CLI.
+- Gateway Server will no longer leave permanent gateway connection stats data on the registry when crashing.
+
+## [3.17.2] - 2022-01-30
+
+### Added
+
+- Add configurable storage limit to device's DevNonce in the JoinServer. Can be configured using the option `js.dev-nonce-limit`.
+- Fix copy button in API key modal in the Console.
+- Enable copying and format transformations of byte values in the event previews in the Console.
+- Attribute `administrative_contact` on "gateway eui taken" error to help users resolve gateway EUI conflicts.
+- Add retry capability for cli requests. Can be configured with the options found in `retry-config`, some of the configuration options are `retry-config.max` and `retry-config.default-timeout`.
+
+### Changed
+
+- Webhook maximum header value length extended to 4096 characters.
+- Limited the end device event types that are included in application event streams to only application layer events, errors and warnings. Other end device events can still be received when subscribing to end device device events.
+- Several small improvements to the styling, structuring and input logic of forms in the Console.
+
+### Fixed
+
+- CLI Completion and Documentation commands no longer try to make a server connection.
+- When an end device has both `NwkKey` and `AppKey` provisioned in the Join Server, `NwkKey` is used for MIC and session key derivation when activating the device in LoRaWAN 1.0.x. This is per LoRaWAN 1.1 specification.
+- Gateway Server will no longer report the gateways as being both connected and disconnected at the same time.
+
+## [3.17.1] - 2022-01-12
+
+### Changed
+
+- Gateways are removed from the Packet Broker Mapper API when unsetting the location public setting. This is to remove gateways from the map. Previously, the location was still set, but it did not get updated.
+
+### Fixed
+
+- Rate limiting of cluster authenticated RPCs.
+- CLI panic when setting end devices.
+
+## [3.17.0] - 2022-01-07
+
+### Added
+
+- Support reading the Join Server's default JoinEUI and using this in the CLI for end device creation.
+  - The Join Server has a new API `GetDefaultJoinEUI`.
+  - The default JoinEUI can be configured on the Join Server using the option `--js.default-join-eui`.
+- Filtering of end device frequency plans in end device forms based on band id in the Console.
+- Showing automatically set entity locations in the Console.
+- Applications, OAuth clients, gateways and organizations now have an `administrative_contact` and `technical_contact`.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+
+### Deprecated
+
+- The `contact_info` fields of applications, OAuth clients, gateways, organizations and users.
+
+### Fixed
+
+- CLI panic when getting devices.
+- Application uplink processing serialization behavior in the Application Server.
+
+## [3.16.2] - 2021-12-17
+
+### Added
+
+- User defined antenna gain for LBS gateways.
+- Webhooks now have a health status associated with them. Webhooks that fail successively are now disabled for a period of time.
+  - Failure in this context means that the HTTP endpoint returned a non-2xx status code.
+  - A successful HTTP request will reset the failure counter.
+  - The number of allowed successive failures and cooldown period can be configured using the `--as.webhooks.unhealthy-attempts-threshold` and `--as.webhooks.unhealthy-retry-interval` configuration options.
+- Webhook enabled path validation in the Console.
+
+### Changed
+
+- Increased the maximum gRPC message size to 16MB.
+- Gateways which have been deleted are now automatically disconnected by the Gateway Server.
+- Mark off and hide and restrict access to end devices that are registered on a different cluster in the Console.
+- Show more detailed last activity information inside tooltip info in the Console.
+- Add a button to allow exporting the event log in the Console.
+
+### Fixed
+
+- Access to application payload formatters for users with `RIGHT_APPLICATION_SETTINGS_BASIC` right.
+- End device mac settings handling in the Console.
+- Uplink and downlink counters display on end device activity in the Console.
+- Join settings handling in JS-only deployments in the Console.
+- Configuring Packet Broker listed option when Packet Broker Agent is configured with a Packet Broker tenant API key.
+- Contact info validation through the Account app.
+
+## [3.16.1] - 2021-11-26
+
+### Added
+
+- Support for fine timestamps and frequency offsets sent by gateways with SX1303 concentrator using the legacy UDP protocol.
+- Support for resetting end device session context and MAC state in the Console.
+- The Content-Security-Policy header (that was previously behind the `webui.csp` feature flag) is now enabled by default.
+- Default `Cache-Control: no-store` headers.
+- `Cache-Control: public, max-age=604800, immutable` headers for hashed static files.
+- Experimental support for BasicStation GPS timestamps which use the wrong precision (milliseconds instead of microseconds).
+  - The Gateway Server will attempt to determine the correct GPS timestamp from the provided `gpstime` based on the time at which the upstream message has been received.
+  - This workaround will be available until the related gateway vendors will release patches for this issue.
+- Firmware version of The Things Kickstarter Gateway are written to the gateway attributes upon receiving a valid status message.
+- Desired mac settings to end device general settings in the Console.
+- Experimental support for Azure Blob Storage. Only authentication via Managed Identity is supported.
+
+### Changed
+
+- Gateway server disconnects LoRa Basics Station gateways that stop sending pongs to server pings. This does not apply to gateways that don't support pongs.
+- The new plugin for reading/writing JSON in our API (that was previously behind the `jsonpb.jsonplugin` feature flag) is now enabled by default. All API responses should be equivalent, but in some cases object fields may be in a different order.
+
+### Fixed
+
+- The reported sub-band's `downlink_utilization` in gateway connection stats now represents the utilization of the available duty-cycle time.
+- Missing fields when admins list non-owned entities.
+- Using the correct timestamp when retreiving the "Last activity" data point for Gateways on initial page loads in the Console.
+- Events reappearing in the end device data view after clearing them when navigating back and forth.
+
+## [3.16.0] - 2021-11-12
+
+### Added
+
+- `ttn_lw_as_subscription_sets_publish_success_total` and `ttn_lw_as_subscription_sets_publish_failed_total` metrics to track the number of subscription set publish attempts.
+- Application Server advanced distribution settings:
+  - `as.distribution.global.individual.subscription-blocks` controls if the Application Server should block while publishing traffic to individual global subscribers (such as MQTT clients).
+  - `as.distribution.global.individual.subscription-queue-size` controls how many uplinks the Application Server should buffer for an individual global subscriber. Note that when the buffer is full, the Application Server will drop the uplinks if `--as.distribution.global.individual.subscription-blocks` is not enabled. Use a negative value in order to disable the queue.
+  - `as.distribution.local.broadcast.subscription-blocks` controls if the Application Server should block while publishing traffic to broadcast local subscribers (such as webhooks and application packages matching).
+  - `as.distribution.local.broadcast.subscription-queue-size` controls how many uplinks the Application Server should buffer for an broadcast local subscriber. Has the same semantics as `--as.distribution.global.individual.subscription-queue-size`.
+  - `as.distribution.local.individual.subscription-blocks` controls if the Application Server should block while publishing traffic to individual local subscribers (such as PubSub integrations).
+  - `as.distribution.local.individual.subscription-queue-size` controls how many uplinks the Application Server should buffer for an individual local subscriber. Has the same semantics as `--as.distribution.global.individual.subscription-queue-size`.
+- `ttn_lw_gs_txack_received_total`, `ttn_lw_gs_txack_forwarded_total` and `ttn_lw_gs_txack_dropped_total` metrics, which track the transmission acknowledgements from gateways.
+- `gs.txack.receive`, `gs.txack.drop` and `gs.txack.forward` events, which track the transmission acknowledgements from gateways.
+- `ttn-lw-stack as-db migrate` command to migrate the Application Server database. This command records the schema version and only performs migrations if on a newer version.
+  - Use the `--force` flag to force perform migrations.
+- Server-side event filtering with the `names` field.
+
+### Changed
+
+- Gateway Server default UDP worker count has been increased to 1024, from 16.
+- Application Server webhooks and application packages default worker count has been increased to 1024, from 16.
+- Application Server no longer sets the end device's `session.started_at` and `pending_session.started_at`. The session start time should be retrieved from the Network Server, per API specification.
+  - This requires an Application Server database migration (`ttn-lw-stack as-db migrate`) to clear the `started_at` field in existing (pending) sessions.
+- Console changing to server-side event filtering (used to be client-side).
+
+### Removed
+
+- The `ttn_lw_gs_status_failed_total`, `ttn_lw_gs_uplink_failed_total` metrics. `ttn_lw_gs_status_dropped_total` and `ttn_lw_gs_uplink_dropped_total` should be used instead, as they contain the failure cause.
+- The `gs.status.fail` and `gs.up.fail` events. `gs.status.drop` and `gs.up.drop` should be used instead, as they contain the failure cause.
+- The `data_rate_index` field in uplink message metadata. Observe the fully described data rate in the `data_rate` field instead.
+- LoRaWAN data rate index reported to LoRa Cloud DMS.
+- Dockerfile doesn't define environmental variables `TTN_LW_BLOB_LOCAL_DIRECTORY`, `TTN_LW_IS_DATABASE_URI` and `TTN_LW_REDIS_ADDRESS` anymore. They need to be set when running the container: please refer to `docker-compose.yml` for example values.
+- `CockroachDB` from development tooling as well as config option within `docker-compose.yml`.
+  - This also changes the default value of the `--is.database-uri` option, so it can connect to the development Postgres database by default.
+
+### Fixed
+
+- Handling of NaN values in our JSON API.
+- Receiver metadata from more than one antenna is now available in messages received from Packet Broker.
+- Unhelpful error message when aborting the OIDC Login in the Console.
+- Parsing of multi-word description search queries.
+
+## [3.15.3] - 2021-10-26
+
+### Fixed
+
+- Gateway disconnection when location updates from status messages are enabled.
+- Table entries not allowing to be opened in new tabs in the Console.
+- Right clicking on table entries navigating to respective entity in the Console.
+
+## [3.15.2] - 2021-10-22
+
+### Added
+
+- `tls.cipher-suites` config option to specify used cipher suites.
+- Support for enhanced security policies of Packet Broker services.
+- Handling of MAC and PHY versions in end device forms based on selected frequency plan in the Console.
+- Support for scheduling downlink messages as JSON in the Console.
+- Support for Packet Broker authentication through LoRaWAN Backend Interfaces. This adds the following configuration options:
+  - `interop.public-tls-address`: public address of the interop server. The audience in the incoming OAuth 2.0 token from Packet Broker is verified against this address to ensure that other networks cannot impersonate as Packet Broker;
+  - `interop.packet-broker.enabled`: enable Packet Broker to authenticate;
+  - `interop.packet-broker.token-issuer`: the issuer of the incoming OAuth 2.0 token from Packet Broker is verified against this value.
+- Support for LoRaWAN Backend Interfaces in Identity Server to obtain an end device's NetID, tenant ID and Network Server address with the use of a vendor-specifc extension (`VSExtension`). This adds the following configuration options:
+  - `is.network.net-id`: the NetID of the network. When running a Network Server, make sure that this is the same value as `ns.net-id`.
+  - `is.network.tenant-id`: the Tenant ID in the host NetID. Leave blank if the NetID that you use is dedicated for this Identity Server.
+- Configuration option `experimental.features` to enable experimental features.
+- Tooltip descriptions for "Last activity" values (formerly "Last seen") and uplink/downlink counts in the Console.
+- Status pulses being triggered by incoming data in the Console.
+- Packet broker page crashing when networks with a NetID of `0` are present.
+- Allowing to toggle visibility of sensitive values in text inputs in the Console.
+- Webhook failed event.
+
+### Changed
+
+- Searching for entity IDs is now case insensitive.
+- Renamed entitie's "Last seen" to "Last activity" in the Console.
+- The database queries for determining the rights of users on entities have been rewritten to reduce the number of round-trips to the database.
+- The default downlink path expiration timeout for UDP gateway connections has been increased to 90 seconds, and the default connection timeout has been increased to 3 minutes.
+  - The original downlink path expiration timeout was based on the fact that the default `PULL_DATA` interval is 5 seconds. In practice we have observed that most gateways actually send a `PULL_DATA` message every 30 seconds instead in order to preserve data transfer costs.
+- The default duration for storing (sparse) entity events has been increased to 24 hours.
+
+### Removed
+
+- Option to select targeted stack components during end device import in the Console.
+
+### Fixed
+
+- LoRaWAN Backend Interfaces 1.1 fields that were used in 1.0 (most notably `SenderNSID` and `ReceiverNSID`). Usage of `NSID` is now only supported with LoRaWAN Backend Interfaces 1.1 as specified.
+- Connection status not being shown as toast notification.
+- Registering and logging in users with 2 character user IDs in the Account App.
+- Frequency plan display for the gateway overview page in the Console.
+- Profile settings link not being present in the mobile menu in the Console.
+- Calculation of "Last activity" values not using all available data in the Console.
+- Layout jumps due to length of "Last activity" text.
+- Invalid `session` handling in Network Layer settings form in the Console.
+
+### Security
+
+- Network Servers using LoRaWAN Backend Interfaces to interact with the Join Server can now provide a single Network Server address in the X.509 Common Name of the TLS client certificate (the old behavior) or multiple Network Server addresses in the X.509 DNS Subject Alternative Names (SANs). DNS names have precedence over an address in the Common Name.
+
+## [3.15.1] - 2021-10-01
+
+### Added
+
+- Packet Broker gateway visibility management (default settings only). See `ttn-lw-cli packetbroker home-networks gateway-visibilities --help` for more information.
+
+### Changed
+
+- The Gateway Server worker pools may now drop workers if they are idle for too long.
+- FPort = 0 uplinks are no longer decoded by the Application Server, and the Network Server no longer provides the frame payload to the Application Server for these messages.
+
+### Fixed
+
+- Emails to admins about requested OAuth clients.
+- `session` handling for joined OTAA end devices in the Console.
+- Empty Join Server address handling in end device creation form in the Console.
+- Data Rate to data rate index matching for uplinks and downlinks.
+
+## [3.15.0] - 2021-09-17
+
+### Added
+
+- RPC to query supported PHY versions for a given Band ID.
+- Non-TLS LNS endpoint support.
+
+### Changed
+
+- Update to Go 1.17.
+- LBS timestamp rollover threshold.
+- Layout of error pages.
+- The Application Server worker pools may now drop workers if they are idle for too long.
+- Improved error page UX in the Console.
+
+### Fixed
+
+- Entity purge handling for non-admin users in the Console.
+- URL field validation in webhook forms in the Console when value is not trimmed.
+- Not rendering site header and footer for error pages in some situations.
+- Not providing a copy button for error pages in some situations.
+- Improved errors for invalid URLs.
+- Limit length of search queries within tables in the Console to 50 to comply with API validation.
+- External Join Server address handling in end device creation form in the Console.
+- Updating `supports_class_b` field in the end device general settings page in the Console.
+
+## [3.14.2] - 2021-08-27
+
+### Added
+
+- CLI warnings about insecure connections.
+- CLI warnings about using the `--all` flag.
+- Packet Broker network listed switch in the Console.
+- Improved errors for invalid command-line flags.
+- Validation of entity attributes in the Console, with regards to maximum length for keys and values.
+- CLI command to decode raw LoRaWAN frames (`ttn-lw-cli lorawan decode`), useful for debugging purposes.
+- Options to restore or purge deleted applications, gateways and organizations in the Console.
+- Handling of default mac settings values when manually registering end devices in the Console.
+- Add a new `class_b_c_downlink_interval` field that can be configured to set the minimum interval between a network initiated downlink (Class B & Class C) and an arbitrary downlink per device.
+- Retrieve count of upstream messages from the Storage Integration by end device.
+  - See the new `GetStoredApplicationUpCount` RPC.
+  - See the new `ttn-lw-cli applications storage count` and `ttn-lw-cli end-devices storage count` CLI commands.
+
+### Changed
+
+- The Identity Server now returns a validation error when trying to update the EUIs of an end device.
+- Network Server no longer accepts RX metadata from Packet Broker if the originating forwarder network equals the current Network Server (by NetID and cluster ID, based on`ns.net-id` and `ns.cluster-id` configuration). This avoids duplicate RX metadata as well as redundant downlink scheduling attempts through Packet Broker after the cluster's Gateway Server already failed to schedule.
+- Usability of the end device import function in the Console.
+  - Show a per-device report when errors occur.
+  - More structural changes to the process to improve UX.
+
+### Removed
+
+- Packet Broker mutual TLS authentication; only OAuth 2.0 is supported now.
+- `request_details` from errors in the Console.
+
+### Fixed
+
+- Generated CLI configuration for The Things Stack Community Edition.
+- End device access with limited rights in the Console.
+- Parsing of ID6 encoded EUIs from Basic Station gateways.
+- Warnings about unknown fields when getting or searching for gateways.
+- Internal Server Errors from `pkg/identityserver/store`.
+- Console rendering blank pages in outdated browsers due to missing or incomplete internationalization API.
+- Error in edit user form (Console) when submitting without making any changes.
+- `description` field not being fetched in edit user form (admin only) in the Console.
+- Ignore invalid configuration when printing configuration with `ttn-lw-cli config` or `ttn-lw-stack config`.
+- Emails about API key changes.
+- Avoid rendering blank pages in the Console for certain errors.
+- Blank page crashes in the Console for certain browsers that do not fully support `Intl` API.
+- End device session keys handling in the Console.
+- Byte input width in Safari in the Console.
+
+## [3.14.1] - 2021-08-06
+
+### Added
+
+- New config option `--as.packages.timeout` to control the message processing timeout of application packages.
+- Option to view and copy error details in full view errors in the Console.
+- Metrics for CUPS requests.
+- Language chooser in the footer in the Console.
+- Japanese language support in the Console.
+
+### Changed
+
+- Cache Root CA for client TLS configuration.
+- Identity Server no longer allows removing the `_ALL` right from entity collaborators if that leaves the entity without any collaborator that has the `_ALL` right.
+- The Network Server application uplink queue may now be skipped if the Application Server peer is available at enqueue time.
+- The interval for updating gateways in Packet Broker is now 10 minutes (was 5 minutes) and the timeout is 5 seconds (was 2 seconds).
+
+### Fixed
+
+- Improved errors when ordering search requests by non-existent fields.
+- LNS authentication key handling for gateways in the Console.
+
+## [3.14.0] - 2021-07-23
+
+### Added
+
+- Gateway antenna placement; unknown, indoor or outdoor. This can now be specified with CLI, e.g. for the first antenna: `ttn-lw-cli gateways set <gateway-id> --antenna.index 0 --antenna.placement OUTDOOR`. The antenna placement will be reported to Packet Broker Mapper.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+- Payload formatter length validation in the Console.
+- User session management (listing and deleting) in the Identity Server and the CLI.
+- Improved logging for the OAuth server.
+- LR-FHSS modulation
+  - Additional fields for the Gateway and Rx Metadata API. This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+  - Support for LR-FHSS fields when translating uplink messages with the UDP protocol.
+- Network Server now appends network identifiers in forwarded uplink messages. These are populated from the `ns.net-id` and the new `ns.cluster-id` configuration option.
+  - See the new `uplink_message.network_identifiers.net_id`, `uplink_message.network_identifiers.cluster_id` and `uplink_message.network_identifiers.tenant_id` fields.
+  - This can be useful for HTTP webhooks to determine the Network Server that received and forwarded an uplink message.
+- `GetDefaultMACSettings` RPC for requesting the default and desired MAC settings for a Band (Frequency Plan) and LoRaWAN regional parameters version.
+- Error handling for missing templates in device repository form in the Console.
+- Opt out of Packet Broker for individual gateways, see the new `disable_packet_broker_forwarding` gateway option.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+  - This is only relevant when Packet Broker is enabled and configured by the network operator.
+- Gateways are now disconnected when settings affecting the connection with Gateway Server change. Use the `gs.fetch-gateway-interval` and `gs.fetch-interval-jitter` to configure how often the gateway is fetched from the entity registry.
+- Small UX improvements to the LoRaCloud DAS forms in the Console.
+- End device first activation timestamp in the Identity Server end device store.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+- `AppJs` interface for applications to get the LoRaWAN AppSKey directly from the Join Server.
+- Console support for DevEUI generation from the configured DevEUI address block.
+  - This requires `console.ui.dev-eui-issuing-enabled` and `console.ui.dev-eui-app-limit` to be set with the same values as in the Identity Server configuration.
+- Gateway antenna placement selection in the Console.
+
+### Changed
+
+- When a gateway uplink message contains duplicate data uplinks, only the one with the highest RSSI are forwarded.
+- The HTTP port now allows HTTP/2 connections over cleartext (h2c).
+- `ttn-lw-stack ns-db migrate` command records the schema version and only performs migrations if on a newer version.
+  - Use the `--force` flag to force perform migrations.
+- Any authenticated user in the network can now list the collaborators of entities in the network.
+- The search RPCs no longer require fields to be specified in the field mask when those fields are already specified as filters.
+- When generating client configuration with the CLI `use` command, automatically set the correct Identity Server and OAuth Server addresses for The Things Stack Cloud and The Things Stack Community Edition.
+
+### Removed
+
+- The `old` log format.
+
+### Fixed
+
+- Network Server ADR algorithm data rate adjustment behavior on negative margin.
+- CLI `gateway set --antenna.remove` command failing to remove gateway antennas in some cases.
+- CLI `gateway set --antenna.gain <gain>` command crashing when no gateway antennas are present.
+- Webhook template path variable expansion of query parameters.
+- LBS LNS Auth Secret displays garbage value when updated.
+- Transmit confirmation messages for LoRa Basics Station gateways.
+- Instability and frequent crashes when internet connection is lost in the Console.
+- Panic in GCS when CUPS rotation is set without a key.
+- Rate limiting for `GatewayRegistry.GetGatewayIdentifiersForEUI` is now applied per gateway EUI.
+- Network Server ensures that the Band ID in the end device version identifiers match the configured Frequency Plan of the device.
+
+## [3.13.3] - 2021-07-02
+
+### Added
+
+- Email sent to admins when an OAuth client is requested by a non-admin user.
+- Packet Broker UI in the Console (admin only).
+- New config option `--console.oauth.cross-site-cookie` to control access to OAuth state cookie between origins.
+  - This option needs to be set to `true` (default is `false`) in multi-cluster deployments in order to support OAuth clients that use POST callbacks.
+- Application Server forwards upstream messages of type `ApplicationDownlinkSent` for application downlink messages that were acknowledged with a TxAck message from the gateway.
+  - MQTT clients can subscribe to the topic `v3/{application-id}/devices/{device-id}/down/sent`.
+  - For HTTP webhooks, make sure that the **Downlink Sent** messages are enabled.
+- Query for the most recent application messages from the Storage Integration API with the new `last` parameter (for example, `?last=10m` or `?last=2h`). See also `--last` argument for the `ttn-lw-cli applications storage get` and `ttn-lw-cli end-devices storage get` commands.
+- A location solved message is published automatically by Application Server when the decoded payload contains coordinates (e.g. `latitude` and `longitude`, among other combinations, as well as support for accuracy and altitude).
+- Configuration option to include Packet Broker metadata in uplink messages: `pba.home-network.include-hops`. By default, this is now disabled.
+- Update gateway identity, status, antennas, frequency plan, location and receive and transmit rates to Packet Broker Mapper. Mapping is enabled when the Forwarder role is enabled. The following new configuration options are introduced to change the default behavior:
+  - `gs.packetbroker.update-gateway-interval`: Update gateway interval
+  - `gs.packetbroker.update-gateway-jitter`: Jitter (fraction) to apply to the update interval to randomize intervals
+  - `gs.packetbroker.online-ttl-margin`: Time to extend the online status before it expires
+  - `pba.mapper-address`: Address of Packet Broker Mapper
+  - `pba.forwarder.gateway-online-ttl`: Time-to-live of online status reported to Packet Broker
+
+### Changed
+
+- Low-level log messages from the `go-redis` library are printed only when the log level is set to `DEBUG`.
+- GS will discard repeated gateway uplink messages (often received due to buggy gateway forwarder implementations). A gateway uplink is considered to be repeated when it has the same payload, frequency and antenna index as the last one.
+  - The new `gs_uplink_repeated_total` metric counts how many repeated uplinks have been discarded.
+  - A `gs.up.repeat` event is emitted (once per minute maximum) for gateways that are stuck in a loop and forward the same uplink message.
+- For ABP sessions, the CLI now requests a DevAddr from the Network Server instead of generating one from the testing NetID.
+- Descriptions, tooltips and defaults for checkboxes for public gateway status and location in the Console.
+- All HTTP requests made by The Things Stack now contain a `User-Agent` header in the form of `TheThingsStack/{version}`.
+- No connection to Packet Broker is being made when neither the Forwarder nor the Home Network role is enabled.
+- Increase the default size limit for payload formatter scripts to 40KB (up from 4KB). The maximum size enforced at API level is 40KB (up from 16KB).
+  - For more context see [issue #4053](https://github.com/TheThingsNetwork/lorawan-stack/issues/4053) and [issue #4278](https://github.com/TheThingsNetwork/lorawan-stack/issues/4278).
+
+### Fixed
+
+- Parse error in Webhook Templates.
+- Application deletion handling in the Console.
+- Error when logging into the Console when using connections without TLS.
+- Account for antenna gain when the gateway is not authenticated (i.e. UDP gateway).
+- Preserve antenna gain when the gateway status message contains GPS coordinates.
+- Location map coordinate selection in the Console.
+- Rights required for reading scheduled downlinks.
+
+## [3.13.2] - 2021-06-17
+
+### Added
+
+- Configurable log formats with the `log.format` configuration option.
+  - The `console` format that prints logs as more human-friendly text. This is the new default.
+  - The `json` format that prints logs as JSON. This is the recommended format for production deployments.
+  - The `old` format (deprecated). This can be used if you need to adapt your log analysis tooling before v3.14.
+- `ttn_lw_gs_ns_uplink_latency_seconds`, `ttn_lw_ns_as_uplink_latency_seconds` and `ttn_lw_gtw_as_uplink_latency_seconds` metrics to track latency of uplink processing.
+- Signing of releases.
+- Hard delete option to delete applications, gateways and organizations in the Console.
+
+### Changed
+
+- Relaxed the cookie policy for cross-origin requests from Strict to Lax.
+- Changed the cookie policy for OAuth state to None.
+
+### Deprecated
+
+- The `old` log format is deprecated and will be removed in v3.14.
+
+### Fixed
+
+- Permissions issue for reading and writing gateway secrets in the Console.
+- Current and future rights selection for organization collaborators in the Console.
+- Current and future rights selection for user api keys in the Console.
+- Low or no throughput of message handling from Packet Broker when the ingress is high when Packet Broker Agent starts.
+- Unset ADR bit in downlink messages to multicast devices.
+
+## [3.13.1] - 2021-06-04
+
+### Added
+
+- More contextual tooltips to end device and gateway form fields in the Console.
+- Warnings in the Console when changing or revoking your own access to an entity.
+
+### Changed
+
+- Do not print error line logs for rate limited gRPC and HTTP API requests.
+- The `ttn_lw_log_log_messages_total` metric was renamed to `ttn_lw_log_messages_total` and has an additional `error_name` label.
+- Authenticated users now have access to gateway status and location when those are set to public.
+- Cookies are no longer allowed in cross-origin requests to the HTTP API. Applications must instead use Bearer tokens in the Authorization header.
+
+### Fixed
+
+- Downlink queue eviction on FCnt mismatch.
+- End device payload formatter view crashing in the Console.
+- End device overview frequently crashing in the Console.
+- Panic on empty downlink in zero indexed downlink token.
+
+## [3.13.0] - 2021-05-20
+
+### Added
+
+- Searching Packet Broker networks with `--tenant-id-contains` and `--name-contains` flags.
+- Listing all listed Packet Broker networks with `ttn-lw-cli packetbroker networks list`.
+- Include end device version identifiers in upstream messages (see `uplink_message.version_ids.brand_id`, `uplink_message.version_ids.model_id`, `uplink_message.version_ids.firmware_version`, `uplink_message.version_ids.hardware_version` and `uplink_message.version_ids.band_id` fields).
+- Reporting uplink and downlink message delivery state changes to Packet Broker. This will be used for statistical purposes (e.g. which message is processed successfully or why it errored) as well as LoRaWAN roaming (the `XmitDataAns` result code).
+- Setting API key expiry via `--api-key-expiry` flag using RFC3339 format.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added columns.
+- Events storage in the Redis events backend. This can be enabled with the new `events.redis.store.enable` option. The new options `events.redis.store.ttl`, `events.redis.store.entity-ttl`, `events.redis.store.entity-count` and `events.redis.store.correlation-id-count` can be used to configure retention.
+- RPC to find related events by correlation ID.
+- CLI command `events find-related`.
+- Support for loading Device Repository profiles from different vendors if specified. This allows reusing standard end device profiles from module makers and LoRaWAN end device stack vendors.
+- Filtering out verbose events in the event views in the Console.
+- The `gs.up.forward` event now includes the host an uplink was forwarded to.
+- Previews for `*.update` events in the Console.
+- The Console can now show recent historical events in networks that have events storage enabled.
+- Add a new `mac_settings.desired_max_eirp` field that can be configured to set the desired MaxEIRP value per device.
+- Support loading rate limiting profile configuration from external sources. When set, they will override embedded configuration. See `rate-limiting.config-source`, `rate-limiting.directory`, `rate-limiting.url` and `rate-limiting.blob.*` configuration options.
+- `IssueDevEUI` RPC for requesting a DevEUI from a configured IEEE MAC block for devices per application.
+  - This requires a database schema migration (`ttn-lw-stack is-db migrate`) because of the added `eui_blocks` table and `dev_eui_counter`
+    column in applications table.
+  - This requires a new `dev-eui-block` configuration setting.
+
+### Changed
+
+- User IDs now have a minimum length of 2 instead of 3, so that more users coming from v2 can keep their username.
+- Disabled device uplink simulation and downlink message sending when skipping payload crypto.
+- The UpdateAPIKey RPCs now take a fieldmask.
+- The Gateway Server no longer sends `gs.up.drop` event if the Network Server does not handle an uplink message, or if the uplink does not match the DevAddr prefix of an upstream.
+- Maximum size for user-defined payload formatter scripts.
+  - The default cap is at 4KB, see the new `as.formatters.max-parameter-length` config option.
+  - A maximum cap of 16KB per script is set at the API level.
+  - This only prevents setting large payload formatter scripts for new devices and applications; it does not remove payload formatters from existing applications and devices. Scripts sourced from the Device Repository are not affected. See [issue #4053](https://github.com/TheThingsNetwork/lorawan-stack/issues/4053) for more context on this change.
+- LoRa Basics Station `router_config` message omits hardware specific fields.
+- Showing "Last seen" information in end device tables (replacing "Created").
+
+### Removed
+
+- The `gs.status.forward` event.
+
+### Fixed
+
+- OAuth token exchange for OAuth clients that use Basic auth.
+- The CLI now properly returns a non-zero exit status code on invalid commands.
+- Gateway connection requests with zero EUI are rejected.
+- End device payload formatter reset to `FORMATTER_NONE` in the Console.
+- Memory issues when importing end devices in the Console.
+
+## [3.12.3] - 2021-05-06
+
+### Changed
+
+- Optimized storage of recent application uplinks in Application Server.
+
+### Fixed
+
+- Validation of OAuth token exchange requests from the CLI.
+- Validation of join-request types when using the Crypto Server backend.
+- Application Server session recovery functionality for imported devices.
+- Fetching AppSKey when the session is rebuilt but the identifier did not change.
+
+## [3.12.2] - 2021-04-30
+
+### Added
+
+- Contextual tooltips to form fields in the Console.
+- C-Style uint32_t representation for end device address field.
+- Gateway Configuration Server to the cluster package.
+  - This introduces a new config option `cluster.gateway-configuration-server` that needs to be set in multi-instance deployments.
+- Uplink storage for integrations in the Application Server. The number of uplinks stored per end device may be configured via the config option `as.uplink-storage.limit`.
+- LoRaCloud GLS multi frame request support.
+- LoRaCloud GNSS request support.
+- LoRaCloud WiFi request support.
+
+### Changed
+
+- Allow the LinkADRReq commands to lower the data rate used by the end devices.
+
+### Fixed
+
+- Occasional crashes in the ratelimit middleware.
+- Handling of zero EUI CUPS update-info requests.
+- Backend validation messages for some forms.
+- Gateway downlink message previews not displaying correctly in the event view of the Console.
+- Importing end devices from the Console would occasionally ignore some device MAC settings fields.
 
 ## [3.12.1] - 2021-04-15
 
@@ -1433,7 +2669,55 @@ For details about compatibility between different releases, see the **Commitment
 <!--
 NOTE: These links should respect backports. See https://github.com/TheThingsNetwork/lorawan-stack/pull/1444/files#r333379706.
 -->
-[unreleased]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.12.1...v3.12
+
+[unreleased]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.27.1...v3.27
+[3.27.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.27.0...v3.27.1
+[3.27.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.26.2...v3.27.0
+[3.26.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.26.1...v3.26.2
+[3.26.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.26.0...v3.26.1
+[3.26.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.25.2...v3.26.0
+[3.25.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.25.1...v3.25.2
+[3.25.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.25.0...v3.25.1
+[3.25.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.24.2...v3.25.0
+[3.24.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.24.1...v3.24.2
+[3.24.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.24.0...v3.24.1
+[3.24.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.23.2...v3.24.0
+[3.23.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.23.1...v3.23.2
+[3.23.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.23.0...v3.23.1
+[3.23.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.22.2...v3.23.0
+[3.22.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.22.1...v3.22.2
+[3.22.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.22.0...v3.22.1
+[3.22.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.21.2...v3.22.0
+[3.21.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.21.1...v3.21.2
+[3.21.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.21.0...v3.21.1
+[3.21.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.20.2...v3.21.0
+[3.20.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.20.1...v3.20.2
+[3.20.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.20.0...v3.20.1
+[3.20.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.19.2...v3.20.0
+[3.19.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.19.1...v3.19.2
+[3.19.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.19.0...v3.19.1
+[3.19.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.18.2...v3.19.0
+[3.18.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.18.1...v3.18.2
+[3.18.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.18.0...v3.18.1
+[3.18.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.17.1...v3.18.0
+[3.17.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.17.0...v3.17.1
+[3.17.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.16.2...v3.17.0
+[3.16.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.16.1...v3.16.2
+[3.16.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.16.0...v3.16.1
+[3.16.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.15.3...v3.16.0
+[3.15.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.15.2...v3.15.3
+[3.15.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.15.1...v3.15.2
+[3.15.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.15.0...v3.15.1
+[3.15.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.14.2...v3.15.0
+[3.14.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.14.1...v3.14.2
+[3.14.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.14.0...v3.14.1
+[3.14.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.13.3...v3.14.0
+[3.13.3]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.13.2...v3.13.3
+[3.13.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.13.1...v3.13.2
+[3.13.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.13.0...v3.13.1
+[3.13.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.12.3...v3.13.0
+[3.12.3]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.12.2...v3.12.3
+[3.12.2]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.12.1...v3.12.2
 [3.12.1]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.12.0...v3.12.1
 [3.12.0]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.11.3...v3.12.0
 [3.11.3]: https://github.com/TheThingsNetwork/lorawan-stack/compare/v3.11.2...v3.11.3

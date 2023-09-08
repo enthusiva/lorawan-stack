@@ -12,10 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-const mapWebhookMessageTypeToFormValue = messageType =>
-  (messageType && { enabled: true, value: messageType.path }) || { enabled: false, value: '' }
+import { isPlainObject } from 'lodash'
 
-const mapWebhookHeadersTypeToFormValue = headersType =>
+const isBasicAuth = header =>
+  isPlainObject(header) && header.key === 'Authorization' && header.value?.startsWith('Basic ')
+const hasBasicAuth = headers => headers instanceof Array && headers.findIndex(isBasicAuth) !== -1
+
+export const decodeMessageType = messageType => {
+  if (isPlainObject(messageType)) {
+    if ('path' in messageType) {
+      return { enabled: true, value: messageType.path }
+    }
+
+    return { enabled: true, value: '' }
+  }
+
+  return { enabled: false, value: '' }
+}
+
+export const encodeMessageType = formValue => {
+  if (formValue && formValue.enabled) {
+    return { path: formValue.value }
+  }
+
+  return null
+}
+
+const decodeHeaders = headersType =>
   (headersType &&
     Object.keys(headersType).reduce(
       (result, key) =>
@@ -27,28 +50,7 @@ const mapWebhookHeadersTypeToFormValue = headersType =>
     )) ||
   []
 
-export const mapWebhookToFormValues = webhook => ({
-  webhook_id: webhook.ids.webhook_id,
-  base_url: webhook.base_url,
-  format: webhook.format,
-  headers: mapWebhookHeadersTypeToFormValue(webhook.headers),
-  downlink_api_key: webhook.downlink_api_key,
-  uplink_message: mapWebhookMessageTypeToFormValue(webhook.uplink_message),
-  join_accept: mapWebhookMessageTypeToFormValue(webhook.join_accept),
-  downlink_ack: mapWebhookMessageTypeToFormValue(webhook.downlink_ack),
-  downlink_nack: mapWebhookMessageTypeToFormValue(webhook.downlink_nack),
-  downlink_sent: mapWebhookMessageTypeToFormValue(webhook.downlink_sent),
-  downlink_failed: mapWebhookMessageTypeToFormValue(webhook.downlink_failed),
-  downlink_queued: mapWebhookMessageTypeToFormValue(webhook.downlink_queued),
-  downlink_queue_invalidated: mapWebhookMessageTypeToFormValue(webhook.downlink_queue_invalidated),
-  location_solved: mapWebhookMessageTypeToFormValue(webhook.location_solved),
-  service_data: mapWebhookMessageTypeToFormValue(webhook.service_data),
-})
-
-const mapMessageTypeFormValueToWebhookMessageType = formValue =>
-  (formValue.enabled && { path: formValue.value }) || null
-
-const mapHeadersTypeFormValueToWebhookHeadersType = formValue =>
+const encodeHeaders = formValue =>
   (formValue &&
     formValue.reduce(
       (result, { key, value }) => ({
@@ -59,46 +61,83 @@ const mapHeadersTypeFormValueToWebhookHeadersType = formValue =>
     )) ||
   null
 
-export const mapFormValuesToWebhook = (values, appId) => {
-  return {
-    ids: {
-      application_ids: {
-        application_id: appId,
-      },
-      webhook_id: values.webhook_id,
-    },
-    base_url: values.base_url,
-    format: values.format,
-    headers: mapHeadersTypeFormValueToWebhookHeadersType(values.headers),
-    downlink_api_key: values.downlink_api_key,
-    uplink_message: mapMessageTypeFormValueToWebhookMessageType(values.uplink_message),
-    join_accept: mapMessageTypeFormValueToWebhookMessageType(values.join_accept),
-    downlink_ack: mapMessageTypeFormValueToWebhookMessageType(values.downlink_ack),
-    downlink_nack: mapMessageTypeFormValueToWebhookMessageType(values.downlink_nack),
-    downlink_sent: mapMessageTypeFormValueToWebhookMessageType(values.downlink_sent),
-    downlink_failed: mapMessageTypeFormValueToWebhookMessageType(values.downlink_failed),
-    downlink_queued: mapMessageTypeFormValueToWebhookMessageType(values.downlink_queued),
-    downlink_queue_invalidated: mapMessageTypeFormValueToWebhookMessageType(
-      values.downlink_queue_invalidated,
-    ),
-    location_solved: mapMessageTypeFormValueToWebhookMessageType(values.location_solved),
-    service_data: mapMessageTypeFormValueToWebhookMessageType(values.service_data),
+export const encodeValues = formValues => {
+  const {
+    _basic_auth_enabled,
+    _basic_auth_username,
+    _basic_auth_password,
+    _headers,
+    ...newValues
+  } = formValues
+
+  newValues.headers = encodeHeaders(_headers)
+  if (_basic_auth_enabled) {
+    newValues.headers.Authorization = `Basic ${btoa(
+      `${_basic_auth_username || ''}:${_basic_auth_password || ''}`,
+    )}`
   }
+
+  return newValues
+}
+
+export const decodeValues = backendValues => {
+  const formValues = { ...backendValues }
+  let decodeError = false
+  if (backendValues?.headers?.Authorization?.startsWith('Basic ')) {
+    const encodedCredentials = backendValues.headers.Authorization.split('Basic ')[1]
+    if (encodedCredentials) {
+      let decodedCredentials
+      try {
+        decodedCredentials = atob(encodedCredentials)
+        formValues._basic_auth_enabled = true
+        formValues._basic_auth_username = decodedCredentials.slice(
+          0,
+          decodedCredentials.indexOf(':'),
+        )
+        formValues._basic_auth_password = decodedCredentials.slice(
+          decodedCredentials.indexOf(':') + 1,
+        )
+      } catch (err) {
+        decodeError = true
+      }
+    }
+  } else {
+    formValues._basic_auth_enabled = false
+    formValues._basic_auth_username = ''
+    formValues._basic_auth_password = ''
+  }
+
+  formValues._headers = decodeHeaders(backendValues?.headers)
+  if (hasBasicAuth(formValues._headers)) {
+    formValues._headers.find(isBasicAuth).readOnly = !decodeError
+    formValues._headers.find(isBasicAuth).decodeError = decodeError
+  }
+
+  return formValues
 }
 
 export const blankValues = {
-  webhook_id: undefined,
-  base_url: undefined,
-  format: undefined,
+  ids: {
+    webhook_id: '',
+  },
+  base_url: '',
+  format: 'json',
+  field_mask: {
+    paths: [],
+  },
   downlink_api_key: '',
-  uplink_message: { enabled: false, value: '' },
-  join_accept: { enabled: false, value: '' },
-  downlink_ack: { enabled: false, value: '' },
-  downlink_nack: { enabled: false, value: '' },
-  downlink_sent: { enabled: false, value: '' },
-  downlink_failed: { enabled: false, value: '' },
-  downlink_queued: { enabled: false, value: '' },
-  downlink_queue_invalidated: { enabled: false, value: '' },
-  location_solved: { enabled: false, value: '' },
-  service_data: { enabled: false, value: '' },
+  uplink_message: null,
+  uplink_normalized: null,
+  join_accept: null,
+  downlink_ack: null,
+  downlink_nack: null,
+  downlink_sent: null,
+  downlink_failed: null,
+  downlink_queued: null,
+  downlink_queue_invalidated: null,
+  location_solved: null,
+  service_data: null,
+  _basic_auth_enabled: false,
+  _basic_auth_username: '',
+  _basic_auth_password: '',
 }

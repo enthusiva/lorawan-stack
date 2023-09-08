@@ -22,35 +22,34 @@ import (
 
 	lpp "github.com/TheThingsNetwork/go-cayenne-lib"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/gogoproto"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/messageprocessors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
-type host struct {
-}
+type host struct{}
 
-type decodedMap map[string]interface{}
+type decodedMap map[string]any
 
 // New creates and returns a new CayenneLPP payload encoder and decoder.
-func New() messageprocessors.PayloadEncodeDecoder {
+func New() messageprocessors.PayloadEncoderDecoder {
 	return &host{}
 }
 
 var (
 	errInput  = errors.DefineInvalidArgument("input", "invalid input")
-	errOutput = errors.Define("output", "invalid output")
+	errOutput = errors.DefineInvalidArgument("output", "invalid output")
 )
 
 // EncodeDownlink encodes the message's DecodedPayload to FRMPayload using CayenneLPP encoding.
-func (h *host) EncodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationDownlink, script string) error {
+func (h *host) EncodeDownlink(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationDownlink, script string) error {
 	defer trace.StartRegion(ctx, "encode downlink message").End()
 
 	decoded := msg.DecodedPayload
 	if decoded == nil {
 		return nil
 	}
-	m, err := gogoproto.Map(decoded)
+	m, err := goproto.Map(decoded)
 	if err != nil {
 		return errInput.WithCause(err)
 	}
@@ -67,20 +66,20 @@ func (h *host) EncodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifier
 			}
 		}
 	}
-	msg.FRMPayload = encoder.Bytes()
+	msg.FrmPayload = encoder.Bytes()
 	return nil
 }
 
 // DecodeUplink decodes the message's FRMPayload to DecodedPayload using CayenneLPP decoding.
-func (h *host) DecodeUplink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationUplink, script string) error {
+func (h *host) DecodeUplink(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationUplink, script string) error {
 	defer trace.StartRegion(ctx, "decode uplink message").End()
 
-	decoder := lpp.NewDecoder(bytes.NewBuffer(msg.FRMPayload))
-	m := decodedMap(make(map[string]interface{}))
+	decoder := lpp.NewDecoder(bytes.NewBuffer(msg.FrmPayload))
+	m := decodedMap(make(map[string]any))
 	if err := decoder.DecodeUplink(m); err != nil {
 		return errOutput.WithCause(err)
 	}
-	s, err := gogoproto.Struct(m)
+	s, err := goproto.Struct(m)
 	if err != nil {
 		return errOutput.WithCause(err)
 	}
@@ -89,15 +88,15 @@ func (h *host) DecodeUplink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers,
 }
 
 // DecodeDownlink decodes the message's FRMPayload to DecodedPayload using CayenneLPP decoding.
-func (h *host) DecodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationDownlink, script string) error {
+func (h *host) DecodeDownlink(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationDownlink, script string) error {
 	defer trace.StartRegion(ctx, "decode downlink message").End()
 
-	decoder := lpp.NewDecoder(bytes.NewBuffer(msg.FRMPayload))
-	m := decodedMap(make(map[string]interface{}))
+	decoder := lpp.NewDecoder(bytes.NewBuffer(msg.FrmPayload))
+	m := decodedMap(make(map[string]any))
 	if err := decoder.DecodeDownlink(m); err != nil {
 		return errOutput.WithCause(err)
 	}
-	s, err := gogoproto.Struct(m)
+	s, err := goproto.Struct(m)
 	if err != nil {
 		return errOutput.WithCause(err)
 	}

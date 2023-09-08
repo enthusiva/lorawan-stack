@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
-import { connect } from 'react-redux'
+import React from 'react'
 import { Container, Col, Row } from 'react-grid-system'
 import { defineMessages } from 'react-intl'
-import { Switch, Route } from 'react-router'
-import bind from 'autobind-decorator'
+import { Routes, Route, useParams } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 
 import BlankWebhookImg from '@assets/misc/blank-webhook.svg'
 
 import PageTitle from '@ttn-lw/components/page-title'
 import Link from '@ttn-lw/components/link'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
 
 import Message from '@ttn-lw/lib/components/message'
@@ -33,13 +32,7 @@ import ApplicationWebhookAddForm from '@console/views/application-integrations-w
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 import PropTypes from '@ttn-lw/lib/prop-types'
 
-import { listWebhookTemplates } from '@console/store/actions/webhook-templates'
-
-import { selectSelectedApplicationId } from '@console/store/selectors/applications'
-import {
-  selectWebhookTemplates,
-  selectWebhookTemplatesFetching,
-} from '@console/store/selectors/webhook-templates'
+import { selectWebhookTemplates } from '@console/store/selectors/webhook-templates'
 
 import style from './application-integrations-webhook-add-choose.styl'
 
@@ -50,7 +43,7 @@ const m = defineMessages({
 
 const WebhookTile = ({ ids, name, description, logo_url }) => (
   <Col xl={3} lg={4} sm={6} xs={6} key={`tile-${ids.template_id}`} className={style.tileColumn}>
-    <Link to={`template/${ids.template_id}`} className={style.webhookTile}>
+    <Link to={ids.template_id} className={style.webhookTile}>
       <img className={style.logo} alt={name} src={logo_url} />
       <span className={style.name}>{name}</span>
       <span className={style.description}>
@@ -63,68 +56,51 @@ const WebhookTile = ({ ids, name, description, logo_url }) => (
 WebhookTile.propTypes = {
   description: PropTypes.message.isRequired,
   ids: PropTypes.shape({
-    template_id: PropTypes.isRequired,
+    template_id: PropTypes.string.isRequired,
   }).isRequired,
   logo_url: PropTypes.string.isRequired,
   name: PropTypes.string.isRequired,
 }
 
-@connect(
-  state => ({
-    appId: selectSelectedApplicationId(state),
-    webhookTemplates: selectWebhookTemplates(state),
-    fetching: selectWebhookTemplatesFetching(state),
-  }),
-  { listWebhookTemplates },
-)
-@withBreadcrumb('apps.single.integrations.webhooks.add.from-template', ({ appId }) => (
-  <Breadcrumb
-    path={`/applications/${appId}/integrations/webhooks/add/template`}
-    content={sharedMessages.add}
-  />
-))
-export default class ApplicationWebhookAddChooser extends Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-    webhookTemplates: PropTypes.webhookTemplates,
-  }
+const WebhookChooser = () => {
+  const webhookTemplates = useSelector(selectWebhookTemplates)
 
-  static defaultProps = {
-    webhookTemplates: undefined,
-  }
-
-  @bind
-  chooser() {
-    const { webhookTemplates } = this.props
-
-    return (
-      <Container>
-        <Row>
-          <Col lg={8} md={12}>
-            <PageTitle title={m.chooseTemplate} />
-          </Col>
-        </Row>
-        <Row gutterWidth={15} className={style.tileRow}>
-          {webhookTemplates.map(WebhookTile)}
-          <WebhookTile
-            ids={{ template_id: 'custom' }}
-            name="Custom webhook"
-            description={m.customTileDescription}
-            logo_url={BlankWebhookImg}
-          />
-        </Row>
-      </Container>
-    )
-  }
-
-  render() {
-    const { match } = this.props
-
-    return (
-      <Switch>
-        <Route exact path={match.path} component={this.chooser} />
-        <Route exact path={`${match.path}/:templateId`} component={ApplicationWebhookAddForm} />
-      </Switch>
-    )
-  }
+  return (
+    <Container>
+      <Row>
+        <Col lg={8} md={12}>
+          <PageTitle title={m.chooseTemplate} />
+        </Col>
+      </Row>
+      <Row gutterWidth={15} className={style.tileRow}>
+        <WebhookTile
+          ids={{ template_id: 'custom' }}
+          name="Custom webhook"
+          description={m.customTileDescription}
+          logo_url={BlankWebhookImg}
+        />
+        {webhookTemplates.map(WebhookTile)}
+      </Row>
+    </Container>
+  )
 }
+const ApplicationWebhookAddChooser = () => {
+  const { appId } = useParams()
+
+  useBreadcrumbs(
+    'apps.single.integrations.webhooks.add.from-template',
+    <Breadcrumb
+      path={`/applications/${appId}/integrations/webhooks/add/template`}
+      content={sharedMessages.add}
+    />,
+  )
+
+  return (
+    <Routes>
+      <Route index Component={WebhookChooser} />
+      <Route path=":templateId" Component={ApplicationWebhookAddForm} />
+    </Routes>
+  )
+}
+
+export default ApplicationWebhookAddChooser

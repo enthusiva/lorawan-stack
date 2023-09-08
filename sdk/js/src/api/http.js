@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import axios from 'axios'
-import { cloneDeep, get, isObject } from 'lodash'
+import { cloneDeep, isObject } from 'lodash'
 
 import Token from '../util/token'
 import EventHandler from '../util/events'
@@ -21,6 +21,7 @@ import {
   URI_PREFIX_STACK_COMPONENT_MAP,
   STACK_COMPONENTS_MAP,
   AUTHORIZATION_MODES,
+  RATE_LIMIT_RETRIES,
 } from '../util/constants'
 
 import stream from './stream/stream-node'
@@ -108,7 +109,7 @@ class Http {
       }
 
       if (method === 'get' || method === 'delete') {
-        // For GETs and DELETEs, convert payload to query params (should usually
+        // For GETs convert payload to query params (should usually
         // be field_mask only).
         config.params = this._payloadToQueryParams(payload)
       } else {
@@ -116,30 +117,64 @@ class Http {
         config.data = payload
       }
 
-      const response = await this[parsedComponent](config)
+      let statusCode, response, retryAfter, limit
+      let retries = 0
 
-      if ('X-Warning' in response.headers || 'x-warning' in response.headers) {
+      while (statusCode === undefined || statusCode === 429) {
+        if (statusCode === 429 && retryAfter !== undefined) {
+          // Dispatch a warning event to note the user about the waiting time
+          // resulting from the rate limitation.
+          EventHandler.dispatchEvent(
+            EventHandler.EVENTS.WARNING,
+            `The rate limitation of ${limit} requests per minute was exceeded while making a request. It will be automatically retried when the rate limiter resets.`,
+          )
+
+          // Sleep until the cool down elapsed before retrying.
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000))
+        }
+
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          response = await this[parsedComponent](config)
+          statusCode = response.status
+        } catch (err) {
+          if (
+            isObject(err) &&
+            'response' in err &&
+            isObject(err.response) &&
+            'status' in err.response &&
+            err.response.status === 429 &&
+            retries <= RATE_LIMIT_RETRIES
+          ) {
+            statusCode = 429
+            // Always wait at least one second to avoid retries in quick succession.
+            retryAfter = Math.max(1, parseInt(err.response.headers['x-rate-limit-retry']))
+            limit = err.response.headers['x-rate-limit-limit']
+          } else {
+            throw err
+          }
+        }
+
+        retries++
+      }
+
+      for (const key in response.headers) {
+        if (!(key.toLowerCase() in response.headers)) {
+          // Normalize capitalized HTTP/1 headers to lowercase HTTP/2 headers.
+          response.headers[key.toLowerCase()] = response.headers[key]
+        }
+      }
+
+      if ('x-warning' in response.headers) {
         // Dispatch a warning event when the server has set a warning header.
-        EventHandler.dispatchEvent(
-          EventHandler.EVENTS.WARNING,
-          response.headers['X-Warning'] || response.headers['x-warning'],
-        )
+        EventHandler.dispatchEvent(EventHandler.EVENTS.WARNING, response.headers['x-warning'])
       }
 
       return response
     } catch (err) {
-      if ('response' in err && err.response && 'data' in err.response) {
+      if (isObject(err) && 'response' in err && err.response && 'data' in err.response) {
         const error = cloneDeep(err.response.data)
-        // Augment the default error with config entries as well as the stack component
-        // abbreviation that threw an error.
-        // TODO: Consider changing this, see https://github.com/TheThingsNetwork/lorawan-stack/issues/3424.
-        if (isObject(error)) {
-          error.request_details = {
-            url: get(err, 'response.config.url'),
-            method: get(err, 'response.config.method'),
-            stack_component: parsedComponent,
-          }
-        }
 
         throw error
       } else {
@@ -158,12 +193,20 @@ class Http {
   _payloadToQueryParams(payload) {
     const res = { ...payload }
     if (payload && Object.keys(payload).length > 0) {
-      if ('field_mask' in payload) {
-        // Convert field mask prop to a query param friendly format
-        res.field_mask = payload.field_mask.paths.join(',')
+      const { field_mask } = payload
+      if (!field_mask) {
+        return res
       }
+      const { paths } = field_mask
+      delete res.field_mask
+      if (!Array.isArray(paths) || paths.length === 0) {
+        return res
+      }
+      // Convert field mask prop to a query param friendly format
+      res.field_mask = paths.join(',')
       return res
     }
+    return {}
   }
 
   /**

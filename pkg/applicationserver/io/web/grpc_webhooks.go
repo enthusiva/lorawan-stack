@@ -18,11 +18,11 @@ import (
 	"context"
 	"strconv"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func setTotalHeader(ctx context.Context, total uint64) {
@@ -38,6 +38,8 @@ func appendImplicitWebhookGetPaths(paths ...string) []string {
 }
 
 type webhookRegistryRPC struct {
+	ttnpb.UnimplementedApplicationWebhookRegistryServer
+
 	webhooks  WebhookRegistry
 	templates TemplateStore
 }
@@ -50,7 +52,7 @@ func NewWebhookRegistryRPC(webhooks WebhookRegistry, templates TemplateStore) tt
 	}
 }
 
-func (s webhookRegistryRPC) GetFormats(ctx context.Context, _ *pbtypes.Empty) (*ttnpb.ApplicationWebhookFormats, error) {
+func (s webhookRegistryRPC) GetFormats(ctx context.Context, _ *emptypb.Empty) (*ttnpb.ApplicationWebhookFormats, error) {
 	fs := make(map[string]string, len(formats))
 	for key, val := range formats {
 		fs[key] = val.Name
@@ -69,17 +71,17 @@ func (s webhookRegistryRPC) ListTemplates(ctx context.Context, req *ttnpb.ListAp
 }
 
 func (s webhookRegistryRPC) Get(ctx context.Context, req *ttnpb.GetApplicationWebhookRequest) (*ttnpb.ApplicationWebhook, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_TRAFFIC_READ); err != nil {
+	if err := rights.RequireApplication(ctx, req.Ids.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ); err != nil {
 		return nil, err
 	}
-	return s.webhooks.Get(ctx, req.ApplicationWebhookIdentifiers, appendImplicitWebhookGetPaths(req.FieldMask.Paths...))
+	return s.webhooks.Get(ctx, req.Ids, appendImplicitWebhookGetPaths(req.FieldMask.GetPaths()...))
 }
 
 func (s webhookRegistryRPC) List(ctx context.Context, req *ttnpb.ListApplicationWebhooksRequest) (*ttnpb.ApplicationWebhooks, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers, ttnpb.RIGHT_APPLICATION_TRAFFIC_READ); err != nil {
+	if err := rights.RequireApplication(ctx, req.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ); err != nil {
 		return nil, err
 	}
-	webhooks, err := s.webhooks.List(ctx, req.ApplicationIdentifiers, appendImplicitWebhookGetPaths(req.FieldMask.Paths...))
+	webhooks, err := s.webhooks.List(ctx, req.ApplicationIds, appendImplicitWebhookGetPaths(req.FieldMask.GetPaths()...))
 	if err != nil {
 		return nil, err
 	}
@@ -94,19 +96,19 @@ func (s webhookRegistryRPC) List(ctx context.Context, req *ttnpb.ListApplication
 }
 
 func (s webhookRegistryRPC) Set(ctx context.Context, req *ttnpb.SetApplicationWebhookRequest) (*ttnpb.ApplicationWebhook, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers,
-		ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC,
-		ttnpb.RIGHT_APPLICATION_TRAFFIC_READ,
-		ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+	if err := rights.RequireApplication(ctx, req.Webhook.Ids.ApplicationIds,
+		ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
 	); err != nil {
 		return nil, err
 	}
-	return s.webhooks.Set(ctx, req.ApplicationWebhookIdentifiers, appendImplicitWebhookGetPaths(req.FieldMask.Paths...),
+	return s.webhooks.Set(ctx, req.Webhook.Ids, appendImplicitWebhookGetPaths(req.FieldMask.GetPaths()...),
 		func(webhook *ttnpb.ApplicationWebhook) (*ttnpb.ApplicationWebhook, []string, error) {
 			if webhook != nil {
-				return &req.ApplicationWebhook, req.FieldMask.Paths, nil
+				return req.Webhook, req.FieldMask.GetPaths(), nil
 			}
-			return &req.ApplicationWebhook, append(req.FieldMask.Paths,
+			return req.Webhook, append(req.FieldMask.GetPaths(),
 				"ids.application_ids",
 				"ids.webhook_id",
 			), nil
@@ -114,15 +116,15 @@ func (s webhookRegistryRPC) Set(ctx context.Context, req *ttnpb.SetApplicationWe
 	)
 }
 
-func (s webhookRegistryRPC) Delete(ctx context.Context, req *ttnpb.ApplicationWebhookIdentifiers) (*pbtypes.Empty, error) {
-	if err := rights.RequireApplication(ctx, req.ApplicationIdentifiers,
-		ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC,
-		ttnpb.RIGHT_APPLICATION_TRAFFIC_READ,
-		ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+func (s webhookRegistryRPC) Delete(ctx context.Context, req *ttnpb.ApplicationWebhookIdentifiers) (*emptypb.Empty, error) {
+	if err := rights.RequireApplication(ctx, req.ApplicationIds,
+		ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
 	); err != nil {
 		return nil, err
 	}
-	_, err := s.webhooks.Set(ctx, *req, nil,
+	_, err := s.webhooks.Set(ctx, req, nil,
 		func(webhook *ttnpb.ApplicationWebhook) (*ttnpb.ApplicationWebhook, []string, error) {
 			return nil, nil, nil
 		},

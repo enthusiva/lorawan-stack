@@ -27,7 +27,6 @@
 // limitations under the License.
 
 import React from 'react'
-import { storiesOf } from '@storybook/react'
 import { withInfo } from '@storybook/addon-info'
 
 import DataSheet from '.'
@@ -46,6 +45,13 @@ const testData = [
     header: 'Activation Info',
     items: [
       { key: 'Device EUI', value: '1212121212', type: 'byte', sensitive: false },
+      {
+        key: 'Device EUI with Uint32_t',
+        value: '1212121212',
+        type: 'byte',
+        sensitive: false,
+        enableUint32: true,
+      },
       { key: 'Join EUI', value: '1212121212', type: 'byte', sensitive: false },
       {
         key: 'Value with Nesting',
@@ -65,17 +71,21 @@ const containerStyles = {
   maxWidth: '600px',
 }
 
-storiesOf('Data Sheet', module)
-  .addDecorator((story, context) =>
+export default {
+  title: 'Data Sheet',
+
+  decorators: [
     withInfo({
       inline: true,
       header: false,
       source: true,
       propTables: [DataSheet],
-    })(story)(context),
-  )
-  .add('Default', () => (
-    <div style={containerStyles}>
-      <DataSheet data={testData} />
-    </div>
-  ))
+    }),
+  ],
+}
+
+export const Default = () => (
+  <div style={containerStyles}>
+    <DataSheet data={testData} />
+  </div>
+)

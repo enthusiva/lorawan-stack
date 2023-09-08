@@ -18,9 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -31,7 +30,6 @@ func TestNeedsRxTimingSetupReq(t *testing.T) {
 	for _, tc := range []struct {
 		Name        string
 		InputDevice *ttnpb.EndDevice
-		Defaults    ttnpb.MACSettings
 		Needs       bool
 	}{
 		{
@@ -41,12 +39,12 @@ func TestNeedsRxTimingSetupReq(t *testing.T) {
 		{
 			Name: "current(delay:1),desired(delay:1)",
 			InputDevice: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						Rx1Delay: ttnpb.RX_DELAY_1,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
 					},
-					DesiredParameters: ttnpb.MACParameters{
-						Rx1Delay: ttnpb.RX_DELAY_1,
+					DesiredParameters: &ttnpb.MACParameters{
+						Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
 					},
 				},
 			},
@@ -54,16 +52,32 @@ func TestNeedsRxTimingSetupReq(t *testing.T) {
 		{
 			Name: "current(delay:1),desired(delay:5)",
 			InputDevice: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						Rx1Delay: ttnpb.RX_DELAY_1,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
 					},
-					DesiredParameters: ttnpb.MACParameters{
-						Rx1Delay: ttnpb.RX_DELAY_5,
+					DesiredParameters: &ttnpb.MACParameters{
+						Rx1Delay: ttnpb.RxDelay_RX_DELAY_5,
 					},
 				},
 			},
 			Needs: true,
+		},
+		{
+			Name: "current(delay:1),desired(delay:5),recent",
+			InputDevice: &ttnpb.EndDevice{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
+					},
+					DesiredParameters: &ttnpb.MACParameters{
+						Rx1Delay: ttnpb.RxDelay_RX_DELAY_5,
+					},
+					RecentMacCommandIdentifiers: []ttnpb.MACCommandIdentifier{
+						ttnpb.MACCommandIdentifier_CID_RX_TIMING_SETUP,
+					},
+				},
+			},
 		},
 	} {
 		tc := tc
@@ -71,7 +85,7 @@ func TestNeedsRxTimingSetupReq(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.InputDevice)
+				dev := ttnpb.Clone(tc.InputDevice)
 				res := DeviceNeedsRxTimingSetupReq(dev)
 				if tc.Needs {
 					a.So(res, should.BeTrue)
@@ -94,33 +108,42 @@ func TestHandleRxTimingSetupAns(t *testing.T) {
 		{
 			Name: "no request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Events: events.Builders{
 				EvtReceiveRxTimingSetupAnswer,
 			},
-			Error: ErrRequestNotFound,
+			Error: ErrRequestNotFound.WithAttributes("cid", ttnpb.MACCommandIdentifier_CID_RX_TIMING_SETUP),
 		},
 		{
 			Name: "42",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_RxTimingSetupReq{
 							Delay: 42,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
 						Rx1Delay: 42,
 					},
-					PendingRequests: []*ttnpb.MACCommand{},
+					DesiredParameters: &ttnpb.MACParameters{},
+					PendingRequests:   []*ttnpb.MACCommand{},
 				},
 			},
 			Events: events.Builders{
@@ -133,7 +156,7 @@ func TestHandleRxTimingSetupAns(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				evs, err := HandleRxTimingSetupAns(ctx, dev)
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||

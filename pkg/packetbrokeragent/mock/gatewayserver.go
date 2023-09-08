@@ -17,7 +17,7 @@ package mock
 import (
 	"context"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"google.golang.org/grpc"
@@ -25,6 +25,8 @@ import (
 
 // GatewayServer is a mock Gateway Server.
 type GatewayServer struct {
+	ttnpb.UnimplementedNsGsServer
+
 	*component.Component
 	Downlink chan *ttnpb.DownlinkMessage
 }
@@ -67,4 +69,10 @@ func (gs *GatewayServer) ScheduleDownlink(ctx context.Context, req *ttnpb.Downli
 	default:
 	}
 	return &ttnpb.ScheduleDownlinkResponse{}, nil
+}
+
+// UpdateGateway updates the gateway in Packet Broker Agent in the cluster.
+func (gs *GatewayServer) UpdateGateway(ctx context.Context, req *ttnpb.UpdatePacketBrokerGatewayRequest) (*ttnpb.UpdatePacketBrokerGatewayResponse, error) {
+	client := ttnpb.NewGsPbaClient(gs.LoopbackConn())
+	return client.UpdateGateway(ctx, req, gs.WithClusterAuth())
 }

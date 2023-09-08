@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package applicationserver provides a LoRaWAN-compliant Application Server implementation.
 package applicationserver
 
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
+	"runtime/trace"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/distribution"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io"
 	iogrpc "go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/grpc"
@@ -32,11 +32,12 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/pubsub"
 	_ "go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/pubsub/provider/mqtt" // The MQTT integration provider
 	_ "go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/pubsub/provider/nats" // The NATS integration provider
-	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/web"
+	ioweb "go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/web"
+	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/lastseen"
+	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/metadata"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
-	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoutil"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
@@ -47,28 +48,42 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/messageprocessors/devicerepository"
 	"go.thethings.network/lorawan-stack/v3/pkg/messageprocessors/javascript"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/hooks"
+	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpclog"
+	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/rpctracer"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/tracing/tracer"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
+	"go.thethings.network/lorawan-stack/v3/pkg/web"
+	"go.thethings.network/lorawan-stack/v3/pkg/workerpool"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ApplicationServer implements the Application Server component.
 //
 // The Application Server exposes the As, AppAs and AsEndDeviceRegistry services.
 type ApplicationServer struct {
+	ttnpb.UnimplementedAsServer
+	ttnpb.UnimplementedNsAsServer
+
 	*component.Component
 	ctx context.Context
 
 	config *Config
 
-	linkRegistry     LinkRegistry
-	deviceRegistry   DeviceRegistry
-	formatters       messageprocessors.MapPayloadProcessor
-	webhooks         web.Webhooks
-	webhookTemplates web.TemplateStore
-	pubsub           *pubsub.PubSub
-	appPackages      packages.Server
+	linkRegistry           LinkRegistry
+	deviceRegistry         DeviceRegistry
+	locationRegistry       metadata.EndDeviceLocationRegistry
+	formatters             messageprocessors.MapPayloadProcessor
+	webhooks               ioweb.Webhooks
+	webhookTemplates       ioweb.TemplateStore
+	pubsub                 *pubsub.PubSub
+	appPackages            packages.Server
+	appPkgRegistry         packages.Registry
+	deviceLastSeenProvider lastseen.LastSeenProvider
 
 	clusterDistributor distribution.Distributor
 	localDistributor   distribution.Distributor
@@ -76,12 +91,16 @@ type ApplicationServer struct {
 	grpc struct {
 		asDevices asEndDeviceRegistryServer
 		appAs     ttnpb.AppAsServer
+
+		asBatchDevices asEndDeviceBatchRegistryServer
 	}
 
 	interopClient InteropClient
 	interopID     string
 
-	endDeviceFetcher EndDeviceFetcher
+	activationPool     workerpool.WorkerPool[*ttnpb.EndDeviceIdentifiers]
+	processingPool     workerpool.WorkerPool[*ttnpb.ApplicationUp]
+	deviceLastSeenPool workerpool.WorkerPool[lastSeenAtInfo]
 }
 
 // Context returns the context of the Application Server.
@@ -89,56 +108,97 @@ func (as *ApplicationServer) Context() context.Context {
 	return as.ctx
 }
 
-var errListenFrontend = errors.DefineFailedPrecondition("listen_frontend", "failed to start frontend listener `{protocol}` on address `{address}`")
+var (
+	errListenFrontend = errors.DefineFailedPrecondition(
+		"listen_frontend", "start frontend listener `{protocol}` on address `{address}`",
+	)
+	errMaxRetriesReached = errors.DefineAborted(
+		"max_retries_reached", "maximum number of retries ({max_retries}) reached",
+	)
+)
+
+func validateDownlinkConfirmationConfig(c ConfirmationConfig) error {
+	if c.DefaultRetryAttempts == 0 || c.MaxRetryAttempts == 0 {
+		return errZeroAttemptCounts.New()
+	}
+	if c.DefaultRetryAttempts > c.MaxRetryAttempts {
+		return errDefaultRetryCountLargerThanMax.New()
+	}
+	return nil
+}
 
 // New returns new *ApplicationServer.
 func New(c *component.Component, conf *Config) (as *ApplicationServer, err error) {
-	ctx := log.NewContextWithField(c.Context(), "namespace", "applicationserver")
+	ctx := tracer.NewContextWithTracer(c.Context(), tracerNamespace)
+
+	ctx = log.NewContextWithField(ctx, "namespace", logNamespace)
 
 	baseConf := c.GetBaseConfig(ctx)
 
-	httpClient, err := c.HTTPClient(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var interopCl InteropClient
 	if !conf.Interop.IsZero() {
 		interopConf := conf.Interop.InteropClient
-		interopConf.GetFallbackTLSConfig = func(ctx context.Context) (*tls.Config, error) {
-			return c.GetTLSClientConfig(ctx)
-		}
 		interopConf.BlobConfig = baseConf.Blob
-		if interopConf.HTTPClient == nil {
-			interopConf.HTTPClient = httpClient
-		}
 
-		interopCl, err = interop.NewClient(ctx, interopConf)
+		interopCl, err = interop.NewClient(ctx, interopConf, c, interop.SelectorApplicationServer)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	as = &ApplicationServer{
-		Component:      c,
-		ctx:            ctx,
-		config:         conf,
-		linkRegistry:   conf.Links,
-		deviceRegistry: wrapEndDeviceRegistryWithReplacedFields(conf.Devices, replacedEndDeviceFields...),
-		formatters: messageprocessors.MapPayloadProcessor{
-			ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT: javascript.New(),
-			ttnpb.PayloadFormatter_FORMATTER_CAYENNELPP: cayennelpp.New(),
-		},
-		clusterDistributor: distribution.NewPubSubDistributor(ctx, c, conf.Distribution.Timeout, conf.Distribution.PubSub),
-		localDistributor:   distribution.NewLocalDistributor(ctx, c, conf.Distribution.Timeout),
-		interopClient:      interopCl,
-		interopID:          conf.Interop.ID,
-		endDeviceFetcher:   conf.EndDeviceFetcher.Fetcher,
+	if err := validateDownlinkConfirmationConfig(conf.Downlinks.ConfirmationConfig); err != nil {
+		return nil, err
 	}
+
+	as = &ApplicationServer{
+		Component:        c,
+		ctx:              ctx,
+		config:           conf,
+		linkRegistry:     conf.Links,
+		deviceRegistry:   wrapEndDeviceRegistryWithReplacedFields(conf.Devices, replacedEndDeviceFields...),
+		appPkgRegistry:   conf.Packages.Registry,
+		locationRegistry: conf.EndDeviceMetadataStorage.Location.Registry,
+		formatters:       make(messageprocessors.MapPayloadProcessor),
+		clusterDistributor: distribution.NewPubSubDistributor(
+			ctx,
+			c,
+			conf.Distribution.Timeout,
+			conf.Distribution.Global.PubSub,
+			conf.Distribution.Global.Individual.SubscriptionOptions(),
+		),
+		localDistributor: distribution.NewLocalDistributor(
+			ctx,
+			c,
+			conf.Distribution.Timeout,
+			conf.Distribution.Local.Broadcast.SubscriptionOptions(),
+			conf.Distribution.Local.Individual.SubscriptionOptions(),
+		),
+		interopClient: interopCl,
+		interopID:     conf.Interop.ID,
+	}
+
+	as.formatters[ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT] = javascript.New()
+	as.formatters[ttnpb.PayloadFormatter_FORMATTER_CAYENNELPP] = cayennelpp.New()
 	as.formatters[ttnpb.PayloadFormatter_FORMATTER_REPOSITORY] = devicerepository.New(as.formatters, as)
 
-	if as.endDeviceFetcher == nil {
-		as.endDeviceFetcher = &NoopEndDeviceFetcher{}
-	}
+	as.activationPool = workerpool.NewWorkerPool(workerpool.Config[*ttnpb.EndDeviceIdentifiers]{
+		Component: c,
+		Context:   ctx,
+		Name:      "set_activated",
+		Handler:   as.setActivated,
+	})
+	as.processingPool = workerpool.NewWorkerPool(workerpool.Config[*ttnpb.ApplicationUp]{
+		Component: c,
+		Context:   ctx,
+		Name:      "process_application_uplinks",
+		Handler:   as.processUpAsync,
+	})
+	as.deviceLastSeenPool = workerpool.NewWorkerPool(workerpool.Config[lastSeenAtInfo]{
+		Component: c,
+		Context:   ctx,
+		Name:      "store_device_last_seen_from_uplink",
+		Handler:   as.storeDeviceLastSeen,
+	})
 
 	as.grpc.asDevices = asEndDeviceRegistryServer{
 		AS:       as,
@@ -146,9 +206,30 @@ func New(c *component.Component, conf *Config) (as *ApplicationServer, err error
 	}
 	as.grpc.appAs = iogrpc.New(as,
 		iogrpc.WithMQTTConfigProvider(as),
-		iogrpc.WithEndDeviceFetcher(as.endDeviceFetcher),
+		iogrpc.WithGetEndDeviceIdentifiers(func(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) (*ttnpb.EndDeviceIdentifiers, error) {
+			dev, err := as.deviceRegistry.Get(ctx, ids, []string{"ids"})
+			if err != nil {
+				return nil, err
+			}
+			return dev.Ids, nil
+		}),
 		iogrpc.WithPayloadProcessor(as.formatters),
+		iogrpc.WithSkipPayloadCrypto(func(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) (bool, error) {
+			link, err := as.getLink(ctx, ids.ApplicationIds, []string{"skip_payload_crypto"})
+			if err != nil {
+				return false, err
+			}
+			dev, err := as.deviceRegistry.Get(ctx, ids, []string{"skip_payload_crypto_override"})
+			if err != nil {
+				return false, err
+			}
+			return as.skipPayloadCrypto(ctx, link, dev, nil), nil
+		}),
 	)
+
+	as.grpc.asBatchDevices = asEndDeviceBatchRegistryServer{
+		AS: as,
+	}
 
 	ctx, cancel := context.WithCancel(as.Context())
 	defer func() {
@@ -175,7 +256,7 @@ func New(c *component.Component, conf *Config) (as *ApplicationServer, err error
 			if endpoint.Address() == "" {
 				continue
 			}
-			as.RegisterTask(&component.TaskConfig{
+			as.RegisterTask(&task.Config{
 				Context: as.Context(),
 				ID:      fmt.Sprintf("serve_mqtt/%s", endpoint.Address()),
 				Func: func(ctx context.Context) error {
@@ -193,23 +274,17 @@ func New(c *component.Component, conf *Config) (as *ApplicationServer, err error
 					defer lis.Close()
 					return mqtt.Serve(ctx, as, lis, version.Format, endpoint.Protocol())
 				},
-				Restart: component.TaskRestartOnFailure,
-				Backoff: component.DefaultTaskBackoffConfig,
+				Restart: task.RestartOnFailure,
+				Backoff: task.DefaultBackoffConfig,
 			})
 		}
 	}
 
-	if webhooks, err := conf.Webhooks.NewWebhooks(ctx, as); err != nil {
+	if as.webhooks, err = conf.Webhooks.NewWebhooks(ctx, as); err != nil {
 		return nil, err
-	} else if webhooks != nil {
-		as.webhooks = webhooks
-		c.RegisterWeb(webhooks)
 	}
 
-	if conf.Webhooks.Templates.HTTPClient == nil {
-		conf.Webhooks.Templates.HTTPClient = httpClient
-	}
-	if as.webhookTemplates, err = conf.Webhooks.Templates.NewTemplateStore(); err != nil {
+	if as.webhookTemplates, err = conf.Webhooks.Templates.NewTemplateStore(ctx, as); err != nil {
 		return nil, err
 	}
 
@@ -219,13 +294,38 @@ func New(c *component.Component, conf *Config) (as *ApplicationServer, err error
 
 	if as.appPackages, err = conf.Packages.NewApplicationPackages(ctx, as); err != nil {
 		return nil, err
-	} else if as.appPackages != nil {
-		c.RegisterGRPC(as.appPackages)
 	}
 
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.NsAs", cluster.HookName, c.ClusterAuthUnaryHook())
+	if as.deviceLastSeenProvider, err = conf.DeviceLastSeen.NewLastSeen(ctx, c); err != nil {
+		return nil, err
+	}
+
+	for _, hook := range []struct {
+		name       string
+		middleware hooks.UnaryHandlerMiddleware
+	}{
+		{rpctracer.TracerHook, rpctracer.UnaryTracerHook(tracerNamespace)},
+		{rpclog.NamespaceHook, rpclog.UnaryNamespaceHook(logNamespace)},
+	} {
+		for _, filter := range []string{
+			"/ttn.lorawan.v3.As",
+			"/ttn.lorawan.v3.NsAs",
+			"/ttn.lorawan.v3.AsEndDeviceRegistry",
+			"/ttn.lorawan.v3.AsEndDeviceBatchRegistry",
+			"/ttn.lorawan.v3.AppAs",
+			"/ttn.lorawan.v3.ApplicationWebhookRegistry",
+			"/ttn.lorawan.v3.ApplicationPubSubRegistry",
+		} {
+			c.GRPC.RegisterUnaryHook(filter, hook.name, hook.middleware)
+		}
+	}
+	c.GRPC.RegisterUnaryHook("/ttn.lorawan.v3.NsAs", cluster.HookName, c.ClusterAuthUnaryHook())
+
+	c.GRPC.RegisterStreamHook("/ttn.lorawan.v3.AppAs", rpctracer.TracerHook, rpctracer.StreamTracerHook(tracerNamespace))
+	c.GRPC.RegisterStreamHook("/ttn.lorawan.v3.AppAs", rpclog.NamespaceHook, rpclog.StreamNamespaceHook(logNamespace))
 
 	c.RegisterGRPC(as)
+	c.RegisterWeb(as)
 	return as, nil
 }
 
@@ -235,29 +335,47 @@ func (as *ApplicationServer) RegisterServices(s *grpc.Server) {
 	ttnpb.RegisterNsAsServer(s, as)
 	ttnpb.RegisterAsEndDeviceRegistryServer(s, as.grpc.asDevices)
 	ttnpb.RegisterAppAsServer(s, as.grpc.appAs)
-	if as.webhooks != nil {
-		ttnpb.RegisterApplicationWebhookRegistryServer(s, web.NewWebhookRegistryRPC(as.webhooks.Registry(), as.webhookTemplates))
+	if wh := as.webhooks; wh != nil {
+		ttnpb.RegisterApplicationWebhookRegistryServer(s, ioweb.NewWebhookRegistryRPC(wh.Registry(), as.webhookTemplates))
 	}
-	if as.pubsub != nil {
-		ttnpb.RegisterApplicationPubSubRegistryServer(s, as.pubsub)
+	if ps := as.pubsub; ps != nil {
+		ttnpb.RegisterApplicationPubSubRegistryServer(s, ps)
 	}
+	if pkgs := as.appPackages; pkgs != nil {
+		pkgs.RegisterServices(s)
+	}
+	ttnpb.RegisterAsEndDeviceBatchRegistryServer(s, as.grpc.asBatchDevices)
 }
 
 // RegisterHandlers registers gRPC handlers.
 func (as *ApplicationServer) RegisterHandlers(s *runtime.ServeMux, conn *grpc.ClientConn) {
-	ttnpb.RegisterAsHandler(as.Context(), s, conn)
-	ttnpb.RegisterAsEndDeviceRegistryHandler(as.Context(), s, conn)
-	ttnpb.RegisterAppAsHandler(as.Context(), s, conn)
+	ttnpb.RegisterAsHandler(as.Context(), s, conn)                  //nolint:errcheck
+	ttnpb.RegisterAsEndDeviceRegistryHandler(as.Context(), s, conn) //nolint:errcheck
+	ttnpb.RegisterAppAsHandler(as.Context(), s, conn)               //nolint:errcheck
 	if as.webhooks != nil {
-		ttnpb.RegisterApplicationWebhookRegistryHandler(as.Context(), s, conn)
+		ttnpb.RegisterApplicationWebhookRegistryHandler(as.Context(), s, conn) //nolint:errcheck
 	}
 	if as.pubsub != nil {
-		ttnpb.RegisterApplicationPubSubRegistryHandler(as.Context(), s, conn)
+		ttnpb.RegisterApplicationPubSubRegistryHandler(as.Context(), s, conn) //nolint:errcheck
+	}
+	if pkgs := as.appPackages; pkgs != nil {
+		pkgs.RegisterHandlers(s, conn)
+	}
+	ttnpb.RegisterAsEndDeviceBatchRegistryHandler(as.Context(), s, conn) // nolint:errcheck
+}
+
+// RegisterRoutes registers HTTP routes.
+func (as *ApplicationServer) RegisterRoutes(s *web.Server) {
+	if wh := as.webhooks; wh != nil {
+		wh.RegisterRoutes(s)
+	}
+	if pkgs := as.appPackages; pkgs != nil {
+		pkgs.RegisterRoutes(s)
 	}
 }
 
 // Roles returns the roles that the Application Server fulfills.
-func (as *ApplicationServer) Roles() []ttnpb.ClusterRole {
+func (*ApplicationServer) Roles() []ttnpb.ClusterRole {
 	return []ttnpb.ClusterRole{ttnpb.ClusterRole_APPLICATION_SERVER}
 }
 
@@ -272,31 +390,49 @@ func (as *ApplicationServer) Subscribe(ctx context.Context, protocol string, ids
 	}
 	if cluster {
 		return as.clusterDistributor.Subscribe(ctx, protocol, ids)
-	} else {
-		return as.localDistributor.Subscribe(ctx, protocol, ids)
 	}
+	return as.localDistributor.Subscribe(ctx, protocol, ids)
 }
 
 // Publish processes the given upstream message and then publishes it to the application frontends.
 func (as *ApplicationServer) Publish(ctx context.Context, up *ttnpb.ApplicationUp) error {
-	link, err := as.getLink(ctx, up.ApplicationIdentifiers, []string{
+	return as.processingPool.Publish(ctx, up)
+}
+
+func (as *ApplicationServer) processUpAsync(ctx context.Context, up *ttnpb.ApplicationUp) {
+	link, err := as.getLink(ctx, up.EndDeviceIds.ApplicationIds, []string{
 		"default_formatters",
 		"skip_payload_crypto",
 	})
 	if err != nil {
-		return err
+		log.FromContext(ctx).WithError(err).Warn("Failed to retrieve application link")
+		return
 	}
-	return as.processUp(ctx, up, link)
+	if err := as.processUp(ctx, up, link); err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to process application uplink")
+		return
+	}
+}
+
+// lastSeenAtInfo holds the information needed for a worker to store entry in the LastSeen map.
+type lastSeenAtInfo struct {
+	ids        *ttnpb.EndDeviceIdentifiers
+	lastSeenAt *timestamppb.Timestamp
+}
+
+func (as *ApplicationServer) storeDeviceLastSeen(ctx context.Context, lastSeenEntry lastSeenAtInfo) {
+	if err := as.deviceLastSeenProvider.PushLastSeenFromUplink(ctx, lastSeenEntry.ids, lastSeenEntry.lastSeenAt); err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to set device last seen timestamp")
+	}
 }
 
 func (as *ApplicationServer) processUp(ctx context.Context, up *ttnpb.ApplicationUp, link *ttnpb.ApplicationLink) error {
-	ctx = log.NewContextWithField(ctx, "device_uid", unique.ID(ctx, up.EndDeviceIdentifiers))
-	ctx = events.ContextWithCorrelationID(ctx, append(up.CorrelationIDs, fmt.Sprintf("as:up:%s", events.NewCorrelationID()))...)
-	up.CorrelationIDs = events.CorrelationIDsFromContext(ctx)
-	registerReceiveUp(ctx, up)
+	defer trace.StartRegion(ctx, "process up").End()
 
-	now := time.Now().UTC()
-	up.ReceivedAt = &now
+	ctx = log.NewContextWithField(ctx, "device_uid", unique.ID(ctx, up.EndDeviceIds))
+	ctx = events.ContextWithCorrelationID(ctx, append(up.CorrelationIds, fmt.Sprintf("as:up:%s", events.NewCorrelationID()))...)
+	up.CorrelationIds = events.CorrelationIDsFromContext(ctx)
+	registerReceiveUp(ctx, up)
 
 	pass, err := as.handleUp(ctx, up, link)
 	if err != nil {
@@ -319,6 +455,8 @@ func (as *ApplicationServer) processUp(ctx context.Context, up *ttnpb.Applicatio
 }
 
 func (as *ApplicationServer) publishUp(ctx context.Context, up *ttnpb.ApplicationUp) error {
+	defer trace.StartRegion(ctx, "publish up").End()
+
 	if err := as.localDistributor.Publish(ctx, up); err != nil {
 		return err
 	}
@@ -329,8 +467,8 @@ func (as *ApplicationServer) publishUp(ctx context.Context, up *ttnpb.Applicatio
 // This method returns true if the AppSKey of the given session is wrapped and cannot be unwrapped by the Application
 // Server, and if the end device's skip_payload_crypto_override is true or if the link's skip_payload_crypto is true.
 func (as *ApplicationServer) skipPayloadCrypto(ctx context.Context, link *ttnpb.ApplicationLink, dev *ttnpb.EndDevice, session *ttnpb.Session) bool {
-	if session != nil && session.AppSKey != nil {
-		if _, err := cryptoutil.UnwrapAES128Key(ctx, session.AppSKey, as.KeyVault); err == nil {
+	if appSKey := session.GetKeys().GetAppSKey(); appSKey != nil {
+		if _, err := cryptoutil.UnwrapAES128Key(ctx, appSKey, as.KeyService()); err == nil {
 			return false
 		}
 	}
@@ -340,34 +478,61 @@ func (as *ApplicationServer) skipPayloadCrypto(ctx context.Context, link *ttnpb.
 	return link.SkipPayloadCrypto.GetValue()
 }
 
+// lastAFCntDownFromMinFCnt computes the last application frame counter based on the
+// minimum frame counter provided by the Network Server.
+// The Network Server may report this minimum as being zero, thus the last application
+// frame counter would be -1. As the frame counters are unsigned integers, this would
+// lead to an overflow.
+func lastAFCntDownFromMinFCnt(min uint32) uint32 {
+	if min == 0 {
+		return 0
+	}
+	return min - 1
+}
+
 var (
 	errDeviceNotFound  = errors.DefineNotFound("device_not_found", "device `{device_uid}` not found")
-	errNoDeviceSession = errors.DefineFailedPrecondition("no_device_session", "no device session; check device activation")
-	errRebuild         = errors.DefineAborted("rebuild", "could not rebuild device session; check device address")
+	errNoDeviceSession = errors.DefineFailedPrecondition(
+		"no_device_session", "no device session; check device activation",
+	)
+	errRebuild = errors.DefineAborted(
+		"rebuild", "rebuild device session; check device address",
+	)
+	errZeroAttemptCounts = errors.DefineFailedPrecondition(
+		"zero_attempt_counts", "the default and maximum number of retries cannot be zero",
+	)
+	errDefaultRetryCountLargerThanMax = errors.DefineFailedPrecondition(
+		"default_retry_count_larger_than_max",
+		"the default number of retries cannot be larger than the maximum number of retries",
+	)
+	errDownlinkMaxRetriesInvalid = errors.DefineInvalidArgument(
+		"downlink_max_retries_invalid", "downlink maximum retries exceed configured maximum of {max}",
+	)
 )
 
 // buildSessionsFromError attempts to rebuild the end device session and pending session based on the error
 // details found in the provided error. This may mutate the session, pending session and device address.
 // If the sessions cannot be rebuilt from the provided error, the error itself is returned.
 func (as *ApplicationServer) buildSessionsFromError(ctx context.Context, dev *ttnpb.EndDevice, err error) ([]string, error) {
+	defer trace.StartRegion(ctx, "rebuild sessions from error").End()
+
 	reconstructSession := func(sessionKeyID []byte, devAddr *types.DevAddr, minFCntDown uint32) (*ttnpb.Session, error) {
-		appSKey, err := as.fetchAppSKey(ctx, dev.EndDeviceIdentifiers, sessionKeyID)
+		appSKey, err := as.fetchAppSKey(ctx, dev.Ids, sessionKeyID)
 		if err != nil {
 			return nil, errFetchAppSKey.WithCause(err)
 		}
 		return &ttnpb.Session{
-			DevAddr: *devAddr,
-			SessionKeys: ttnpb.SessionKeys{
-				SessionKeyID: sessionKeyID,
-				AppSKey:      &appSKey,
+			DevAddr: devAddr.Bytes(),
+			Keys: &ttnpb.SessionKeys{
+				SessionKeyId: sessionKeyID,
+				AppSKey:      appSKey,
 			},
-			LastAFCntDown: minFCntDown,
-			StartedAt:     time.Now().UTC(),
+			LastAFCntDown: lastAFCntDownFromMinFCnt(minFCntDown),
 		}, nil
 	}
 
-	ttnErr, ok := err.(errors.ErrorDetails)
-	if !ok {
+	var ttnErr errors.ErrorDetails
+	if !errors.As(err, &ttnErr) {
 		return nil, err
 	}
 	details := ttnErr.Details()
@@ -376,6 +541,7 @@ func (as *ApplicationServer) buildSessionsFromError(ctx context.Context, dev *tt
 	}
 	var diagnostics *ttnpb.DownlinkQueueOperationErrorDetails
 	for _, detail := range details {
+		var ok bool
 		diagnostics, ok = detail.(*ttnpb.DownlinkQueueOperationErrorDetails)
 		if ok {
 			break
@@ -388,64 +554,178 @@ func (as *ApplicationServer) buildSessionsFromError(ctx context.Context, dev *tt
 	var mask []string
 	if diagnostics.DevAddr != nil {
 		switch {
-		case len(diagnostics.SessionKeyID) > 0:
-			session, err := reconstructSession(diagnostics.SessionKeyID, diagnostics.DevAddr, diagnostics.MinFCntDown)
+		// If the SessionKeyID and DevAddr did not change, just update the LastAFCntDown.
+		case dev.Session != nil &&
+			bytes.Equal(diagnostics.SessionKeyId, dev.Session.Keys.SessionKeyId) &&
+			types.MustDevAddr(dev.Session.DevAddr).OrZero().Equal(types.MustDevAddr(diagnostics.DevAddr).OrZero()):
+			dev.Session.LastAFCntDown = lastAFCntDownFromMinFCnt(diagnostics.MinFCntDown)
+		// If there is a SessionKeyID on the Network Server side, rebuild the session.
+		case len(diagnostics.SessionKeyId) > 0:
+			session, err := reconstructSession(diagnostics.SessionKeyId,
+				types.MustDevAddr(diagnostics.DevAddr),
+				diagnostics.MinFCntDown,
+			)
 			if err != nil {
 				return nil, err
 			}
 			dev.Session = session
-			dev.DevAddr = &session.DevAddr
-		case dev.Session != nil && dev.Session.DevAddr.Equal(*diagnostics.DevAddr):
-			dev.Session.LastAFCntDown = diagnostics.MinFCntDown
+			dev.Ids.DevAddr = session.DevAddr
 		default:
 			return nil, errRebuild.New()
 		}
 	} else {
 		dev.Session = nil
-		dev.DevAddr = nil
+		dev.Ids.DevAddr = nil
 	}
-	mask = append(mask, "session", "ids.dev_addr")
+	mask = ttnpb.AddFields(mask, "session", "ids.dev_addr")
 
 	if diagnostics.PendingDevAddr != nil {
-		session, err := reconstructSession(diagnostics.PendingSessionKeyID, diagnostics.PendingDevAddr, diagnostics.PendingMinFCntDown)
-		if err != nil {
-			return nil, err
+		switch {
+		// If the SessionKeyID did not change, just update the LastAFcntDown.
+		case dev.PendingSession != nil &&
+			bytes.Equal(diagnostics.PendingSessionKeyId, dev.PendingSession.Keys.SessionKeyId) &&
+			types.MustDevAddr(
+				dev.PendingSession.DevAddr).OrZero().Equal(types.MustDevAddr(diagnostics.PendingDevAddr).OrZero()):
+			dev.PendingSession.LastAFCntDown = lastAFCntDownFromMinFCnt(diagnostics.PendingMinFCntDown)
+		// If there is a SessionKeyID on the Network Server side, rebuild the session.
+		case len(diagnostics.PendingSessionKeyId) > 0:
+			session, err := reconstructSession(diagnostics.PendingSessionKeyId,
+				types.MustDevAddr(diagnostics.PendingDevAddr),
+				diagnostics.PendingMinFCntDown,
+			)
+			if err != nil {
+				return nil, err
+			}
+			dev.PendingSession = session
+		default:
+			return nil, errRebuild.New()
 		}
-		dev.PendingSession = session
 	} else {
 		dev.PendingSession = nil
 	}
-	mask = append(mask, "pending_session")
+	mask = ttnpb.AddFields(mask, "pending_session")
 
 	return mask, nil
 }
 
+type downlinkQueueOperation struct {
+	Items             []*ttnpb.ApplicationDownlink
+	Operation         func(ttnpb.AsNsClient, context.Context, *ttnpb.DownlinkQueueRequest, ...grpc.CallOption) (*emptypb.Empty, error)
+	SkipSessionKeyIDs [][]byte
+	ResultFunc        func(decrypted, encrypted []*ttnpb.ApplicationDownlink, err error)
+}
+
+func (d downlinkQueueOperation) shouldSkip(sessionKeyID []byte) bool {
+	for _, id := range d.SkipSessionKeyIDs {
+		if bytes.Equal(id, sessionKeyID) {
+			return true
+		}
+	}
+	return false
+}
+
 const maxDownlinkQueueOperationAttempts = 50
 
-func (as *ApplicationServer) downlinkQueueOp(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink, op func(ttnpb.AsNsClient, context.Context, *ttnpb.DownlinkQueueRequest, ...grpc.CallOption) (*pbtypes.Empty, error)) error {
-	ctx = events.ContextWithCorrelationID(ctx, fmt.Sprintf("as:downlink:%s", events.NewCorrelationID()))
-	for _, item := range items {
-		item.CorrelationIDs = append(item.CorrelationIDs, events.CorrelationIDsFromContext(ctx)...)
+func (as *ApplicationServer) attemptDownlinkQueueOp(ctx context.Context, dev *ttnpb.EndDevice, link *ttnpb.ApplicationLink, peer cluster.Peer, op downlinkQueueOperation) (mask []string, err error) {
+	defer trace.StartRegion(ctx, "attempt downlink queue operation").End()
+
+	var encryptedItems []*ttnpb.ApplicationDownlink
+	if op.ResultFunc != nil {
+		defer func() {
+			op.ResultFunc(op.Items, encryptedItems, err)
+		}()
 	}
-	logger := log.FromContext(ctx)
-	for _, item := range items {
-		registerReceiveDownlink(ctx, ids, item)
+
+	for _, down := range op.Items {
+		if down.FPort == 0 {
+			return nil, errNoFPort.New()
+		}
 	}
-	peer, err := as.GetPeer(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
-	if err != nil {
-		return err
-	}
+
 	pc, err := peer.Conn()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	link, err := as.getLink(ctx, ids.ApplicationIdentifiers, []string{
+	mask = make([]string, 0, 2)
+	attempt := 1
+	for {
+		ctx := log.NewContextWithField(ctx, "attempt", attempt)
+
+		sessions := make([]*ttnpb.Session, 0, 2)
+		if dev.Session != nil && !op.shouldSkip(dev.Session.Keys.SessionKeyId) {
+			sessions = append(sessions, dev.Session)
+			mask = ttnpb.AddFields(mask, "session.last_a_f_cnt_down")
+		}
+		if dev.PendingSession != nil && !op.shouldSkip(dev.PendingSession.Keys.SessionKeyId) {
+			// Downlink can be encrypted with the pending session while the device first joined but not confirmed the
+			// session by sending an uplink.
+			sessions = append(sessions, dev.PendingSession)
+			mask = ttnpb.AddFields(mask, "pending_session.last_a_f_cnt_down")
+		}
+		if len(sessions) == 0 {
+			return nil, errNoDeviceSession.New()
+		}
+		encryptedItems, err = as.encryptDownlinks(ctx, dev, link, op.Items, sessions)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = op.Operation(ttnpb.NewAsNsClient(pc), ctx, &ttnpb.DownlinkQueueRequest{
+			EndDeviceIds: dev.Ids,
+			Downlinks:    encryptedItems,
+		}, as.WithClusterAuth())
+		if err == nil {
+			return mask, nil
+		}
+		if attempt >= maxDownlinkQueueOperationAttempts || as.skipPayloadCrypto(ctx, link, dev, nil) {
+			return nil, err
+		}
+		mask, err = as.buildSessionsFromError(ctx, dev, err)
+		if err != nil {
+			return nil, err
+		}
+		attempt++
+	}
+}
+
+// initAndValidateConfirmationRetriesConfig initializes and validates the confirmation
+// retries configuration for the given downlink.
+func (as *ApplicationServer) initAndValidateConfirmationRetriesConfig(item *ttnpb.ApplicationDownlink) error {
+	if !item.Confirmed {
+		return nil
+	}
+
+	if item.ConfirmedRetry == nil {
+		item.ConfirmedRetry = &ttnpb.ApplicationDownlink_ConfirmedRetry{
+			Attempt: 1,
+		}
+	}
+
+	maxAttemptsAllowed := as.config.Downlinks.ConfirmationConfig.MaxRetryAttempts
+	if item.ConfirmedRetry.MaxAttempts.GetValue() > maxAttemptsAllowed {
+		return errDownlinkMaxRetriesInvalid.WithAttributes("max", maxAttemptsAllowed)
+	}
+	return nil
+}
+
+func (as *ApplicationServer) downlinkQueueOp(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink, op func(ttnpb.AsNsClient, context.Context, *ttnpb.DownlinkQueueRequest, ...grpc.CallOption) (*emptypb.Empty, error)) error {
+	ctx = events.ContextWithCorrelationID(ctx, fmt.Sprintf("as:downlink:%s", events.NewCorrelationID()))
+	link, err := as.getLink(ctx, ids.ApplicationIds, []string{
 		"default_formatters",
 		"skip_payload_crypto",
 	})
 	if err != nil {
 		return err
 	}
+	peer, err := as.GetPeer(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		ctx := events.ContextWithCorrelationID(ctx, item.CorrelationIds...)
+		item.CorrelationIds = events.CorrelationIDsFromContext(ctx)
+	}
+	now := timestamppb.Now()
 	_, err = as.deviceRegistry.Set(ctx, ids,
 		[]string{
 			"formatters",
@@ -455,135 +735,63 @@ func (as *ApplicationServer) downlinkQueueOp(ctx context.Context, ids ttnpb.EndD
 			"version_ids",
 		},
 		func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
-			attempt := 0
-		operationAttempt:
-			for {
-				ctx := log.NewContextWithField(ctx, "attempt", attempt)
-				var mask []string
-				if dev == nil {
-					return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
-				}
-				sessions := make([]*ttnpb.Session, 0, 2)
-				if dev.Session != nil {
-					sessions = append(sessions, dev.Session)
-					mask = append(mask, "session.last_a_f_cnt_down")
-				}
-				if dev.PendingSession != nil {
-					// Downlink can be encrypted with the pending session while the device first joined but not confirmed the
-					// session by sending an uplink.
-					sessions = append(sessions, dev.PendingSession)
-					mask = append(mask, "pending_session.last_a_f_cnt_down")
-				}
-				if len(sessions) == 0 {
-					return nil, nil, errNoDeviceSession.New()
-				}
-				var encryptedItems []*ttnpb.ApplicationDownlink
-				for _, session := range sessions {
-					skipPayloadCrypto := as.skipPayloadCrypto(ctx, link, dev, session)
-					for _, item := range items {
-						fCnt := session.LastAFCntDown + 1
-						if skipPayloadCrypto {
-							fCnt = item.FCnt
-						}
-						encryptedItem := &ttnpb.ApplicationDownlink{
-							SessionKeyID:   session.SessionKeyID,
-							FPort:          item.FPort,
-							FCnt:           fCnt,
-							FRMPayload:     item.FRMPayload,
-							DecodedPayload: item.DecodedPayload,
-							Confirmed:      item.Confirmed,
-							ClassBC:        item.ClassBC,
-							Priority:       item.Priority,
-							CorrelationIDs: item.CorrelationIDs,
-						}
-						if !skipPayloadCrypto {
-							if err := as.encodeAndEncryptDownlink(ctx, dev, session, encryptedItem, link.DefaultFormatters); err != nil {
-								logger.WithError(err).Warn("Encoding and encryption of downlink message failed; drop item")
-								return nil, nil, err
-							}
-						}
-						encryptedItem.DecodedPayload = nil
-						session.LastAFCntDown = encryptedItem.FCnt
-						encryptedItems = append(encryptedItems, encryptedItem)
-					}
-				}
-				client := ttnpb.NewAsNsClient(pc)
-				req := &ttnpb.DownlinkQueueRequest{
-					EndDeviceIdentifiers: ids,
-					Downlinks:            encryptedItems,
-				}
-				_, err = op(client, ctx, req, as.WithClusterAuth())
-				if err != nil {
-					if attempt >= maxDownlinkQueueOperationAttempts || as.skipPayloadCrypto(ctx, link, dev, nil) {
-						return nil, nil, err
-					}
-
-					rebuildMask, err := as.buildSessionsFromError(ctx, dev, err)
-					if err != nil {
-						return nil, nil, err
-					}
-					mask = append(mask, rebuildMask...)
-					attempt++
-
-					continue operationAttempt
-				}
-				return dev, mask, nil
+			if dev == nil {
+				return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
 			}
+			for _, item := range items {
+				var err error
+				if item.FrmPayload != nil && item.DecodedPayload == nil {
+					err = as.decodeDownlink(ctx, dev, item, link.DefaultFormatters)
+				} else {
+					err = as.encodeDownlink(ctx, dev, item, link.DefaultFormatters)
+				}
+				if err != nil {
+					log.FromContext(ctx).WithError(err).Warn("Encoding or decoding downlink message failed")
+					return nil, nil, err
+				}
+				if err := as.initAndValidateConfirmationRetriesConfig(item); err != nil {
+					return nil, nil, err
+				}
+			}
+
+			registerReceiveDownlinks(ctx, dev.Ids, items)
+
+			mask, err := as.attemptDownlinkQueueOp(ctx, dev, link, peer, downlinkQueueOperation{
+				Items:     items,
+				Operation: op,
+				ResultFunc: func(decrypted, encrypted []*ttnpb.ApplicationDownlink, err error) {
+					if err != nil {
+						as.registerDropDownlinks(ctx, dev.Ids, decrypted, now, err)
+					} else {
+						as.registerForwardDownlinks(ctx, dev.Ids, decrypted, encrypted, now)
+					}
+				},
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			return dev, mask, nil
 		},
 	)
-	if err != nil {
-		var errorDetails ttnpb.ErrorDetails
-		if ttnErr, ok := err.(errors.ErrorDetails); ok {
-			errorDetails = *ttnpb.ErrorDetailsToProto(ttnErr)
-		}
-		for _, item := range items {
-			if err := as.publishUp(ctx, &ttnpb.ApplicationUp{
-				EndDeviceIdentifiers: ids,
-				CorrelationIDs:       item.CorrelationIDs,
-				Up: &ttnpb.ApplicationUp_DownlinkFailed{
-					DownlinkFailed: &ttnpb.ApplicationDownlinkFailed{
-						ApplicationDownlink: *item,
-						Error:               errorDetails,
-					},
-				},
-			}); err != nil {
-				logger.WithError(err).Warn("Failed to send upstream message")
-			}
-			registerDropDownlink(ctx, ids, item, err)
-		}
-		return err
-	}
-	for _, item := range items {
-		if err := as.publishUp(ctx, &ttnpb.ApplicationUp{
-			EndDeviceIdentifiers: ids,
-			CorrelationIDs:       item.CorrelationIDs,
-			Up: &ttnpb.ApplicationUp_DownlinkQueued{
-				DownlinkQueued: item,
-			},
-		}); err != nil {
-			logger.WithError(err).Warn("Failed to send upstream message")
-		}
-		registerForwardDownlink(ctx, ids, item, peer.Name())
-	}
-	return nil
+	return err
 }
 
 // DownlinkQueuePush pushes the given downlink messages to the end device's application downlink queue.
 // This operation changes FRMPayload in the given items.
-func (as *ApplicationServer) DownlinkQueuePush(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
+func (as *ApplicationServer) DownlinkQueuePush(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
 	return as.downlinkQueueOp(ctx, ids, io.CleanDownlinks(items), ttnpb.AsNsClient.DownlinkQueuePush)
 }
 
 // DownlinkQueueReplace replaces the end device's application downlink queue with the given downlink messages.
 // This operation changes FRMPayload in the given items.
-func (as *ApplicationServer) DownlinkQueueReplace(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
+func (as *ApplicationServer) DownlinkQueueReplace(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, items []*ttnpb.ApplicationDownlink) error {
 	return as.downlinkQueueOp(ctx, ids, io.CleanDownlinks(items), ttnpb.AsNsClient.DownlinkQueueReplace)
 }
 
 var errNoAppSKey = errors.DefineCorruption("no_app_s_key", "no AppSKey")
 
 // DownlinkQueueList lists the application downlink queue of the given end device.
-func (as *ApplicationServer) DownlinkQueueList(ctx context.Context, ids ttnpb.EndDeviceIdentifiers) ([]*ttnpb.ApplicationDownlink, error) {
+func (as *ApplicationServer) DownlinkQueueList(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) ([]*ttnpb.ApplicationDownlink, error) {
 	dev, err := as.deviceRegistry.Get(ctx, ids, []string{
 		"formatters",
 		"session",
@@ -593,19 +801,19 @@ func (as *ApplicationServer) DownlinkQueueList(ctx context.Context, ids ttnpb.En
 	if err != nil {
 		return nil, err
 	}
-	link, err := as.getLink(ctx, ids.ApplicationIdentifiers, []string{
+	link, err := as.getLink(ctx, ids.ApplicationIds, []string{
 		"default_formatters",
 		"skip_payload_crypto",
 	})
 	if err != nil {
 		return nil, err
 	}
-	pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
+	pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
 	if err != nil {
 		return nil, err
 	}
 	client := ttnpb.NewAsNsClient(pc)
-	res, err := client.DownlinkQueueList(ctx, &ids, as.WithClusterAuth())
+	res, err := client.DownlinkQueueList(ctx, ids, as.WithClusterAuth())
 	if err != nil {
 		return nil, err
 	}
@@ -622,10 +830,10 @@ func (as *ApplicationServer) DownlinkQueueList(ctx context.Context, ids ttnpb.En
 	default:
 		return nil, errNoDeviceSession.New()
 	}
-	if session.AppSKey == nil {
+	if session.GetKeys().GetAppSKey() == nil {
 		return nil, errNoAppSKey.New()
 	}
-	queue, _ = ttnpb.PartitionDownlinksBySessionKeyIDEquality(session.SessionKeyID, res.Downlinks...)
+	queue, _ = ttnpb.PartitionDownlinksBySessionKeyIDEquality(session.Keys.SessionKeyId, res.Downlinks...)
 	if as.skipPayloadCrypto(ctx, link, dev, session) {
 		return queue, nil
 	}
@@ -637,37 +845,49 @@ func (as *ApplicationServer) DownlinkQueueList(ctx context.Context, ids ttnpb.En
 	return queue, nil
 }
 
-var errJSUnavailable = errors.DefineUnavailable("join_server_unavailable", "Join Server unavailable for JoinEUI `{join_eui}`")
+var (
+	errJSUnavailable = errors.DefineUnavailable("join_server_unavailable", "Join Server unavailable for JoinEUI `{join_eui}`")
+	errNoDevEUI      = errors.DefineInvalidArgument("no_dev_eui", "no device EUI provided")
+	errNoJoinEUI     = errors.DefineInvalidArgument("no_join_eui", "no join EUI provided")
+)
 
-func (as *ApplicationServer) fetchAppSKey(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, sessionKeyID []byte) (ttnpb.KeyEnvelope, error) {
-	req := &ttnpb.SessionKeyRequest{
-		SessionKeyID: sessionKeyID,
-		DevEUI:       *ids.DevEUI,
-		JoinEUI:      *ids.JoinEUI,
+func (as *ApplicationServer) fetchAppSKey(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, sessionKeyID []byte) (*ttnpb.KeyEnvelope, error) {
+	defer trace.StartRegion(ctx, "fetch AppSKey").End()
+
+	if ids == nil || ids.DevEui == nil {
+		return nil, errNoDevEUI.New()
 	}
-	if js, err := as.GetPeer(ctx, ttnpb.ClusterRole_JOIN_SERVER, ids); err == nil {
+	if ids.JoinEui == nil {
+		return nil, errNoJoinEUI.New()
+	}
+	req := &ttnpb.SessionKeyRequest{
+		SessionKeyId: sessionKeyID,
+		DevEui:       ids.DevEui,
+		JoinEui:      ids.JoinEui,
+	}
+	if js, err := as.GetPeer(ctx, ttnpb.ClusterRole_JOIN_SERVER, nil); err == nil {
 		cc, err := js.Conn()
 		if err != nil {
-			return ttnpb.KeyEnvelope{}, err
+			return nil, err
 		}
 		res, err := ttnpb.NewAsJsClient(cc).GetAppSKey(ctx, req, as.WithClusterAuth())
-		if err == nil {
+		if err == nil && res.AppSKey != nil {
 			return res.AppSKey, nil
 		}
 		if !errors.IsNotFound(err) {
-			return ttnpb.KeyEnvelope{}, err
+			return nil, err
 		}
 	}
 	if as.interopClient != nil && !interop.GeneratedSessionKeyID(sessionKeyID) {
 		res, err := as.interopClient.GetAppSKey(ctx, as.interopID, req)
-		if err == nil {
+		if err == nil && res.AppSKey != nil {
 			return res.AppSKey, nil
 		}
 		if !errors.IsNotFound(err) {
-			return ttnpb.KeyEnvelope{}, err
+			return nil, err
 		}
 	}
-	return ttnpb.KeyEnvelope{}, errJSUnavailable.WithAttributes("join_eui", *ids.JoinEUI)
+	return nil, errJSUnavailable.WithAttributes("join_eui", types.MustEUI64(ids.JoinEui).OrZero())
 }
 
 func (as *ApplicationServer) handleUp(ctx context.Context, up *ttnpb.ApplicationUp, link *ttnpb.ApplicationLink) (pass bool, err error) {
@@ -676,23 +896,23 @@ func (as *ApplicationServer) handleUp(ctx context.Context, up *ttnpb.Application
 	}
 	switch p := up.Up.(type) {
 	case *ttnpb.ApplicationUp_JoinAccept:
-		return true, as.handleJoinAccept(ctx, up.EndDeviceIdentifiers, p.JoinAccept, link)
+		return true, as.handleJoinAccept(ctx, up.EndDeviceIds, up.ReceivedAt, p.JoinAccept, link)
 	case *ttnpb.ApplicationUp_UplinkMessage:
-		return true, as.handleUplink(ctx, up.EndDeviceIdentifiers, p.UplinkMessage, link)
-	case *ttnpb.ApplicationUp_DownlinkQueueInvalidated:
-		return as.handleDownlinkQueueInvalidated(ctx, up.EndDeviceIdentifiers, p.DownlinkQueueInvalidated, link)
-	case *ttnpb.ApplicationUp_DownlinkQueued:
-		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIdentifiers, p.DownlinkQueued, link)
-	case *ttnpb.ApplicationUp_DownlinkSent:
-		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIdentifiers, p.DownlinkSent, link)
-	case *ttnpb.ApplicationUp_DownlinkFailed:
-		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIdentifiers, &p.DownlinkFailed.ApplicationDownlink, link)
-	case *ttnpb.ApplicationUp_DownlinkAck:
-		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIdentifiers, p.DownlinkAck, link)
-	case *ttnpb.ApplicationUp_DownlinkNack:
-		return true, as.handleDownlinkNack(ctx, up.EndDeviceIdentifiers, p.DownlinkNack, link)
-	case *ttnpb.ApplicationUp_LocationSolved:
+		return true, as.handleUplink(ctx, uplinkInfo{up.EndDeviceIds, up.ReceivedAt, p.UplinkMessage, false, link})
+	case *ttnpb.ApplicationUp_UplinkNormalized:
 		return true, nil
+	case *ttnpb.ApplicationUp_DownlinkQueueInvalidated:
+		return as.handleDownlinkQueueInvalidated(ctx, up.EndDeviceIds, up.ReceivedAt, p.DownlinkQueueInvalidated, link)
+	case *ttnpb.ApplicationUp_DownlinkSent:
+		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIds, p.DownlinkSent, link)
+	case *ttnpb.ApplicationUp_DownlinkFailed:
+		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIds, p.DownlinkFailed.Downlink, link)
+	case *ttnpb.ApplicationUp_DownlinkAck:
+		return true, as.decryptDownlinkMessage(ctx, up.EndDeviceIds, p.DownlinkAck, link)
+	case *ttnpb.ApplicationUp_DownlinkNack:
+		return true, as.handleDownlinkNack(ctx, up.EndDeviceIds, up.ReceivedAt, p.DownlinkNack, link)
+	case *ttnpb.ApplicationUp_LocationSolved:
+		return true, as.handleLocationSolved(ctx, up.EndDeviceIds, p.LocationSolved, link)
 	case *ttnpb.ApplicationUp_ServiceData:
 		return true, nil
 	default:
@@ -703,28 +923,43 @@ func (as *ApplicationServer) handleUp(ctx context.Context, up *ttnpb.Application
 func (as *ApplicationServer) handleSimulatedUp(ctx context.Context, up *ttnpb.ApplicationUp, link *ttnpb.ApplicationLink) error {
 	switch p := up.Up.(type) {
 	case *ttnpb.ApplicationUp_UplinkMessage:
-		return as.handleSimulatedUplink(ctx, up.EndDeviceIdentifiers, p.UplinkMessage, link)
+		return as.handleSimulatedUplink(ctx, uplinkInfo{up.EndDeviceIds, up.ReceivedAt, p.UplinkMessage, true, link})
 	default:
 		return nil
 	}
 }
 
-var errFetchAppSKey = errors.Define("app_s_key", "failed to get AppSKey")
+var errFetchAppSKey = errors.Define("app_s_key", "get AppSKey")
 
 // handleJoinAccept handles a join-accept message.
 // If the application or device is not configured to skip application crypto, the InvalidatedDownlinks and the AppSKey
 // in the given join-accept message is reset.
-func (as *ApplicationServer) handleJoinAccept(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, joinAccept *ttnpb.ApplicationJoinAccept, link *ttnpb.ApplicationLink) error {
+func (as *ApplicationServer) handleJoinAccept(
+	ctx context.Context,
+	ids *ttnpb.EndDeviceIdentifiers,
+	receivedAt *timestamppb.Timestamp,
+	joinAccept *ttnpb.ApplicationJoinAccept,
+	link *ttnpb.ApplicationLink,
+) error {
+	defer trace.StartRegion(ctx, "handle join accept").End()
+
 	logger := log.FromContext(ctx).WithFields(log.Fields(
-		"join_eui", ids.JoinEUI,
-		"dev_eui", ids.DevEUI,
-		"session_key_id", joinAccept.SessionKeyID,
+		"join_eui", ids.JoinEui,
+		"dev_eui", ids.DevEui,
+		"session_key_id", joinAccept.SessionKeyId,
 	))
-	_, err := as.deviceRegistry.Set(ctx, ids,
+	peer, err := as.GetPeer(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = as.deviceRegistry.Set(ctx, ids,
 		[]string{
+			"formatters",
 			"pending_session",
 			"session",
 			"skip_payload_crypto_override",
+			"version_ids",
 		},
 		func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
 			var mask []string
@@ -735,334 +970,210 @@ func (as *ApplicationServer) handleJoinAccept(ctx context.Context, ids ttnpb.End
 				logger.Debug("Received AppSKey from Network Server")
 			} else {
 				logger.Debug("Fetch AppSKey from Join Server")
-				key, err := as.fetchAppSKey(ctx, ids, joinAccept.SessionKeyID)
+				key, err := as.fetchAppSKey(ctx, ids, joinAccept.SessionKeyId)
 				if err != nil {
 					return nil, nil, errFetchAppSKey.WithCause(err)
 				}
-				joinAccept.AppSKey = &key
+				joinAccept.AppSKey = key
 				logger.Debug("Fetched AppSKey from Join Server")
 			}
 			previousSession := dev.PendingSession
 			dev.PendingSession = &ttnpb.Session{
-				DevAddr: *ids.DevAddr,
-				SessionKeys: ttnpb.SessionKeys{
-					SessionKeyID: joinAccept.SessionKeyID,
+				DevAddr: ids.DevAddr,
+				Keys: &ttnpb.SessionKeys{
+					SessionKeyId: joinAccept.SessionKeyId,
 					AppSKey:      joinAccept.AppSKey,
 				},
-				StartedAt: time.Now().UTC(),
 			}
-			mask = append(mask, "pending_session")
-			if !as.skipPayloadCrypto(ctx, link, dev, dev.PendingSession) {
-				if len(joinAccept.InvalidatedDownlinks) > 0 {
-					// The Network Server does not reset the downlink queues as the new security session is established,
-					// but rather when the session is confirmed on the first uplink. The downlink queue of the current
-					// session is passed as part of the join-accept in order to allow the Application Server to compute
-					// the downlink queue of this new pending session.
-					logger := logger.WithField("count", len(joinAccept.InvalidatedDownlinks))
-					logger.Debug("Recalculating downlink queue to restore downlink queue on join")
-					if err := as.recalculatePendingDownlinkQueue(ctx, dev, link, previousSession, joinAccept.InvalidatedDownlinks); err != nil {
-						logger.WithError(err).Warn("Failed to recalculate downlink queue; items lost")
-					}
-					joinAccept.InvalidatedDownlinks = nil
+			mask = ttnpb.AddFields(mask, "pending_session")
+			if as.skipPayloadCrypto(ctx, link, dev, dev.PendingSession) {
+				return dev, mask, nil
+			}
+			joinAccept.AppSKey = nil
+			if len(joinAccept.InvalidatedDownlinks) == 0 {
+				return dev, mask, nil
+			}
+
+			// The Network Server does not reset the downlink queues as the new security session is established,
+			// but rather when the session is confirmed on the first uplink. The downlink queue of the current
+			// session is passed as part of the join-accept in order to allow the Application Server to compute
+			// the downlink queue of this new pending session.
+			logger := logger.WithField("count", len(joinAccept.InvalidatedDownlinks))
+			logger.Debug("Recalculating downlink queue to restore downlink queue on join")
+
+			items := make([]*ttnpb.ApplicationDownlink, 0, len(joinAccept.InvalidatedDownlinks))
+			for _, msg := range joinAccept.InvalidatedDownlinks {
+				if err := as.decryptDownlink(ctx, dev, msg, previousSession); err != nil {
+					logger.WithError(err).Warn("Failed to decrypt downlink message; drop item")
+					registerDropDownlink(ctx, dev.Ids, msg, err)
+					continue
 				}
-				joinAccept.AppSKey = nil
+				items = append(items, msg)
 			}
+			joinAccept.InvalidatedDownlinks = nil
+			if len(items) == 0 {
+				return dev, mask, nil
+			}
+
+			pushMask, err := as.attemptDownlinkQueueOp(ctx, dev, link, peer, downlinkQueueOperation{
+				Items:     items,
+				Operation: ttnpb.AsNsClient.DownlinkQueuePush,
+				// The session from which the downlinks originate already contains them. As such
+				// we don't need to push them there.
+				SkipSessionKeyIDs: [][]byte{items[0].SessionKeyId},
+				ResultFunc: func(decrypted, _ []*ttnpb.ApplicationDownlink, err error) {
+					if err != nil {
+						as.registerDropDownlinks(ctx, dev.Ids, decrypted, receivedAt, err)
+					}
+				},
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			mask = ttnpb.AddFields(mask, pushMask...)
+
 			return dev, mask, nil
 		},
 	)
 	if err != nil {
 		return err
 	}
+
+	// Publish last seen event.
+	if err := as.deviceLastSeenPool.Publish(ctx, lastSeenAtInfo{
+		ids:        ids,
+		lastSeenAt: joinAccept.ReceivedAt,
+	}); err != nil {
+		logger.WithError(err).Warn("Failed to publish last seen event")
+	}
+
 	return nil
 }
 
-// resetInvalidDownlinkQueue clears the invalid downlink queue of the provided device and publishes the appropriate events.
-func (as *ApplicationServer) resetInvalidDownlinkQueue(ctx context.Context, ids ttnpb.EndDeviceIdentifiers) error {
-	logger := log.FromContext(ctx)
-	pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
-	if err != nil {
-		return err
-	}
-	client := ttnpb.NewAsNsClient(pc)
-	req := &ttnpb.DownlinkQueueRequest{
-		EndDeviceIdentifiers: ids,
-	}
-	_, err = client.DownlinkQueueReplace(ctx, req, as.WithClusterAuth())
-	if err != nil {
-		logger.WithError(err).Warn("Failed to clear the downlink queue; any queued items in the Network Server are invalid")
-		events.Publish(evtInvalidQueueDataDown.NewWithIdentifiersAndData(ctx, ids, err))
-	} else {
-		events.Publish(evtLostQueueDataDown.NewWithIdentifiersAndData(ctx, ids, err))
-	}
-	return err
-}
-
-// downlinkQueueTransaction represents a transaction to be run on the downlink queues of the provided device.
-type downlinkQueueTransaction func(context.Context, *ttnpb.EndDevice) error
-
-// runDownlinkQueueTransaction runs the provided downlink queue transaction on the device. If the transaction
-// fails, the LastAFCntDown session fields are restored to their previous values and the downlink queue is reset.
-func (as *ApplicationServer) runDownlinkQueueTransaction(ctx context.Context, dev *ttnpb.EndDevice, link *ttnpb.ApplicationLink, t downlinkQueueTransaction) error {
-	logger := log.FromContext(ctx)
-	pendingSession := dev.PendingSession
-	if pendingSession != nil {
-		logger = logger.WithField("pending_session_key_id", pendingSession.SessionKeyID)
-	}
-	session := dev.Session
-	if session != nil {
-		logger = logger.WithField("session_key_id", session.SessionKeyID)
-	}
-	if as.skipPayloadCrypto(ctx, link, dev, session) || as.skipPayloadCrypto(ctx, link, dev, pendingSession) {
-		return errPayloadCryptoDisabled.New()
-	}
-	ctx = log.NewContext(ctx, logger)
-	if err := t(ctx, dev); err != nil {
-		// If something fails, clear the downlink queue as an empty downlink queue is better than a downlink queue
-		// with items that are encrypted with the wrong AppSKey.
-		logger.WithError(err).Warn("Failed to recalculate downlink queue; clear the downlink queue")
-		as.resetInvalidDownlinkQueue(ctx, dev.EndDeviceIdentifiers)
-	}
-	return t(ctx, dev)
-}
-
 var errUnknownSession = errors.DefineNotFound("unknown_session", "unknown session")
-
-// recalculatePendingDownlinkQueue computes the downlink queue of the device's pending session, by decrypting the
-// invalidated queue using the device session and moving them to the pending session.
-// The previous pending session is used for cases in which the device has not been activated, and as such does not
-// have a device session. In such cases, if there are downlinks present in the pending queue, they are decrypted
-// using the previous pending session and encrypted using new pending session.
-// This method mutates the LastAFCntDown of pending session. Downlinks which cannot be decrypted are dropped.
-// This method uses the downlink queue transaction mechanism, so any errors that occur during recomputation will
-// result in an downlink queue reset attempt.
-func (as *ApplicationServer) recalculatePendingDownlinkQueue(ctx context.Context, dev *ttnpb.EndDevice, link *ttnpb.ApplicationLink, previousPendingSession *ttnpb.Session, invalidatedDownlinks []*ttnpb.ApplicationDownlink) error {
-	return as.runDownlinkQueueTransaction(ctx, dev, link, func(ctx context.Context, dev *ttnpb.EndDevice) error {
-		var previousPendingQueue, previousQueue []*ttnpb.ApplicationDownlink
-		unmatched := invalidatedDownlinks
-		if previousPendingSession != nil {
-			previousPendingQueue, unmatched = ttnpb.PartitionDownlinksBySessionKeyIDEquality(previousPendingSession.SessionKeyID, unmatched...)
-		}
-		if dev.Session != nil {
-			previousQueue, unmatched = ttnpb.PartitionDownlinksBySessionKeyIDEquality(dev.Session.SessionKeyID, unmatched...)
-		}
-		logger := log.FromContext(ctx)
-		for _, item := range unmatched {
-			logger.WithFields(log.Fields(
-				"f_port", item.FPort,
-				"f_cnt", item.FCnt,
-				"session_key_id", item.SessionKeyID,
-			)).Warn("Downlink message with unknown session key ID found; drop item")
-			registerDropDownlink(ctx, dev.EndDeviceIdentifiers, item, errUnknownSession)
-		}
-
-		var sourceQueue []*ttnpb.ApplicationDownlink
-		var sourceSession *ttnpb.Session
-		switch {
-		case previousPendingSession == nil && dev.Session == nil:
-			// We cannot decode any of the downlinks if both sessions are missing.
-			return errNoDeviceSession.New()
-		case dev.Session != nil:
-			// In the presence of a current session we copy the items from the current session to the pending session.
-			sourceQueue = previousQueue
-			sourceSession = dev.Session
-			logger.Debug("Initializing pending downlink queue from the current session")
-		case previousPendingSession != nil:
-			// In the presence of a previous session and the absence of a current session we migrate the items from the
-			// previous pending session to the new pending session.
-			sourceQueue = previousPendingQueue
-			sourceSession = previousPendingSession
-			logger.Debug("Initializing pending downlink queue from the previous pending session")
-		}
-
-		newPendingQueue, err := as.migrateDownlinkQueue(ctx, dev.EndDeviceIdentifiers, sourceQueue, sourceSession, dev.PendingSession, 1)
-		if err != nil {
-			return err
-		}
-
-		pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, dev.ApplicationIdentifiers)
-		if err != nil {
-			return err
-		}
-		client := ttnpb.NewAsNsClient(pc)
-		_, err = client.DownlinkQueueReplace(ctx, &ttnpb.DownlinkQueueRequest{
-			EndDeviceIdentifiers: dev.EndDeviceIdentifiers,
-			Downlinks:            append(previousQueue, newPendingQueue...),
-		}, as.WithClusterAuth())
-		return err
-	})
-}
-
-// recalculateDownlinkQueue computes downlink queue of the end device's current session by decrypting the provided
-// downlinks using the previous session, and then re-encrypting them using current session starting from the
-// provided AFCntDown.
-// The previous session is provided for cases in which the downlink queue has to be migrated to a new device
-// session. This can occur on device re-activation, when a device sends an uplink with a previously used session key
-// ID for which the session key is available.
-// This method mutates the LastAFCntDown of end device's session. Downlinks which cannot be decrypted are dropped.
-// The pending downlink queue of the end device is discarded.
-// This method uses the downlink queue transaction mechanism, so any errors that occur during recomputation will
-// result in an downlink queue reset attempt.
-func (as *ApplicationServer) recalculateDownlinkQueue(ctx context.Context, dev *ttnpb.EndDevice, link *ttnpb.ApplicationLink, previousSession *ttnpb.Session, previousDownlinks []*ttnpb.ApplicationDownlink, nextAFCntDown uint32, skipEmptyReplace bool) error {
-	return as.runDownlinkQueueTransaction(ctx, dev, link, func(ctx context.Context, dev *ttnpb.EndDevice) (err error) {
-		downlinks, unmatched := ttnpb.PartitionDownlinksBySessionKeyIDEquality(previousSession.SessionKeyID, previousDownlinks...)
-		for _, item := range unmatched {
-			log.FromContext(ctx).WithFields(log.Fields(
-				"f_port", item.FPort,
-				"f_cnt", item.FCnt,
-				"session_key_id", item.SessionKeyID,
-			)).Warn("Downlink message with unknown session key ID found; drop item")
-			registerDropDownlink(ctx, dev.EndDeviceIdentifiers, item, errUnknownSession)
-		}
-		var newQueue []*ttnpb.ApplicationDownlink
-		newQueue, err = as.migrateDownlinkQueue(ctx, dev.EndDeviceIdentifiers, downlinks, previousSession, dev.Session, nextAFCntDown)
-		if err != nil {
-			return err
-		}
-
-		if skipEmptyReplace && len(previousDownlinks) == 0 {
-			return nil
-		}
-
-		pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, dev.ApplicationIdentifiers)
-		if err != nil {
-			return err
-		}
-		client := ttnpb.NewAsNsClient(pc)
-		req := &ttnpb.DownlinkQueueRequest{
-			EndDeviceIdentifiers: dev.EndDeviceIdentifiers,
-			Downlinks:            newQueue,
-		}
-		_, err = client.DownlinkQueueReplace(ctx, req, as.WithClusterAuth())
-		return err
-	})
-}
-
-// migrateDownlinkQueue constructs a new downlink queue by decrypting the items of the old queue using the
-// old session and encrypting them using the new session.
-// This method mutates the LastAFCntDown of the new session. Downlinks which cannot be decrypted are dropped.
-// This method does not change the contents of the old downlink queue.
-func (as *ApplicationServer) migrateDownlinkQueue(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, oldQueue []*ttnpb.ApplicationDownlink, oldSession *ttnpb.Session, newSession *ttnpb.Session, nextAFCntDown uint32) ([]*ttnpb.ApplicationDownlink, error) {
-	if oldSession.AppSKey == nil || newSession.AppSKey == nil {
-		return nil, errNoAppSKey.New()
-	}
-	oldAppSKey, err := cryptoutil.UnwrapAES128Key(ctx, oldSession.AppSKey, as.KeyVault)
-	if err != nil {
-		return nil, err
-	}
-	newAppSKey, err := cryptoutil.UnwrapAES128Key(ctx, newSession.AppSKey, as.KeyVault)
-	if err != nil {
-		return nil, err
-	}
-	newSession.LastAFCntDown = nextAFCntDown - 1
-	logger := log.FromContext(ctx)
-	newQueue := make([]*ttnpb.ApplicationDownlink, 0, len(oldQueue))
-	for _, oldItem := range oldQueue {
-		logger := logger.WithFields(log.Fields(
-			"f_port", oldItem.FPort,
-			"f_cnt", oldItem.FCnt,
-			"session_key_id", oldItem.SessionKeyID,
-		))
-		frmPayload, err := crypto.DecryptDownlink(oldAppSKey, oldSession.DevAddr, oldItem.FCnt, oldItem.FRMPayload, false)
-		if err != nil {
-			logger.WithError(err).Warn("Failed to decrypt downlink message; drop item")
-			registerDropDownlink(ctx, ids, oldItem, err)
-			continue
-		}
-		newFRMPayload, err := crypto.EncryptDownlink(newAppSKey, newSession.DevAddr, newSession.LastAFCntDown+1, frmPayload, false)
-		if err != nil {
-			logger.WithError(err).Warn("Failed to encrypt downlink message; drop item")
-			registerDropDownlink(ctx, ids, oldItem, err)
-			continue
-		}
-		newItem := &ttnpb.ApplicationDownlink{
-			SessionKeyID:   newSession.SessionKeyID,
-			FPort:          oldItem.FPort,
-			FCnt:           newSession.LastAFCntDown + 1,
-			FRMPayload:     newFRMPayload,
-			Confirmed:      oldItem.Confirmed,
-			ClassBC:        oldItem.ClassBC,
-			Priority:       oldItem.Priority,
-			CorrelationIDs: oldItem.CorrelationIDs,
-		}
-		newQueue = append(newQueue, newItem)
-		newSession.LastAFCntDown = newItem.FCnt
-	}
-	return newQueue, nil
-}
 
 // matchSession updates the currently active ttnpb.Session of a ttnpb.EndDevice, based on the provided session key ID.
 // This function will mutate the provided ttnpb.EndDevice and migrate the Session field to the session that matches
 // the provided session key ID.
 // The following fields are expected to be part of the provided ttnpb.EndDevice:
-// - session and pending_session - used to decide which session is currently active.
-// - formatters, version_Ids - used by the downlink queue encoders, in cases in which the queue must be recalculated.
-// - skip_payload_crypto_override - used by the downlink queue migration mechanism in order to avoid payload encryption.
-func (as *ApplicationServer) matchSession(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, dev *ttnpb.EndDevice, link *ttnpb.ApplicationLink, sessionKeyID []byte) ([]string, error) {
+//   - session and pending_session, used to decide which session is currently active.
+//   - formatters, version_ids, used by the downlink queue encoders, in cases in which the queue must be recalculated.
+//   - skip_payload_crypto_override, used by the downlink queue migration mechanism in order to avoid payload encryption.
+func (as *ApplicationServer) matchSession(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, dev *ttnpb.EndDevice, link *ttnpb.ApplicationLink, sessionKeyID []byte) ([]string, error) {
 	logger := log.FromContext(ctx)
 	var mask []string
-matchSession:
 	switch {
-	case dev.Session != nil && bytes.Equal(dev.Session.SessionKeyID, sessionKeyID):
-	case dev.PendingSession != nil && bytes.Equal(dev.PendingSession.SessionKeyID, sessionKeyID):
+	case dev.Session != nil && bytes.Equal(dev.Session.Keys.SessionKeyId, sessionKeyID):
+	case dev.PendingSession != nil && bytes.Equal(dev.PendingSession.Keys.SessionKeyId, sessionKeyID):
 		dev.Session = dev.PendingSession
 		dev.PendingSession = nil
-		mask = append(mask, "session", "pending_session")
+		mask = ttnpb.AddFields(mask, "session", "pending_session")
 		logger.Debug("Switched to pending session")
 	default:
 		appSKey, err := as.fetchAppSKey(ctx, ids, sessionKeyID)
 		if err != nil {
 			return nil, errFetchAppSKey.WithCause(err)
 		}
-		previousSession := dev.Session
 		dev.Session = &ttnpb.Session{
-			DevAddr: *ids.DevAddr,
-			SessionKeys: ttnpb.SessionKeys{
-				SessionKeyID: sessionKeyID,
-				AppSKey:      &appSKey,
+			DevAddr: ids.DevAddr,
+			Keys: &ttnpb.SessionKeys{
+				SessionKeyId: sessionKeyID,
+				AppSKey:      appSKey,
 			},
-			StartedAt: time.Now().UTC(),
 		}
-		previousPendingSession := dev.PendingSession
 		dev.PendingSession = nil
-		dev.DevAddr = ids.DevAddr
-		mask = append(mask, "session", "pending_session", "ids.dev_addr")
+		dev.Ids.DevAddr = ids.DevAddr
+		mask = ttnpb.AddFields(mask, "session", "pending_session", "ids.dev_addr")
 		logger.Debug("Restored session")
-
-		switch {
-		case previousSession != nil:
-		case previousPendingSession != nil:
-			previousSession = previousPendingSession
-		default:
-			break matchSession
-		}
-
-		// At this point, the application downlink queue in the Network Server is invalid; recalculation is necessary.
-		// Next AFCntDown 1 is assumed. If this is a LoRaWAN 1.0.x end device and the Network Server sent MAC layer
-		// downlink already, the Network Server will trigger the DownlinkQueueInvalidated event. Therefore, this
-		// recalculation may result in another recalculation.
-		pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
-		if err != nil {
-			return nil, err
-		}
-		client := ttnpb.NewAsNsClient(pc)
-		res, err := client.DownlinkQueueList(ctx, &ids, as.WithClusterAuth())
-		if err != nil {
-			logger.WithError(err).Warn("Failed to list downlink queue for recalculation; clear the downlink queue")
-			as.resetInvalidDownlinkQueue(ctx, ids)
-		} else {
-			previousQueue, unmatched := ttnpb.PartitionDownlinksBySessionKeyIDEquality(previousSession.SessionKeyID, res.Downlinks...)
-			if err := as.recalculateDownlinkQueue(ctx, dev, link, previousSession, previousQueue, 1, len(unmatched) == 0); err != nil {
-				logger.WithError(err).Warn("Failed to recalculate downlink queue; items lost")
-			}
-		}
 	}
 	return mask, nil
 }
 
-func (as *ApplicationServer) handleUplink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, uplink *ttnpb.ApplicationUplink, link *ttnpb.ApplicationLink) error {
-	ctx = log.NewContextWithField(ctx, "session_key_id", uplink.SessionKeyID)
-	dev, err := as.deviceRegistry.Set(ctx, ids,
+// setActivated attempts to mark the end device as activated in the Entity Registry.
+// If the update succeeds, the end device will be updated in the Application Server end device registry
+// in order to avoid subsequent calls.
+func (as *ApplicationServer) setActivated(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) {
+	defer trace.StartRegion(ctx, "set activated").End()
+
+	cc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_ENTITY_REGISTRY, nil)
+	if err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to get Entity Registry peer")
+		return
+	}
+	now := time.Now().UTC()
+	mask := []string{"activated_at"}
+	_, err = ttnpb.NewEndDeviceRegistryClient(cc).Update(ctx, &ttnpb.UpdateEndDeviceRequest{
+		EndDevice: &ttnpb.EndDevice{
+			Ids:         ids,
+			ActivatedAt: timestamppb.New(now),
+		},
+		FieldMask: ttnpb.FieldMask(mask...),
+	}, as.WithClusterAuth())
+	if err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to set end device activation status in Entity Registry")
+		return
+	}
+	if _, err = as.deviceRegistry.Set(ctx, ids, mask,
+		func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
+			if dev == nil {
+				return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
+			}
+			dev.ActivatedAt = timestamppb.New(now)
+			return dev, mask, nil
+		},
+	); err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to set end device activation status in local registry")
+		return
+	}
+}
+
+func (as *ApplicationServer) publishNormalizedUplink(ctx context.Context, info uplinkInfo) error {
+	for _, measurement := range info.uplink.NormalizedPayload {
+		if err := as.Publish(ctx, &ttnpb.ApplicationUp{
+			EndDeviceIds:   info.ids,
+			CorrelationIds: events.CorrelationIDsFromContext(ctx),
+			ReceivedAt:     info.receivedAt,
+			Up: &ttnpb.ApplicationUp_UplinkNormalized{
+				UplinkNormalized: &ttnpb.ApplicationUplinkNormalized{
+					SessionKeyId:              info.uplink.SessionKeyId,
+					FPort:                     info.uplink.FPort,
+					FCnt:                      info.uplink.FCnt,
+					FrmPayload:                info.uplink.FrmPayload,
+					NormalizedPayload:         measurement,
+					NormalizedPayloadWarnings: info.uplink.NormalizedPayloadWarnings,
+					RxMetadata:                info.uplink.RxMetadata,
+					Settings:                  info.uplink.Settings,
+					ReceivedAt:                info.uplink.ReceivedAt,
+					Confirmed:                 info.uplink.Confirmed,
+					ConsumedAirtime:           info.uplink.ConsumedAirtime,
+					Locations:                 info.uplink.Locations,
+					VersionIds:                info.uplink.VersionIds,
+					NetworkIds:                info.uplink.NetworkIds,
+				},
+			},
+			Simulated: info.simulated,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type uplinkInfo struct {
+	ids        *ttnpb.EndDeviceIdentifiers
+	receivedAt *timestamppb.Timestamp
+	uplink     *ttnpb.ApplicationUplink
+	simulated  bool
+	link       *ttnpb.ApplicationLink
+}
+
+func (as *ApplicationServer) handleUplink(ctx context.Context, info uplinkInfo) error {
+	defer trace.StartRegion(ctx, "handle uplink").End()
+
+	ctx = log.NewContextWithField(ctx, "session_key_id", info.uplink.SessionKeyId)
+	dev, err := as.deviceRegistry.Set(ctx, info.ids,
 		[]string{
+			"activated_at",
 			"formatters",
 			"pending_session",
 			"session",
@@ -1071,13 +1182,13 @@ func (as *ApplicationServer) handleUplink(ctx context.Context, ids ttnpb.EndDevi
 		},
 		func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
 			if dev == nil {
-				return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
+				return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, info.ids))
 			}
-			mask, err := as.matchSession(ctx, ids, dev, link, uplink.SessionKeyID)
+			mask, err := as.matchSession(ctx, info.ids, dev, info.link, info.uplink.SessionKeyId)
 			if err != nil {
 				return nil, nil, err
 			}
-			if dev.Session.AppSKey == nil {
+			if dev.Session.GetKeys().GetAppSKey() == nil {
 				return nil, nil, errNoAppSKey.New()
 			}
 			return dev, mask, nil
@@ -1086,29 +1197,75 @@ func (as *ApplicationServer) handleUplink(ctx context.Context, ids ttnpb.EndDevi
 	if err != nil {
 		return err
 	}
-	if !as.skipPayloadCrypto(ctx, link, dev, dev.Session) {
-		if err := as.decryptAndDecodeUplink(ctx, dev, uplink, link.DefaultFormatters); err != nil {
+
+	if !as.skipPayloadCrypto(ctx, info.link, dev, dev.Session) {
+		if err := as.decryptAndDecodeUplink(ctx, dev, info.uplink, info.link.DefaultFormatters); err != nil {
 			return err
 		}
-	} else if dev.Session != nil && dev.Session.AppSKey != nil {
-		uplink.AppSKey = dev.Session.AppSKey
-		uplink.LastAFCntDown = dev.Session.LastAFCntDown
+		if err := as.publishNormalizedUplink(ctx, info); err != nil {
+			return err
+		}
+	} else if appSKey := dev.GetSession().GetKeys().GetAppSKey(); appSKey != nil {
+		info.uplink.AppSKey = appSKey
+		info.uplink.LastAFCntDown = dev.Session.LastAFCntDown
 	}
 
-	isDev, err := as.endDeviceFetcher.Get(ctx, ids, "locations")
-	if err != nil {
+	registerUplinkLatency(ctx, info.uplink)
+
+	if dev.VersionIds != nil {
+		info.uplink.VersionIds = dev.VersionIds
+	}
+
+	// Set location in message and publish location solved if the payload contains location information.
+	if locations, err := as.locationRegistry.Get(ctx, info.ids); err != nil {
 		log.FromContext(ctx).WithError(err).Warn("Failed to retrieve end device locations")
 	} else {
-		uplink.Locations = isDev.GetLocations()
+		info.uplink.Locations = locations
+	}
+	loc := as.locationFromPayload(info.uplink)
+	if loc != nil {
+		if info.uplink.Locations == nil {
+			info.uplink.Locations = make(map[string]*ttnpb.Location, 1)
+		}
+		info.uplink.Locations["frm-payload"] = loc
+		if err := as.Publish(ctx, &ttnpb.ApplicationUp{
+			EndDeviceIds:   info.ids,
+			CorrelationIds: events.CorrelationIDsFromContext(ctx),
+			ReceivedAt:     info.receivedAt,
+			Up: &ttnpb.ApplicationUp_LocationSolved{
+				LocationSolved: &ttnpb.ApplicationLocation{
+					Service:  "frm-payload",
+					Location: loc,
+				},
+			},
+		}); err != nil {
+			log.FromContext(ctx).WithError(err).Warn("Failed to publish location solved message from location in payload")
+		}
 	}
 
-	// TODO: Run uplink messages through location solvers async (https://github.com/TheThingsNetwork/lorawan-stack/issues/37)
+	// If the device has not been activated before, publish the activation event.
+	if dev.ActivatedAt == nil {
+		if err := as.activationPool.Publish(ctx, info.ids); err != nil {
+			log.FromContext(ctx).WithError(err).Warn("Failed to publish activation event")
+		}
+	}
+
+	// Publish last seen event.
+	if err := as.deviceLastSeenPool.Publish(ctx, lastSeenAtInfo{
+		ids:        info.ids,
+		lastSeenAt: info.uplink.ReceivedAt,
+	}); err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to publish last seen event")
+	}
+
 	return nil
 }
 
-func (as *ApplicationServer) handleSimulatedUplink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, uplink *ttnpb.ApplicationUplink, link *ttnpb.ApplicationLink) error {
-	ctx = log.NewContextWithField(ctx, "session_key_id", uplink.SessionKeyID)
-	dev, err := as.deviceRegistry.Get(ctx, ids,
+func (as *ApplicationServer) handleSimulatedUplink(ctx context.Context, info uplinkInfo) error {
+	defer trace.StartRegion(ctx, "handle simulated uplink").End()
+
+	ctx = log.NewContextWithField(ctx, "session_key_id", info.uplink.SessionKeyId)
+	dev, err := as.deviceRegistry.Get(ctx, info.ids,
 		[]string{
 			"formatters",
 			"version_ids",
@@ -1118,135 +1275,212 @@ func (as *ApplicationServer) handleSimulatedUplink(ctx context.Context, ids ttnp
 		return err
 	}
 
-	isDev, err := as.endDeviceFetcher.Get(ctx, ids, "locations")
-	if err != nil {
+	if locations, err := as.locationRegistry.Get(ctx, info.ids); err != nil {
 		log.FromContext(ctx).WithError(err).Warn("Failed to retrieve end device locations")
 	} else {
-		uplink.Locations = isDev.GetLocations()
+		info.uplink.Locations = locations
 	}
 
-	return as.decodeUplink(ctx, dev, uplink, link.DefaultFormatters)
+	if err := as.decodeUplink(ctx, dev, info.uplink, info.link.DefaultFormatters); err != nil {
+		return err
+	}
+	return as.publishNormalizedUplink(ctx, info)
 }
 
-func (as *ApplicationServer) handleDownlinkQueueInvalidated(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, invalid *ttnpb.ApplicationInvalidatedDownlinks, link *ttnpb.ApplicationLink) (pass bool, err error) {
+func (as *ApplicationServer) handleDownlinkQueueInvalidated(
+	ctx context.Context,
+	ids *ttnpb.EndDeviceIdentifiers,
+	receivedAt *timestamppb.Timestamp,
+	invalid *ttnpb.ApplicationInvalidatedDownlinks,
+	link *ttnpb.ApplicationLink,
+) (pass bool, err error) {
+	defer trace.StartRegion(ctx, "handle downlink queue invalidated").End()
+
+	peer, err := as.GetPeer(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
+	if err != nil {
+		return false, err
+	}
 	_, err = as.deviceRegistry.Set(ctx, ids,
 		[]string{
+			"formatters",
 			"pending_session",
 			"session",
 			"skip_payload_crypto_override",
+			"version_ids",
 		},
 		func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
 			if dev == nil {
 				return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
 			}
 
-			// Older Network Server versions may not send the session key ID of the invalidated queue.
-			// For such cases, we attempt to determine the session key ID based on the session information.
-			var sessionKeyID []byte
-			switch {
-			case len(invalid.SessionKeyID) > 0:
-				sessionKeyID = invalid.SessionKeyID
-			case len(invalid.Downlinks) > 0:
-				sessionKeyID = invalid.Downlinks[0].SessionKeyID
-			case dev.Session != nil:
-				sessionKeyID = dev.Session.SessionKeyID
-			case dev.PendingSession != nil:
-				sessionKeyID = dev.PendingSession.SessionKeyID
-			default:
-				return nil, nil, errNoDeviceSession.WithAttributes("device_uid", unique.ID(ctx, ids))
-			}
-
-			// The downlink queue invalidation may act as a session confirmation. As such, we
-			// attempt to switch the current end device session in such cases.
-			mask, err := as.matchSession(ctx, ids, dev, link, sessionKeyID)
-			if err != nil {
-				return nil, nil, err
-			}
+			mask := []string{"session.last_a_f_cnt_down"}
 
 			if as.skipPayloadCrypto(ctx, link, dev, dev.Session) {
 				// When skipping application payload crypto, the upstream application is responsible for recalculating the
 				// downlink queue. No error is returned here to pass the downlink queue invalidation message upstream.
 				pass = true
 				dev.Session.LastAFCntDown = invalid.LastFCntDown
-				return dev, append(mask, "session.last_a_f_cnt_down"), nil
+				return dev, mask, nil
 			}
-			if err := as.recalculateDownlinkQueue(ctx, dev, link, dev.Session, invalid.Downlinks, invalid.LastFCntDown+1, true); err != nil {
+
+			matchMask, err := as.matchSession(ctx, ids, dev, link, invalid.SessionKeyId)
+			if err != nil {
 				return nil, nil, err
 			}
-			return dev, append(mask, "session"), nil
+			mask = ttnpb.AddFields(mask, matchMask...)
+			dev.Session.LastAFCntDown = invalid.LastFCntDown
+
+			items := make([]*ttnpb.ApplicationDownlink, 0, len(invalid.Downlinks))
+			for _, msg := range invalid.Downlinks {
+				if err := as.decryptDownlink(ctx, dev, msg, nil); err != nil {
+					log.FromContext(ctx).WithError(err).Warn("Failed to decrypt downlink message; drop item")
+					registerDropDownlink(ctx, dev.Ids, msg, err)
+					continue
+				}
+				items = append(items, msg)
+			}
+			if len(items) == 0 {
+				return dev, mask, nil
+			}
+
+			pushMask, err := as.attemptDownlinkQueueOp(ctx, dev, link, peer, downlinkQueueOperation{
+				Items:     items,
+				Operation: ttnpb.AsNsClient.DownlinkQueuePush,
+				ResultFunc: func(decrypted, _ []*ttnpb.ApplicationDownlink, err error) {
+					if err != nil {
+						as.registerDropDownlinks(ctx, dev.Ids, decrypted, receivedAt, err)
+					}
+				},
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			mask = ttnpb.AddFields(mask, pushMask...)
+
+			return dev, mask, nil
 		},
 	)
-	return
+	return pass, err
 }
 
-func (as *ApplicationServer) handleDownlinkNack(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, msg *ttnpb.ApplicationDownlink, link *ttnpb.ApplicationLink) error {
-	logger := log.FromContext(ctx)
-	pc, err := as.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
+func (as *ApplicationServer) handleDownlinkNack(
+	ctx context.Context,
+	ids *ttnpb.EndDeviceIdentifiers,
+	receivedAt *timestamppb.Timestamp,
+	msg *ttnpb.ApplicationDownlink,
+	link *ttnpb.ApplicationLink,
+) error {
+	defer trace.StartRegion(ctx, "handle downlink nack").End()
+
+	peer, err := as.GetPeer(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
 	if err != nil {
 		return err
 	}
-	client := ttnpb.NewAsNsClient(pc)
-	res, err := client.DownlinkQueueList(ctx, &ids, as.WithClusterAuth())
-	if err != nil {
-		logger.WithError(err).Warn("Failed to list the downlink queue for inserting nacked downlink message")
-		registerDropDownlink(ctx, ids, msg, err)
-	} else {
-		_, err := as.deviceRegistry.Set(ctx, ids,
-			[]string{
-				"pending_session",
-				"session",
-				"skip_payload_crypto_override",
-			},
-			func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
-				if dev == nil {
-					return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
+	_, err = as.deviceRegistry.Set(ctx, ids,
+		[]string{
+			"formatters",
+			"pending_session",
+			"session",
+			"skip_payload_crypto_override",
+			"version_ids",
+		},
+		func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
+			if dev == nil {
+				return nil, nil, errDeviceNotFound.WithAttributes("device_uid", unique.ID(ctx, ids))
+			}
+
+			if as.skipPayloadCrypto(ctx, link, dev, dev.Session) {
+				// When skipping application payload crypto, the upstream application is responsible for recalculating the
+				// downlink queue. No error is returned here to pass the downlink nack message upstream.
+				return dev, nil, nil
+			}
+
+			matchMask, err := as.matchSession(ctx, ids, dev, link, msg.SessionKeyId)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// Decrypt the message as it will be sent to upstream after handling it.
+			if err := as.decryptAndDecodeDownlink(ctx, dev, msg, link.DefaultFormatters); err != nil {
+				return nil, nil, err
+			}
+
+			if msg.ConfirmedRetry == nil {
+				msg.ConfirmedRetry = &ttnpb.ApplicationDownlink_ConfirmedRetry{
+					Attempt: 0,
 				}
-				mask, err := as.matchSession(ctx, ids, dev, link, msg.SessionKeyID)
-				if err != nil {
-					return nil, nil, err
-				}
-				if as.skipPayloadCrypto(ctx, link, dev, dev.Session) {
-					// When skipping application payload crypto, the upstream application is responsible for recalculating the
-					// downlink queue. No error is returned here to pass the downlink nack message upstream.
-					return dev, mask, nil
-				}
-				queue, _ := ttnpb.PartitionDownlinksBySessionKeyIDEquality(dev.Session.SessionKeyID, res.Downlinks...)
-				queue = append([]*ttnpb.ApplicationDownlink{msg}, queue...)
-				if err := as.recalculateDownlinkQueue(ctx, dev, link, dev.Session, queue, msg.FCnt+1, false); err != nil {
-					return nil, nil, err
-				}
-				return dev, append(mask, "session"), nil
-			},
-		)
-		if err != nil {
-			logger.WithError(err).Warn("Failed to recalculate downlink queue with inserted nacked downlink message")
-			registerDropDownlink(ctx, ids, msg, err)
-		}
-	}
-	// Decrypt the message as it will be sent to upstream after handling it.
-	if err := as.decryptDownlinkMessage(ctx, ids, msg, link); err != nil {
-		return err
+			}
+			msg.ConfirmedRetry.Attempt++
+			items := []*ttnpb.ApplicationDownlink{msg}
+
+			maxRetries := as.config.Downlinks.ConfirmationConfig.DefaultRetryAttempts
+			if maxAttempts := msg.ConfirmedRetry.MaxAttempts; maxAttempts != nil {
+				maxRetries = maxAttempts.Value
+			}
+			if msg.ConfirmedRetry.Attempt > maxRetries {
+				as.registerDropDownlinks(
+					ctx,
+					dev.Ids,
+					items,
+					receivedAt,
+					errMaxRetriesReached.WithAttributes("max_retries", maxRetries),
+				)
+				return dev, nil, nil
+			}
+
+			pushMask, err := as.attemptDownlinkQueueOp(ctx, dev, link, peer, downlinkQueueOperation{
+				Items:     items,
+				Operation: ttnpb.AsNsClient.DownlinkQueuePush,
+				ResultFunc: func(decrypted, _ []*ttnpb.ApplicationDownlink, err error) {
+					if err != nil {
+						as.registerDropDownlinks(ctx, dev.Ids, decrypted, receivedAt, err)
+					}
+				},
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			mask := ttnpb.AddFields(matchMask, pushMask...)
+
+			return dev, mask, nil
+		},
+	)
+	return err
+}
+
+// handleLocationSolved saves the provided *ttnpb.ApplicationLocation in the Entity Registry as part of the device locations.
+// Locations provided by other services will be maintained.
+func (as *ApplicationServer) handleLocationSolved(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, msg *ttnpb.ApplicationLocation, link *ttnpb.ApplicationLink) error {
+	defer trace.StartRegion(ctx, "handle location solved").End()
+
+	if _, err := as.locationRegistry.Merge(ctx, ids, map[string]*ttnpb.Location{
+		msg.Service: msg.Location,
+	}); err != nil {
+		log.FromContext(ctx).WithError(err).Warn("Failed to merge end device locations")
 	}
 	return nil
 }
 
 // decryptDownlinkMessage decrypts the downlink message.
 // If application payload crypto is skipped, this method returns nil.
-func (as *ApplicationServer) decryptDownlinkMessage(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, msg *ttnpb.ApplicationDownlink, link *ttnpb.ApplicationLink) error {
+func (as *ApplicationServer) decryptDownlinkMessage(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, msg *ttnpb.ApplicationDownlink, link *ttnpb.ApplicationLink) error {
+	defer trace.StartRegion(ctx, "decrypt downlink message").End()
+
 	dev, err := as.deviceRegistry.Get(ctx, ids, []string{
 		"formatters",
 		"pending_session",
 		"session",
 		"skip_payload_crypto_override",
+		"version_ids",
 	})
 	if err != nil {
 		return err
 	}
 	var session *ttnpb.Session
 	switch {
-	case dev.Session != nil && bytes.Equal(dev.Session.SessionKeyID, msg.SessionKeyID):
+	case dev.Session != nil && bytes.Equal(dev.Session.Keys.SessionKeyId, msg.SessionKeyId):
 		session = dev.Session
-	case dev.PendingSession != nil && bytes.Equal(dev.PendingSession.SessionKeyID, msg.SessionKeyID):
+	case dev.PendingSession != nil && bytes.Equal(dev.PendingSession.Keys.SessionKeyId, msg.SessionKeyId):
 		session = dev.PendingSession
 	}
 	if as.skipPayloadCrypto(ctx, link, dev, session) {
@@ -1254,8 +1488,6 @@ func (as *ApplicationServer) decryptDownlinkMessage(ctx context.Context, ids ttn
 	}
 	return as.decryptAndDecodeDownlink(ctx, dev, msg, link.DefaultFormatters)
 }
-
-var errPayloadCryptoDisabled = errors.DefineAborted("payload_crypto_disabled", "payload crypto is disabled")
 
 type ctxConfigKeyType struct{}
 
@@ -1269,9 +1501,14 @@ func (as *ApplicationServer) GetConfig(ctx context.Context) (*Config, error) {
 
 // GetMQTTConfig returns the MQTT frontend configuration based on the context.
 func (as *ApplicationServer) GetMQTTConfig(ctx context.Context) (*config.MQTT, error) {
-	config, err := as.GetConfig(ctx)
+	cfg, err := as.GetConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &config.MQTT, nil
+	return &cfg.MQTT, nil
+}
+
+// GetEndDevice retrieves the end device associated with the provided identifiers from the end device registry.
+func (as *ApplicationServer) GetEndDevice(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string) (*ttnpb.EndDevice, error) {
+	return as.deviceRegistry.Get(ctx, ids, paths)
 }

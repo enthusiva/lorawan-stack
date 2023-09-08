@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcserver"
@@ -29,8 +28,17 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+var testRights = []ttnpb.Right{
+	ttnpb.Right_RIGHT_APPLICATION_LINK,
+	ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+	ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+	ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+	ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+	ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+}
 
 func mustHavePeer(ctx context.Context, c *component.Component, role ttnpb.ClusterRole) {
 	for i := 0; i < 20; i++ {
@@ -42,24 +50,18 @@ func mustHavePeer(ctx context.Context, c *component.Component, role ttnpb.Cluste
 	panic("could not connect to peer")
 }
 
-func eui64Ptr(eui types.EUI64) *types.EUI64 {
-	return &eui
-}
-
-func devAddrPtr(devAddr types.DevAddr) *types.DevAddr {
-	return &devAddr
-}
-
-func withDevAddr(ids ttnpb.EndDeviceIdentifiers, devAddr types.DevAddr) ttnpb.EndDeviceIdentifiers {
-	ids.DevAddr = &devAddr
-	return ids
-}
-
-func aes128KeyPtr(key types.AES128Key) *types.AES128Key {
-	return &key
+func withDevAddr(ids *ttnpb.EndDeviceIdentifiers, devAddr types.DevAddr) *ttnpb.EndDeviceIdentifiers {
+	newIds := &ttnpb.EndDeviceIdentifiers{}
+	if err := newIds.SetFields(ids, ttnpb.EndDeviceIdentifiersFieldPathsNested...); err != nil {
+		panic(err)
+	}
+	newIds.DevAddr = devAddr.Bytes()
+	return newIds
 }
 
 type mockNS struct {
+	ttnpb.UnimplementedAsNsServer
+
 	linkCh          chan ttnpb.ApplicationIdentifiers
 	unlinkCh        chan ttnpb.ApplicationIdentifiers
 	upCh            chan *ttnpb.ApplicationUp
@@ -86,11 +88,13 @@ func startMockNS(ctx context.Context, link chan *mockNSASConn) (*mockNS, string)
 	if err != nil {
 		panic(err)
 	}
-	go srv.Serve(lis)
+	go func() {
+		if err := srv.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
 	return ns, lis.Addr().String()
 }
-
-var errPermissionDenied = errors.DefinePermissionDenied("permission_denied", "permission denied")
 
 func (ns *mockNS) sendTraffic(ctx context.Context, link chan *mockNSASConn) {
 	var cc *grpc.ClientConn
@@ -122,16 +126,16 @@ func (ns *mockNS) reset() {
 	ns.downlinkQueueMu.Unlock()
 }
 
-func (ns *mockNS) DownlinkQueueReplace(ctx context.Context, req *ttnpb.DownlinkQueueRequest) (*pbtypes.Empty, error) {
+func (ns *mockNS) DownlinkQueueReplace(ctx context.Context, req *ttnpb.DownlinkQueueRequest) (*emptypb.Empty, error) {
 	ns.downlinkQueueMu.Lock()
-	ns.downlinkQueue[unique.ID(ctx, req.EndDeviceIdentifiers)] = req.Downlinks
+	ns.downlinkQueue[unique.ID(ctx, req.EndDeviceIds)] = req.Downlinks
 	ns.downlinkQueueMu.Unlock()
 	return ttnpb.Empty, nil
 }
 
-func (ns *mockNS) DownlinkQueuePush(ctx context.Context, req *ttnpb.DownlinkQueueRequest) (*pbtypes.Empty, error) {
+func (ns *mockNS) DownlinkQueuePush(ctx context.Context, req *ttnpb.DownlinkQueueRequest) (*emptypb.Empty, error) {
 	ns.downlinkQueueMu.Lock()
-	uid := unique.ID(ctx, req.EndDeviceIdentifiers)
+	uid := unique.ID(ctx, req.EndDeviceIds)
 	ns.downlinkQueue[uid] = append(ns.downlinkQueue[uid], req.Downlinks...)
 	ns.downlinkQueueMu.Unlock()
 	return ttnpb.Empty, nil
@@ -146,86 +150,17 @@ func (ns *mockNS) DownlinkQueueList(ctx context.Context, ids *ttnpb.EndDeviceIde
 	}, nil
 }
 
-type mockIS struct {
-	ttnpb.ApplicationRegistryServer
-	ttnpb.ApplicationAccessServer
-	applications     map[string]*ttnpb.Application
-	applicationAuths map[string][]string
-}
-
-func startMockIS(ctx context.Context) (*mockIS, string) {
-	is := &mockIS{
-		applications:     make(map[string]*ttnpb.Application),
-		applicationAuths: make(map[string][]string),
-	}
-	srv := rpcserver.New(ctx)
-	ttnpb.RegisterApplicationRegistryServer(srv.Server, is)
-	ttnpb.RegisterApplicationAccessServer(srv.Server, is)
-	lis, err := net.Listen("tcp", ":0")
-	if err != nil {
-		panic(err)
-	}
-	go srv.Serve(lis)
-	return is, lis.Addr().String()
-}
-
-func (is *mockIS) add(ctx context.Context, ids ttnpb.ApplicationIdentifiers, key string) {
-	uid := unique.ID(ctx, ids)
-	is.applications[uid] = &ttnpb.Application{
-		ApplicationIdentifiers: ids,
-	}
-	if key != "" {
-		is.applicationAuths[uid] = []string{fmt.Sprintf("Bearer %v", key)}
-	}
-}
-
 var errNotFound = errors.DefineNotFound("not_found", "not found")
 
-func (is *mockIS) Get(ctx context.Context, req *ttnpb.GetApplicationRequest) (*ttnpb.Application, error) {
-	uid := unique.ID(ctx, req.ApplicationIdentifiers)
-	app, ok := is.applications[uid]
-	if !ok {
-		return nil, errNotFound.New()
-	}
-	return app, nil
-}
-
-func (is *mockIS) ListRights(ctx context.Context, ids *ttnpb.ApplicationIdentifiers) (res *ttnpb.Rights, err error) {
-	res = &ttnpb.Rights{}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return
-	}
-	authorization, ok := md["authorization"]
-	if !ok || len(authorization) == 0 {
-		return
-	}
-	auths, ok := is.applicationAuths[unique.ID(ctx, *ids)]
-	if !ok {
-		return
-	}
-	for _, auth := range auths {
-		if auth == authorization[0] {
-			res.Rights = append(res.Rights,
-				ttnpb.RIGHT_APPLICATION_LINK,
-				ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC,
-				ttnpb.RIGHT_APPLICATION_DEVICES_READ,
-				ttnpb.RIGHT_APPLICATION_DEVICES_WRITE,
-				ttnpb.RIGHT_APPLICATION_TRAFFIC_READ,
-				ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
-			)
-		}
-	}
-	return
-}
-
 type mockJS struct {
-	keys map[string]ttnpb.KeyEnvelope
+	ttnpb.UnimplementedAsJsServer
+
+	keys map[string]*ttnpb.KeyEnvelope
 }
 
 func startMockJS(ctx context.Context) (*mockJS, string) {
 	js := &mockJS{
-		keys: make(map[string]ttnpb.KeyEnvelope),
+		keys: make(map[string]*ttnpb.KeyEnvelope),
 	}
 	srv := rpcserver.New(ctx)
 	ttnpb.RegisterAsJsServer(srv.Server, js)
@@ -233,16 +168,20 @@ func startMockJS(ctx context.Context) (*mockJS, string) {
 	if err != nil {
 		panic(err)
 	}
-	go srv.Serve(lis)
+	go func() {
+		if err := srv.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
 	return js, lis.Addr().String()
 }
 
-func (js *mockJS) add(ctx context.Context, devEUI types.EUI64, sessionKeyID []byte, key ttnpb.KeyEnvelope) {
+func (js *mockJS) add(ctx context.Context, devEUI types.EUI64, sessionKeyID []byte, key *ttnpb.KeyEnvelope) {
 	js.keys[fmt.Sprintf("%v:%v", devEUI, sessionKeyID)] = key
 }
 
 func (js *mockJS) GetAppSKey(ctx context.Context, req *ttnpb.SessionKeyRequest) (*ttnpb.AppSKeyResponse, error) {
-	key, ok := js.keys[fmt.Sprintf("%v:%v", req.DevEUI, req.SessionKeyID)]
+	key, ok := js.keys[fmt.Sprintf("%v:%v", types.MustEUI64(req.DevEui).OrZero(), req.SessionKeyId)]
 	if !ok {
 		return nil, errNotFound.New()
 	}

@@ -15,7 +15,6 @@
 import React from 'react'
 import classnames from 'classnames'
 
-import Button from '@ttn-lw/components/button'
 import Icon from '@ttn-lw/components/icon'
 
 import Message from '@ttn-lw/lib/components/message'
@@ -37,9 +36,7 @@ const Notification = ({
   small,
   success,
   messageValues = {},
-  action,
-  actionMessage,
-  buttonIcon,
+  children,
   'data-test-id': dataTestId,
 }) => {
   const classname = classnames(style.notification, className, {
@@ -64,34 +61,19 @@ const Notification = ({
         <Icon className={style.icon} icon={icon} large={!small} />
         <div className={style.content}>
           {title && <Message className={style.title} content={title} component="h4" />}
-          <div>
-            <Message
-              content={content}
-              values={messageValues}
-              firstToUpper
-              convertBackticks={Boolean(error)}
-            />
-            {action && (
-              <Button
-                secondary
-                icon={buttonIcon}
-                onClick={action}
-                message={actionMessage}
-                type="button"
-              />
-            )}
+          <div className={style.message}>
+            <Message content={content} values={messageValues} firstToUpper />
+            {children}
           </div>
         </div>
       </div>
-      {Boolean(details) && <Details className={style.details} details={details} />}
+      {Boolean(details) && <Details className={style.details} details={details} isError={error} />}
     </div>
   )
 }
 
 Notification.propTypes = {
-  action: PropTypes.func,
-  actionMessage: PropTypes.message,
-  buttonIcon: PropTypes.string,
+  children: PropTypes.node,
   className: PropTypes.string,
   content: PropTypes.oneOfType([PropTypes.message, PropTypes.error, PropTypes.string]),
   'data-test-id': PropTypes.string,
@@ -106,9 +88,7 @@ Notification.propTypes = {
 }
 
 Notification.defaultProps = {
-  action: undefined,
-  actionMessage: undefined,
-  buttonIcon: '',
+  children: undefined,
   className: undefined,
   content: undefined,
   'data-test-id': 'notification',

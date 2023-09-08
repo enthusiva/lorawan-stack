@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build ignore
+//go:build ignore
+// +build ignore
 
 package main
 
 import (
 	"bytes"
 	"go/format"
-	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
 	"text/template"
 
-	_ "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
@@ -39,9 +38,6 @@ var bytesTyp = reflect.TypeOf([]byte{})
 func typeString(typ reflect.Type) string {
 	if typ.Kind() == reflect.Ptr {
 		return "*" + typeString(typ.Elem())
-	}
-	if typ.PkgPath() == "github.com/gogo/protobuf/types" {
-		return "pbtypes." + typ.Name()
 	}
 	return typ.String()
 }
@@ -61,9 +57,9 @@ func main() {
 			numFields := typ.NumField()
 			for i := 0; i < numFields; i++ {
 				f := typ.Field(i)
-				if f.Name == "XXX_NoUnkeyedLiteral" || f.Name == "XXX_sizecache" {
-					// internal protobuf fields
-					continue
+				switch f.Name {
+				case "state", "sizeCache", "unknownFields":
+					continue // internal protobuf fields
 				}
 
 				var pName, pType string
@@ -92,11 +88,10 @@ func main() {
 package test
 
 import (
-	"time"
-
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
-	"go.thethings.network/lorawan-stack/v3/pkg/types"
-	pbtypes "github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 {{ range . }}
 {{ with $type := typeOf . -}}
@@ -105,8 +100,8 @@ import (
 {{ with $optionsType := printf "%sOptionNamespace" $type.Name -}}
 type (
 	// {{ $optionType }} transforms {{ $typeString }} and returns it.
-	// Implemetations must be pure functions with no side-effects.
-	{{ $optionType }} func({{ $typeString }}) {{ $typeString }}
+	// Implementations must be pure functions with no side-effects.
+	{{ $optionType }} func(*{{ $typeString }}) *{{ $typeString }}
 
 	// {{ $optionsType }} represents the namespace, on which various {{ $optionType }} are defined.
 	{{ $optionsType }} struct{}
@@ -114,15 +109,16 @@ type (
 {{ range fields $type }}
 // With{{ .FieldName }} returns a {{ $optionType }}, which returns a copy of {{ $typeString }} with {{ .FieldName }} set to {{ .ParameterName }}.
 func ({{ $optionsType }}) With{{ .FieldName }}({{ .ParameterName }} {{ .ParameterType }}) {{ $optionType }} {
-	return func(x {{ $typeString }}) {{ $typeString }} {
-		x.{{ .FieldName }} = {{ .ParameterName }}
-		return x
+	return func(x *{{ $typeString }}) *{{ $typeString }} {
+		copy := ttnpb.Clone(x)
+		copy.{{ .FieldName }} = {{ .ParameterName }}
+		return copy
 	}
 }
 {{ end }}
 // Compose returns a functional composition of opts as a singular {{ $optionType }}.
 func ({{ $optionsType }}) Compose(opts ...{{ $optionType }}) {{ $optionType }} {
-	return func(x {{ $typeString }}) {{ $typeString }} {
+	return func(x *{{ $typeString }}) *{{ $typeString }} {
 		for _, opt := range opts {
 			x = opt(x)
 		}
@@ -130,9 +126,9 @@ func ({{ $optionsType }}) Compose(opts ...{{ $optionType }}) {{ $optionType }} {
 	}
 }
 
-// Compose returns a functional composition of f and opts as a singular {{ $optionType }}.
+// Compose returns a functional composition of f and opts as a singular {*{{ $typeString }}{ $optionType }}.
 func (f {{ $optionType }}) Compose(opts ...{{ $optionType }}) {{ $optionType }} {
-	return func(x {{ $typeString }}) {{ $typeString }} {
+	return func(x *{{ $typeString }}) *{{ $typeString }} {
 		x = f(x)
 		for _, opt := range opts {
 			x = opt(x)
@@ -147,15 +143,14 @@ var {{ $optionsVar }} {{ $optionsType }}
 
 // Make{{ $type.Name }} constructs a new {{ $typeString }}.
 func Make{{ $type.Name }}(opts ...{{ $optionType }}) *{{ $typeString }} {
-	v := {{ $optionsVar }}.Compose(opts...)(base{{ $type.Name }})
-	return &v
+	return {{ $optionsVar }}.Compose(opts...)(base{{ $type.Name }})
 }
 {{ end -}}
 {{ end -}}
 {{ end -}}
 {{ end -}}
 {{ end -}}
-{{ end }}`)).Execute(buf, []interface{}{
+{{ end }}`)).Execute(buf, []any{
 		ttnpb.RootKeys{},
 		ttnpb.SessionKeys{},
 		ttnpb.Session{},
@@ -169,7 +164,7 @@ func Make{{ $type.Name }}(opts ...{{ $optionType }}) *{{ $typeString }} {
 	if err != nil {
 		log.Fatalf("Failed to format source: %s", err)
 	}
-	if err := ioutil.WriteFile("constructors_generated.go", b, 0o644); err != nil {
+	if err := os.WriteFile("constructors_generated.go", b, 0o644); err != nil {
 		log.Fatalf("Failed to write output: %s", err)
 	}
 }

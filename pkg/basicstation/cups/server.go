@@ -20,12 +20,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	echo "github.com/labstack/echo/v4"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
@@ -48,7 +48,7 @@ type Server struct {
 
 	requireExplicitEnable bool
 	registerUnknown       bool
-	defaultOwner          ttnpb.OrganizationOrUserIdentifiers
+	defaultOwner          *ttnpb.OrganizationOrUserIdentifiers
 	defaultOwnerAuth      func(context.Context) grpc.CallOption
 	defaultLNSURI         string
 
@@ -75,16 +75,7 @@ func (s *Server) getRegistry(ctx context.Context, ids *ttnpb.GatewayIdentifiers)
 	if s.registry != nil {
 		return s.registry, nil
 	}
-	var (
-		cc  *grpc.ClientConn
-		err error
-	)
-	if ids != nil {
-		cc, err = s.component.GetPeerConn(ctx, ttnpb.ClusterRole_ENTITY_REGISTRY, ids)
-	} else {
-		// Don't pass a (*ttnpb.GatewayIdentifiers)(nil) to GetPeerConn.
-		cc, err = s.component.GetPeerConn(ctx, ttnpb.ClusterRole_ENTITY_REGISTRY, nil)
-	}
+	cc, err := s.component.GetPeerConn(ctx, ttnpb.ClusterRole_ENTITY_REGISTRY, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -95,16 +86,7 @@ func (s *Server) getAccess(ctx context.Context, ids *ttnpb.GatewayIdentifiers) (
 	if s.access != nil {
 		return s.access, nil
 	}
-	var (
-		cc  *grpc.ClientConn
-		err error
-	)
-	if ids != nil {
-		cc, err = s.component.GetPeerConn(ctx, ttnpb.ClusterRole_ACCESS, ids)
-	} else {
-		// Don't pass a (*ttnpb.GatewayIdentifiers)(nil) to GetPeerConn.
-		cc, err = s.component.GetPeerConn(ctx, ttnpb.ClusterRole_ACCESS, nil)
-	}
+	cc, err := s.component.GetPeerConn(ctx, ttnpb.ClusterRole_ACCESS, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -120,9 +102,9 @@ type Option func(s *Server)
 func WithRegisterUnknown(owner *ttnpb.OrganizationOrUserIdentifiers, auth func(context.Context) grpc.CallOption) Option {
 	return func(s *Server) {
 		if owner != nil {
-			s.registerUnknown, s.defaultOwner, s.defaultOwnerAuth = true, *owner, auth
+			s.registerUnknown, s.defaultOwner, s.defaultOwnerAuth = true, owner, auth
 		} else {
-			s.registerUnknown, s.defaultOwner, s.defaultOwnerAuth = false, ttnpb.OrganizationOrUserIdentifiers{}, nil
+			s.registerUnknown, s.defaultOwner, s.defaultOwnerAuth = false, nil, nil
 		}
 	}
 }
@@ -197,13 +179,15 @@ func NewServer(c *component.Component, options ...Option) *Server {
 
 // RegisterRoutes implements web.Registerer
 func (s *Server) RegisterRoutes(web *web.Server) {
-	web.POST("/update-info", s.UpdateInfo, ratelimit.EchoMiddleware(s.component.RateLimiter(), "http:gcs:cups"))
+	router := web.Router().NewRoute().Subrouter()
+	router.Use(ratelimit.HTTPMiddleware(s.component.RateLimiter(), "http:gcs:cups"))
+	router.Path("/update-info").HandlerFunc(s.UpdateInfo).Methods(http.MethodPost)
 }
 
-func getContext(c echo.Context) context.Context {
-	ctx := c.Request().Context()
+func getContext(r *http.Request) context.Context {
+	ctx := r.Context()
 	md := metadata.New(map[string]string{
-		"authorization": c.Request().Header.Get(echo.HeaderAuthorization),
+		"authorization": r.Header.Get("Authorization"),
 	})
 	if ctxMd, ok := metadata.FromIncomingContext(ctx); ok {
 		md = metadata.Join(ctxMd, md)
@@ -269,7 +253,7 @@ func (s *Server) getTrust(address string) (*x509.Certificate, error) {
 	}
 	address = net.JoinHostPort(host, port)
 
-	trustI, err, _ := s.getTrustOnce.Do(address, func() (interface{}, error) {
+	trustI, err, _ := s.getTrustOnce.Do(address, func() (any, error) {
 		s.trustCacheMu.RLock()
 		trust, ok := s.trustCache[address]
 		s.trustCacheMu.RUnlock()

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { forwardRef } from 'react'
 import classnames from 'classnames'
 import PropTypes from 'prop-types'
 
@@ -24,6 +24,7 @@ const hardcoded = {
   access: 'lock',
   api_keys: 'vpn_key',
   application: 'web_asset',
+  cluster: 'language',
   collaborators: 'people',
   data: 'poll',
   develop: 'code',
@@ -58,7 +59,9 @@ const hardcoded = {
   logout: 'power_settings_new',
   organization: 'people',
   overview: 'dashboard',
+  packet_broker: 'camera',
   payload_formats: 'code',
+  oauth_clients: 'recent_actors',
   settings: 'tune',
   sort_order_asc: 'arrow_drop_down',
   sort_order_desc: 'arrow_drop_up',
@@ -68,20 +71,34 @@ const hardcoded = {
   valid: 'check_circle',
 }
 
-const Icon = ({ icon, className, nudgeUp, nudgeDown, small, large, ...rest }) => {
+const Icon = forwardRef((props, ref) => {
+  const {
+    icon,
+    className,
+    nudgeUp,
+    nudgeDown,
+    small,
+    large,
+    textPaddedLeft,
+    textPaddedRight,
+    ...rest
+  } = props
+
   const classname = classnames(style.icon, className, {
     [style.nudgeUp]: nudgeUp,
     [style.nudgeDown]: nudgeDown,
     [style.large]: large,
     [style.small]: small,
+    [style.textPaddedLeft]: textPaddedLeft,
+    [style.textPaddedRight]: textPaddedRight,
   })
 
   return (
-    <span className={classname} {...rest}>
+    <span className={classname} ref={ref} {...rest}>
       {hardcoded[icon] || icon}
     </span>
   )
-}
+})
 
 Icon.propTypes = {
   className: PropTypes.string,
@@ -95,6 +112,10 @@ Icon.propTypes = {
   nudgeUp: PropTypes.bool,
   /** Renders a smaller icon. */
   small: PropTypes.bool,
+  /** Whether icon should be padded for a text displayed left to it. */
+  textPaddedLeft: PropTypes.bool,
+  /** Whether icon should be padded for a text displayed right to it. */
+  textPaddedRight: PropTypes.bool,
 }
 
 Icon.defaultProps = {
@@ -103,6 +124,8 @@ Icon.defaultProps = {
   nudgeDown: false,
   nudgeUp: false,
   small: false,
+  textPaddedLeft: false,
+  textPaddedRight: false,
 }
 
 export default Icon

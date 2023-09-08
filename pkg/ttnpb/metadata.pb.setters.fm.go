@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-
-	go_thethings_network_lorawan_stack_v3_pkg_types "go.thethings.network/lorawan-stack/v3/pkg/types"
-)
+import fmt "fmt"
 
 func (dst *RxMetadata) SetFields(src *RxMetadata, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -15,19 +10,26 @@ func (dst *RxMetadata) SetFields(src *RxMetadata, paths ...string) error {
 		case "gateway_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *GatewayIdentifiers
-				if src != nil {
-					newSrc = &src.GatewayIdentifiers
+				if (src == nil || src.GatewayIds == nil) && dst.GatewayIds == nil {
+					continue
 				}
-				newDst = &dst.GatewayIdentifiers
+				if src != nil {
+					newSrc = src.GatewayIds
+				}
+				if dst.GatewayIds != nil {
+					newDst = dst.GatewayIds
+				} else {
+					newDst = &GatewayIdentifiers{}
+					dst.GatewayIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.GatewayIdentifiers = src.GatewayIdentifiers
+					dst.GatewayIds = src.GatewayIds
 				} else {
-					var zero GatewayIdentifiers
-					dst.GatewayIdentifiers = zero
+					dst.GatewayIds = nil
 				}
 			}
 		case "packet_broker":
@@ -108,59 +110,59 @@ func (dst *RxMetadata) SetFields(src *RxMetadata, paths ...string) error {
 				return fmt.Errorf("'encrypted_fine_timestamp_key_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.EncryptedFineTimestampKeyID = src.EncryptedFineTimestampKeyID
+				dst.EncryptedFineTimestampKeyId = src.EncryptedFineTimestampKeyId
 			} else {
 				var zero string
-				dst.EncryptedFineTimestampKeyID = zero
+				dst.EncryptedFineTimestampKeyId = zero
 			}
 		case "rssi":
 			if len(subs) > 0 {
 				return fmt.Errorf("'rssi' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.RSSI = src.RSSI
+				dst.Rssi = src.Rssi
 			} else {
 				var zero float32
-				dst.RSSI = zero
+				dst.Rssi = zero
 			}
 		case "signal_rssi":
 			if len(subs) > 0 {
 				return fmt.Errorf("'signal_rssi' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SignalRSSI = src.SignalRSSI
+				dst.SignalRssi = src.SignalRssi
 			} else {
-				dst.SignalRSSI = nil
+				dst.SignalRssi = nil
 			}
 		case "channel_rssi":
 			if len(subs) > 0 {
 				return fmt.Errorf("'channel_rssi' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ChannelRSSI = src.ChannelRSSI
+				dst.ChannelRssi = src.ChannelRssi
 			} else {
 				var zero float32
-				dst.ChannelRSSI = zero
+				dst.ChannelRssi = zero
 			}
 		case "rssi_standard_deviation":
 			if len(subs) > 0 {
 				return fmt.Errorf("'rssi_standard_deviation' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.RSSIStandardDeviation = src.RSSIStandardDeviation
+				dst.RssiStandardDeviation = src.RssiStandardDeviation
 			} else {
 				var zero float32
-				dst.RSSIStandardDeviation = zero
+				dst.RssiStandardDeviation = zero
 			}
 		case "snr":
 			if len(subs) > 0 {
 				return fmt.Errorf("'snr' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SNR = src.SNR
+				dst.Snr = src.Snr
 			} else {
 				var zero float32
-				dst.SNR = zero
+				dst.Snr = zero
 			}
 		case "frequency_offset":
 			if len(subs) > 0 {
@@ -204,8 +206,7 @@ func (dst *RxMetadata) SetFields(src *RxMetadata, paths ...string) error {
 			if src != nil {
 				dst.DownlinkPathConstraint = src.DownlinkPathConstraint
 			} else {
-				var zero DownlinkPathConstraint
-				dst.DownlinkPathConstraint = zero
+				dst.DownlinkPathConstraint = 0
 			}
 		case "uplink_token":
 			if len(subs) > 0 {
@@ -225,6 +226,44 @@ func (dst *RxMetadata) SetFields(src *RxMetadata, paths ...string) error {
 			} else {
 				var zero uint32
 				dst.ChannelIndex = zero
+			}
+		case "hopping_width":
+			if len(subs) > 0 {
+				return fmt.Errorf("'hopping_width' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.HoppingWidth = src.HoppingWidth
+			} else {
+				var zero uint32
+				dst.HoppingWidth = zero
+			}
+		case "frequency_drift":
+			if len(subs) > 0 {
+				return fmt.Errorf("'frequency_drift' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FrequencyDrift = src.FrequencyDrift
+			} else {
+				var zero int32
+				dst.FrequencyDrift = zero
+			}
+		case "gps_time":
+			if len(subs) > 0 {
+				return fmt.Errorf("'gps_time' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.GpsTime = src.GpsTime
+			} else {
+				dst.GpsTime = nil
+			}
+		case "received_at":
+			if len(subs) > 0 {
+				return fmt.Errorf("'received_at' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.ReceivedAt = src.ReceivedAt
+			} else {
+				dst.ReceivedAt = nil
 			}
 		case "advanced":
 			if len(subs) > 0 {
@@ -293,8 +332,7 @@ func (dst *Location) SetFields(src *Location, paths ...string) error {
 			if src != nil {
 				dst.Source = src.Source
 			} else {
-				var zero LocationSource
-				dst.Source = zero
+				dst.Source = 0
 			}
 
 		default:
@@ -324,8 +362,7 @@ func (dst *PacketBrokerMetadata) SetFields(src *PacketBrokerMetadata, paths ...s
 			if src != nil {
 				dst.ForwarderNetId = src.ForwarderNetId
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.NetID
-				dst.ForwarderNetId = zero
+				dst.ForwarderNetId = nil
 			}
 		case "forwarder_tenant_id":
 			if len(subs) > 0 {
@@ -372,8 +409,7 @@ func (dst *PacketBrokerMetadata) SetFields(src *PacketBrokerMetadata, paths ...s
 			if src != nil {
 				dst.HomeNetworkNetId = src.HomeNetworkNetId
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.NetID
-				dst.HomeNetworkNetId = zero
+				dst.HomeNetworkNetId = nil
 			}
 		case "home_network_tenant_id":
 			if len(subs) > 0 {
@@ -422,8 +458,7 @@ func (dst *PacketBrokerRouteHop) SetFields(src *PacketBrokerRouteHop, paths ...s
 			if src != nil {
 				dst.ReceivedAt = src.ReceivedAt
 			} else {
-				var zero time.Time
-				dst.ReceivedAt = zero
+				dst.ReceivedAt = nil
 			}
 		case "sender_name":
 			if len(subs) > 0 {

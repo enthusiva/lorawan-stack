@@ -16,6 +16,8 @@ import createRequestActions from '@ttn-lw/lib/store/actions/create-request-actio
 import {
   createPaginationRequestActions,
   createPaginationBaseActionType,
+  createPaginationRestoreBaseActionType,
+  createPaginationRestoreActions,
 } from '@ttn-lw/lib/store/actions/pagination'
 
 import createGetRightsListRequestActions, { createGetRightsListActionType } from './rights'
@@ -26,7 +28,11 @@ export const GET_USER_BASE = 'GET_USER'
 export const [
   { request: GET_USER, success: GET_USER_SUCCESS, failure: GET_USER_FAILURE },
   { request: getUser, success: getUserSuccess, failure: getUserFailure },
-] = createRequestActions(GET_USER_BASE, id => ({ id }), (id, selector) => ({ selector }))
+] = createRequestActions(
+  GET_USER_BASE,
+  id => ({ id }),
+  (id, selector) => ({ selector }),
+)
 
 export const GET_USERS_LIST_BASE = createPaginationBaseActionType(SHARED_NAME)
 export const [
@@ -50,7 +56,17 @@ export const DELETE_USER_BASE = 'DELETE_USER'
 export const [
   { request: DELETE_USER, success: DELETE_USER_SUCCESS, failure: DELETE_USER_FAILURE },
   { request: deleteUser, success: deleteUserSuccess, failure: deleteUserFailure },
-] = createRequestActions(DELETE_USER_BASE, id => ({ id }))
+] = createRequestActions(
+  DELETE_USER_BASE,
+  id => ({ id }),
+  (id, options = {}) => ({ options }),
+)
+
+export const RESTORE_USER_BASE = createPaginationRestoreBaseActionType(SHARED_NAME)
+export const [
+  { request: RESTORE_USER, success: RESTORE_USER_SUCCESS, failure: RESTORE_USER_FAILURE },
+  { request: restoreUser, success: restoreUserSuccess, failure: restoreUserFailure },
+] = createPaginationRestoreActions(SHARED_NAME, id => ({ id }))
 
 export const GET_USER_RIGHTS_LIST_BASE = createGetRightsListActionType(SHARED_NAME)
 export const [
@@ -65,3 +81,29 @@ export const [
     failure: getUsersRightsListFailure,
   },
 ] = createGetRightsListRequestActions(SHARED_NAME)
+
+export const GET_USER_INVITATIONS_BASE = createPaginationBaseActionType('INVITATIONS')
+export const [
+  {
+    request: GET_USER_INVITATIONS,
+    success: GET_USER_INVITATIONS_SUCCESS,
+    failure: GET_USER_INVITATIONS_FAILURE,
+  },
+  {
+    request: getUserInvitations,
+    success: getUserInvitationsSuccess,
+    failure: getUserInvitationsFailure,
+  },
+] = createPaginationRequestActions('INVITATIONS')
+
+export const SEND_INVITE_BASE = 'SEND_INVITE'
+export const [
+  { request: SEND_INVITE, success: SEND_INVITE_SUCCESS, failure: SEND_INVITE_FAILURE },
+  { request: sendInvite, success: sendInviteSuccess, failure: sendInviteFailure },
+] = createRequestActions(SEND_INVITE_BASE, email => ({ email }))
+
+export const DELETE_INVITE_BASE = 'DELETE_INVITE'
+export const [
+  { request: DELETE_INVITE, success: DELETE_INVITE_SUCCESS, failure: DELETE_INVITE_FAILURE },
+  { request: deleteInvite, success: deleteInviteSuccess, failure: deleteInviteFailure },
+] = createRequestActions(DELETE_INVITE_BASE, email => ({ email }))

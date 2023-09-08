@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -105,7 +105,7 @@ func TestGoFieldsPathsEndDevice(t *testing.T) {
 	}{
 		{
 			fields:   []string{"mac_state", "frequency_plan_id"},
-			expected: []string{"MACState", "FrequencyPlanID"},
+			expected: []string{"MacState", "FrequencyPlanId"},
 		},
 		{
 			fields:   []string{"session.last_f_cnt_up"},
@@ -113,15 +113,17 @@ func TestGoFieldsPathsEndDevice(t *testing.T) {
 		},
 		{
 			fields:   []string{"ids.application_ids.application_id"},
-			expected: []string{"EndDeviceIdentifiers.ApplicationIdentifiers.ApplicationID"},
+			expected: []string{"Ids.ApplicationIds.ApplicationId"},
 		},
 	} {
 		goFields := goproto.GoFieldsPaths(&field_mask.FieldMask{Paths: tc.fields}, ttnpb.EndDevice{
+			Ids: &ttnpb.EndDeviceIdentifiers{
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{},
+			},
 			Session: &ttnpb.Session{
 				LastFCntUp: 5,
 			},
 		})
-
 		a.So(goFields, should.HaveSameElementsDeep, tc.expected)
 	}
 }

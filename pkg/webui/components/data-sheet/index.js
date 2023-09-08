@@ -29,62 +29,61 @@ const m = defineMessages({
   noData: 'No data available',
 })
 
-const DataSheet = ({ className, data }) => {
-  return (
-    <table className={classnames(className, style.table)}>
-      <tbody>
-        {data.map((group, index) => {
-          return (
-            <React.Fragment key={`${group.header}_${index}`}>
-              <tr className={style.groupHeading}>
-                <th>
-                  <Message content={group.header} />
-                </th>
-              </tr>
-              {group.items.length > 0 ? (
-                group.items.map(item => {
-                  if (!item) {
-                    return null
-                  }
-                  const keyId = typeof item.key === 'object' ? item.key.id : item.key
-                  const subItems = item.subItems
-                    ? item.subItems.map((subItem, subIndex) => (
-                        <DataSheetRow sub item={subItem} key={`${keyId}_${index}_${subIndex}`} />
-                      ))
-                    : null
+const DataSheet = ({ className, data }) => (
+  <table className={classnames(className, style.table)}>
+    <tbody>
+      {data.map((group, index) => (
+        <React.Fragment key={`${group.header}_${index}`}>
+          <tr className={style.groupHeading}>
+            <th>
+              <Message content={group.header} />
+            </th>
+          </tr>
+          {group.items.length > 0 ? (
+            group.items.map(item => {
+              if (!item) {
+                return null
+              }
+              const keyId = typeof item.key === 'object' ? item.key.id : item.key
+              const subItems = item.subItems
+                ? item.subItems.map((subItem, subIndex) => (
+                    <DataSheetRow sub item={subItem} key={`${keyId}_${index}_${subIndex}`} />
+                  ))
+                : null
 
-                  return (
-                    <React.Fragment key={`${keyId}_${index}`}>
-                      <DataSheetRow item={item} />
-                      {subItems}
-                    </React.Fragment>
-                  )
-                })
-              ) : (
-                <tr>
-                  <th colSpan={2}>
-                    <Message content={m.noData} />
-                  </th>
-                </tr>
-              )}
-            </React.Fragment>
-          )
-        })}
-      </tbody>
-    </table>
-  )
-}
+              return (
+                <React.Fragment key={`${keyId}_${index}`}>
+                  <DataSheetRow item={item} />
+                  {subItems}
+                </React.Fragment>
+              )
+            })
+          ) : (
+            <tr>
+              <th colSpan={2}>
+                <Message content={group.emptyMessage || m.noData} />
+              </th>
+            </tr>
+          )}
+        </React.Fragment>
+      ))}
+    </tbody>
+  </table>
+)
 
 DataSheet.propTypes = {
   className: PropTypes.string,
   /** A list of entries for the sheet. */
   data: PropTypes.arrayOf(
     PropTypes.shape({
+      emptyMessage: PropTypes.message,
       /** The title of the item group. */
       header: PropTypes.message.isRequired,
       /** A list of items for the group. */
       items: PropTypes.arrayOf(
         PropTypes.shape({
+          /** Whether uint32_t notation should be enabled for byte representation. */
+          enableUint32: PropTypes.bool,
           /** The key of the item. */
           key: PropTypes.message,
           /** The value of the item. */
@@ -93,9 +92,8 @@ DataSheet.propTypes = {
           type: PropTypes.string,
           /** Whether this 'code' or 'byte' item should be hidden by default. */
           sensitive: PropTypes.bool,
-          /** Optional subitems of this item (same shape as item, but no deeper
-           * hierarchies). */
-          subItems: PropTypes.arrayOf(PropTypes.object),
+          /** Optional subitems of this item (same shape as item, but no deeper hierarchies). */
+          subItems: PropTypes.arrayOf(PropTypes.shape({})),
         }),
       ),
     }),
@@ -114,9 +112,11 @@ const DataSheetRow = ({ item, sub }) => {
 
   return (
     <tr className={rowStyle}>
-      <th>
-        <Message content={item.key} />
-      </th>
+      {item.key && (
+        <th>
+          <Message content={item.key} />
+        </th>
+      )}
       <td>
         {item.value && isSafeInspector ? (
           <SafeInspector
@@ -124,6 +124,7 @@ const DataSheetRow = ({ item, sub }) => {
             isBytes={item.type === 'byte'}
             small
             data={item.value}
+            enableUint32={item.enableUint32}
           />
         ) : (
           item.value || (
@@ -137,6 +138,8 @@ const DataSheetRow = ({ item, sub }) => {
 
 DataSheetRow.propTypes = {
   item: PropTypes.shape({
+    /** Whether uint32_t notation should be enabled for byte representation. */
+    enableUint32: PropTypes.bool,
     /** The key of the item. */
     key: PropTypes.message,
     /** The value of the item. */
@@ -145,9 +148,8 @@ DataSheetRow.propTypes = {
     type: PropTypes.string,
     /** Whether this 'code' or 'byte' item should be hidden by default. */
     sensitive: PropTypes.bool,
-    /** Optional subitems of this item (same shape as item, but no deeper
-     * hierarchies). */
-    subItems: PropTypes.arrayOf(PropTypes.object),
+    /** Optional subitems of this item (same shape as item, but no deeper hierarchies). */
+    subItems: PropTypes.arrayOf(PropTypes.shape({})),
   }).isRequired,
   sub: PropTypes.bool,
 }

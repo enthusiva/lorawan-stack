@@ -27,7 +27,7 @@ import (
 func UnaryServerInterceptor(ctx context.Context, opts ...Option) grpc.UnaryServerInterceptor {
 	o := evaluateServerOpt(opts)
 	logger := log.FromContext(ctx).WithField("namespace", "grpc")
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		ctx = newContextWithRequestFields(ctx)
 		onceFields, propagatedFields := logFieldsForCall(ctx, info.FullMethod)
 		logger := logger.WithFields(propagatedFields)
@@ -36,10 +36,12 @@ func UnaryServerInterceptor(ctx context.Context, opts ...Option) grpc.UnaryServe
 		startTime := time.Now()
 		resp, err := handler(newCtx, req)
 
-		if err == nil {
-			if _, ok := o.ignoreMethods[info.FullMethod]; ok {
-				return resp, err
-			}
+		if cfg, ok := o.ignoreMethods[info.FullMethod]; ok && shouldSuppressLog(cfg, err) {
+			return resp, err
+		}
+
+		if shouldSuppressError(err) {
+			return resp, err
 		}
 
 		onceFields = onceFields.WithField(
@@ -54,7 +56,7 @@ func UnaryServerInterceptor(ctx context.Context, opts ...Option) grpc.UnaryServe
 			onceFields = onceFields.With(fields.fields)
 		}
 
-		level := o.levelFunc(grpc.Code(err))
+		level := o.levelFunc(o.codeFunc(err))
 		if err == context.Canceled {
 			level = log.InfoLevel
 		}
@@ -73,7 +75,7 @@ func UnaryServerInterceptor(ctx context.Context, opts ...Option) grpc.UnaryServe
 func StreamServerInterceptor(ctx context.Context, opts ...Option) grpc.StreamServerInterceptor {
 	o := evaluateServerOpt(opts)
 	logger := log.FromContext(ctx).WithField("namespace", "grpc")
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := newContextWithRequestFields(stream.Context())
 		onceFields, propagatedFields := logFieldsForCall(ctx, info.FullMethod)
 		logger := logger.WithFields(propagatedFields)
@@ -84,10 +86,12 @@ func StreamServerInterceptor(ctx context.Context, opts ...Option) grpc.StreamSer
 		startTime := time.Now()
 		err := handler(srv, wrapped)
 
-		if err == nil {
-			if _, ok := o.ignoreMethods[info.FullMethod]; ok {
-				return err
-			}
+		if cfg, ok := o.ignoreMethods[info.FullMethod]; ok && shouldSuppressLog(cfg, err) {
+			return err
+		}
+
+		if shouldSuppressError(err) {
+			return err
 		}
 
 		onceFields = onceFields.WithField(
@@ -102,7 +106,7 @@ func StreamServerInterceptor(ctx context.Context, opts ...Option) grpc.StreamSer
 			onceFields = onceFields.With(fields.fields)
 		}
 
-		level := o.levelFunc(grpc.Code(err))
+		level := o.levelFunc(o.codeFunc(err))
 		if err == context.Canceled {
 			level = log.InfoLevel
 		}

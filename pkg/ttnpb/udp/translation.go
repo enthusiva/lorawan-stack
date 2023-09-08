@@ -20,17 +20,19 @@ import (
 	"strings"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/gpstime"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/datarate"
 	"go.thethings.network/lorawan-stack/v3/pkg/version"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const (
-	delta = 0.001 // For GPS comparisons
-	lora  = "LORA"
-	fsk   = "FSK"
+	delta  = 0.001 // For GPS comparisons
+	lora   = "LORA"
+	fsk    = "FSK"
+	lrfhss = "LR-FHSS"
 
 	// eirpDelta is the delta between EIRP and ERP.
 	eirpDelta = 2.15
@@ -40,26 +42,25 @@ var (
 	ttnVersions = map[string]string{
 		"ttn-lw-gateway-server": version.TTN,
 	}
-	invalidLocations = []ttnpb.Location{
+	invalidLocations = []*ttnpb.Location{
 		{Latitude: 0.0, Longitude: 0.0},
 		{Latitude: 10.0, Longitude: 20.0},
 	}
 )
 
-func validLocation(loc ttnpb.Location) bool {
+func validLocation(loc *ttnpb.Location) bool {
 	for _, invalidLoc := range invalidLocations {
 		if (loc.Latitude > invalidLoc.Latitude-delta && loc.Latitude < invalidLoc.Latitude+delta) &&
 			(loc.Longitude > invalidLoc.Longitude-delta && loc.Longitude < invalidLoc.Longitude+delta) {
 			return false
 		}
 	}
-
-	return true
+	return loc.ValidateFields() == nil
 }
 
 // UpstreamMetadata related to an uplink.
 type UpstreamMetadata struct {
-	ID ttnpb.GatewayIdentifiers
+	ID *ttnpb.GatewayIdentifiers
 	IP string
 }
 
@@ -75,7 +76,7 @@ func ToGatewayUp(data Data, md UpstreamMetadata) (*ttnpb.GatewayUp, error) {
 		if err != nil {
 			return nil, err
 		}
-		up.UplinkMessages = append(up.UplinkMessages, &convertedRx)
+		up.UplinkMessages = append(up.UplinkMessages, convertedRx)
 	}
 	if data.Stat != nil {
 		up.GatewayStatus = convertStatus(*data.Stat, md)
@@ -115,44 +116,52 @@ var (
 	}
 )
 
-func metadata(rx RxPacket, gatewayID ttnpb.GatewayIdentifiers) []*ttnpb.RxMetadata {
-	return []*ttnpb.RxMetadata{
-		{
-			GatewayIdentifiers: gatewayID,
-			AntennaIndex:       0,
-			ChannelIndex:       uint32(rx.Chan),
-			Timestamp:          rx.Tmst,
-			RSSI:               float32(rx.RSSI),
-			ChannelRSSI:        float32(rx.RSSI),
-			SNR:                float32(rx.LSNR),
-		},
+func v1Metadata(rx RxPacket, gatewayID *ttnpb.GatewayIdentifiers) []*ttnpb.RxMetadata {
+	md := &ttnpb.RxMetadata{
+		GatewayIds:   gatewayID,
+		AntennaIndex: 0,
+		ChannelIndex: uint32(rx.Chan),
+		Timestamp:    rx.Tmst,
+		Rssi:         float32(rx.RSSI),
+		ChannelRssi:  float32(rx.RSSI),
+		Snr:          float32(rx.LSNR),
+		HoppingWidth: rx.Hpw,
 	}
+	if rx.FTime != nil {
+		md.FineTimestamp = uint64(*rx.FTime)
+	}
+	if rx.FOff != nil {
+		md.FrequencyOffset = int64(*rx.FOff)
+	}
+	return []*ttnpb.RxMetadata{md}
 }
 
-func fineTimestampMetadata(rx RxPacket, gatewayID ttnpb.GatewayIdentifiers) []*ttnpb.RxMetadata {
+func v2Metadata(rx RxPacket, gatewayID *ttnpb.GatewayIdentifiers) []*ttnpb.RxMetadata {
 	md := make([]*ttnpb.RxMetadata, 0)
 	for _, signal := range rx.RSig {
 		signalMetadata := &ttnpb.RxMetadata{
-			GatewayIdentifiers: gatewayID,
-			AntennaIndex:       uint32(signal.Ant),
-			ChannelIndex:       uint32(signal.Chan),
-			Timestamp:          rx.Tmst,
-			RSSI:               float32(signal.RSSIC),
-			ChannelRSSI:        float32(signal.RSSIC),
-			SNR:                float32(signal.LSNR),
-			FrequencyOffset:    int64(signal.FOff),
+			GatewayIds:      gatewayID,
+			AntennaIndex:    uint32(signal.Ant),
+			ChannelIndex:    uint32(signal.Chan),
+			Timestamp:       rx.Tmst,
+			Rssi:            float32(signal.RSSIC),
+			ChannelRssi:     float32(signal.RSSIC),
+			Snr:             float32(signal.LSNR),
+			FrequencyOffset: int64(signal.FOff),
+			HoppingWidth:    rx.Hpw,
+			FrequencyDrift:  signal.Fdri,
 		}
 		if signal.RSSIS != nil {
-			signalMetadata.SignalRSSI = &pbtypes.FloatValue{
+			signalMetadata.SignalRssi = &wrapperspb.FloatValue{
 				Value: float32(*signal.RSSIS),
 			}
 		}
 		if signal.RSSISD != nil {
-			signalMetadata.RSSIStandardDeviation = float32(*signal.RSSISD)
+			signalMetadata.RssiStandardDeviation = float32(*signal.RSSISD)
 		}
 		if signal.ETime != "" {
 			if etime, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(signal.ETime, "=")); err == nil {
-				signalMetadata.EncryptedFineTimestampKeyID = strconv.Itoa(int(rx.Aesk))
+				signalMetadata.EncryptedFineTimestampKeyId = strconv.Itoa(int(rx.Aesk))
 				signalMetadata.EncryptedFineTimestamp = etime
 			}
 		}
@@ -164,10 +173,11 @@ func fineTimestampMetadata(rx RxPacket, gatewayID ttnpb.GatewayIdentifiers) []*t
 	return md
 }
 
-func convertUplink(rx RxPacket, md UpstreamMetadata) (ttnpb.UplinkMessage, error) {
-	up := ttnpb.UplinkMessage{
-		Settings: ttnpb.TxSettings{
+func convertUplink(rx RxPacket, md UpstreamMetadata) (*ttnpb.UplinkMessage, error) {
+	up := &ttnpb.UplinkMessage{
+		Settings: &ttnpb.TxSettings{
 			Frequency: uint64(rx.Freq * 1000000),
+			DataRate:  rx.DatR.DataRate,
 		},
 	}
 
@@ -178,9 +188,9 @@ func convertUplink(rx RxPacket, md UpstreamMetadata) (ttnpb.UplinkMessage, error
 	up.RawPayload = rawPayload
 
 	if len(rx.RSig) > 0 {
-		up.RxMetadata = fineTimestampMetadata(rx, md.ID)
+		up.RxMetadata = v2Metadata(rx, md.ID)
 	} else {
-		up.RxMetadata = metadata(rx, md.ID)
+		up.RxMetadata = v1Metadata(rx, md.ID)
 	}
 	for _, md := range up.RxMetadata {
 		if up.Settings.Timestamp == 0 || up.Settings.Timestamp > md.Timestamp {
@@ -188,17 +198,33 @@ func convertUplink(rx RxPacket, md UpstreamMetadata) (ttnpb.UplinkMessage, error
 		}
 	}
 
-	if rx.Time != nil {
-		goTime := time.Time(*rx.Time)
+	var goTime, goGpsTime time.Time
+	switch {
+	case rx.Tmms != nil:
+		goGpsTime = gpstime.Parse(time.Duration(*rx.Tmms) * time.Millisecond)
+		goTime = goGpsTime
+	case rx.Time != nil:
+		goTime = time.Time(*rx.Time)
+	}
+	if !goTime.IsZero() {
+		protoTime := timestamppb.New(goTime)
 		for _, md := range up.RxMetadata {
-			md.Time = &goTime
+			md.Time = protoTime
 		}
-		up.Settings.Time = &goTime
+		up.Settings.Time = protoTime
+	}
+	if !goGpsTime.IsZero() {
+		protoTime := timestamppb.New(goGpsTime)
+		for _, md := range up.RxMetadata {
+			md.GpsTime = protoTime
+		}
 	}
 
-	up.Settings.DataRate = rx.DatR.DataRate
-	if lora := up.Settings.DataRate.GetLoRa(); lora != nil {
-		up.Settings.CodingRate = rx.CodR
+	switch rx.Stat {
+	case 1:
+		up.CrcStatus = wrapperspb.Bool(true)
+	case -1:
+		up.CrcStatus = wrapperspb.Bool(false)
 	}
 
 	return up, nil
@@ -213,6 +239,17 @@ func addVersions(status *ttnpb.GatewayStatus, stat Stat) {
 	}
 	if stat.HAL != nil {
 		status.Versions["hal"] = *stat.HAL
+	}
+	if hver := stat.HVer; hver != nil {
+		if fpga := hver.FPGA; fpga != nil {
+			status.Versions["fpga"] = strconv.Itoa(int(*fpga))
+		}
+		if dsp0 := hver.DSP0; dsp0 != nil {
+			status.Versions["dsp0"] = strconv.Itoa(int(*dsp0))
+		}
+		if dsp1 := hver.DSP1; dsp1 != nil {
+			status.Versions["dsp1"] = strconv.Itoa(int(*dsp1))
+		}
 	}
 }
 
@@ -244,24 +281,22 @@ func convertStatus(stat Stat, md UpstreamMetadata) *ttnpb.GatewayStatus {
 	status := &ttnpb.GatewayStatus{
 		Metrics:  map[string]float32{},
 		Versions: map[string]string{},
-		IP:       []string{md.IP},
+		Ip:       []string{md.IP},
 	}
 
 	if stat.Lati != nil && stat.Long != nil {
-		loc := &ttnpb.Location{Latitude: *stat.Lati, Longitude: *stat.Long}
+		loc := &ttnpb.Location{Latitude: *stat.Lati, Longitude: *stat.Long, Source: ttnpb.LocationSource_SOURCE_GPS}
 		if stat.Alti != nil {
 			loc.Altitude = *stat.Alti
 		}
-		if validLocation(*loc) {
+		if validLocation(loc) {
 			status.AntennaLocations = []*ttnpb.Location{loc}
 		}
 	}
 
-	currentTime := time.Time(stat.Time)
-	status.Time = currentTime
+	status.Time = timestamppb.New(time.Time(stat.Time))
 	if stat.Boot != nil {
-		bootTime := time.Time(*stat.Boot)
-		status.BootTime = bootTime
+		status.BootTime = timestamppb.New(time.Time(*stat.Boot))
 	}
 
 	addVersions(status, stat)
@@ -275,32 +310,58 @@ func convertStatus(stat Stat, md UpstreamMetadata) *ttnpb.GatewayStatus {
 // FromGatewayUp converts the upstream message to the UDP format.
 func FromGatewayUp(up *ttnpb.GatewayUp) (rxs []*RxPacket, stat *Stat, ack *TxPacketAck) {
 	rxs = make([]*RxPacket, 0, len(up.UplinkMessages))
-	var modulation, codr string
 	for _, msg := range up.UplinkMessages {
-		switch msg.Settings.DataRate.Modulation.(type) {
-		case *ttnpb.DataRate_LoRa:
+		var modulation, codr string
+		switch mod := msg.Settings.DataRate.Modulation.(type) {
+		case *ttnpb.DataRate_Lora:
 			modulation = lora
-			codr = msg.Settings.CodingRate
-		case *ttnpb.DataRate_FSK:
+			codr = mod.Lora.CodingRate
+		case *ttnpb.DataRate_Fsk:
 			modulation = fsk
+		case *ttnpb.DataRate_Lrfhss:
+			modulation = lrfhss
+			codr = mod.Lrfhss.CodingRate
+		}
+		var ftime *uint32
+		if i := uint32(msg.RxMetadata[0].FineTimestamp); i != 0 {
+			ftime = &i
+		}
+		var foff *int32
+		if i := int32(msg.RxMetadata[0].FrequencyOffset); i != 0 {
+			foff = &i
+		}
+		crcStatus := int8(0)
+		if msg.CrcStatus != nil {
+			if msg.CrcStatus.Value {
+				crcStatus = 1
+			} else {
+				crcStatus = -1
+			}
 		}
 		rxs = append(rxs, &RxPacket{
-			Freq: float64(msg.Settings.Frequency) / 1000000,
-			Chan: uint8(msg.RxMetadata[0].ChannelIndex),
-			Modu: modulation,
-			DatR: datarate.DR{DataRate: msg.Settings.DataRate},
-			CodR: codr,
-			Size: uint16(len(msg.RawPayload)),
-			Data: base64.StdEncoding.EncodeToString(msg.RawPayload),
-			Tmst: msg.RxMetadata[0].Timestamp,
-			RSSI: int16(msg.RxMetadata[0].RSSI),
-			LSNR: float64(msg.RxMetadata[0].SNR),
+			Freq:  float64(msg.Settings.Frequency) / 1000000,
+			Chan:  uint8(msg.RxMetadata[0].ChannelIndex),
+			Stat:  crcStatus,
+			Modu:  modulation,
+			DatR:  datarate.DR{DataRate: msg.Settings.DataRate},
+			CodR:  codr,
+			Size:  uint16(len(msg.RawPayload)),
+			Data:  base64.StdEncoding.EncodeToString(msg.RawPayload),
+			Tmst:  msg.RxMetadata[0].Timestamp,
+			RSSI:  int16(msg.RxMetadata[0].Rssi),
+			LSNR:  float64(msg.RxMetadata[0].Snr),
+			FTime: ftime,
+			FOff:  foff,
 		})
 	}
 	if up.GatewayStatus != nil {
 		// TODO: Handle multiple antenna locations (https://github.com/TheThingsNetwork/lorawan-stack/issues/2006).
+		var time time.Time
+		if sTime := ttnpb.StdTime(up.GatewayStatus.Time); sTime != nil {
+			time = *sTime
+		}
 		stat = &Stat{
-			Time: ExpandedTime(up.GatewayStatus.Time),
+			Time: ExpandedTime(time),
 		}
 		if len(up.GatewayStatus.AntennaLocations) > 0 {
 			loc := up.GatewayStatus.AntennaLocations[0]
@@ -328,12 +389,9 @@ func ToDownlinkMessage(tx *TxPacket) (*ttnpb.DownlinkMessage, error) {
 		},
 		Timestamp: tx.Tmst,
 	}
-	if lora := scheduled.DataRate.GetLoRa(); lora != nil {
-		scheduled.CodingRate = tx.CodR
-	}
 	if tx.Time != nil {
 		t := gpstime.Parse(time.Duration(*tx.Tmms) * time.Millisecond)
-		scheduled.Time = &t
+		scheduled.Time = timestamppb.New(t)
 	}
 	buf, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(tx.Data, "="))
 	if err != nil {
@@ -363,22 +421,23 @@ func FromDownlinkMessage(msg *ttnpb.DownlinkMessage) (*TxPacket, error) {
 		Tmst: scheduled.Timestamp,
 	}
 	if scheduled.Time != nil {
-		t := uint64(gpstime.ToGPS(*scheduled.Time) / time.Millisecond)
+		t := uint64(gpstime.ToGPS(*ttnpb.StdTime(scheduled.Time)) / time.Millisecond)
 		tx.Tmms = &t
 	} else if scheduled.Timestamp == 0 {
 		tx.Imme = true
 	}
 
 	tx.DatR.DataRate = scheduled.DataRate
-	switch scheduled.DataRate.Modulation.(type) {
-	case *ttnpb.DataRate_LoRa:
-		tx.CodR = scheduled.CodingRate
-		tx.NCRC = !scheduled.EnableCRC
+	switch mod := scheduled.DataRate.GetModulation().(type) {
+	case *ttnpb.DataRate_Lora:
+		tx.CodR = mod.Lora.CodingRate
+		tx.NCRC = !scheduled.EnableCrc
 		tx.Modu = lora
-	case *ttnpb.DataRate_FSK:
+	case *ttnpb.DataRate_Fsk:
 		tx.Modu = fsk
+		tx.FDev = uint16(mod.Fsk.BitRate) / 2
 	default:
-		return tx, errModulation.WithAttributes("modulation", scheduled.DataRate)
+		return nil, errDataRate.New()
 	}
 	return tx, nil
 }

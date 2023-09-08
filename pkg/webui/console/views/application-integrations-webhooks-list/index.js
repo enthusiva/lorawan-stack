@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,35 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
+import React from 'react'
 import { Container, Row, Col } from 'react-grid-system'
+import { useParams } from 'react-router-dom'
 
-import PAGE_SIZES from '@ttn-lw/constants/page-sizes'
-
-import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
+import PageTitle from '@ttn-lw/components/page-title'
 
 import WebhooksTable from '@console/containers/webhooks-table'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
-export default class ApplicationWebhooksList extends Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+const ApplicationWebhooksList = () => {
+  const { appId } = useParams()
 
-  render() {
-    const { appId } = this.props.match.params
-
-    return (
-      <Container>
-        <Row>
-          <IntlHelmet title={sharedMessages.integrations} />
-          <Col>
-            <WebhooksTable pageSize={PAGE_SIZES.REGULAR} appId={appId} />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Container>
+      <PageTitle title={sharedMessages.webhooks} hideHeading />
+      <Row>
+        <Col>
+          <WebhooksTable appId={appId} />
+        </Col>
+      </Row>
+    </Container>
+  )
 }
+
+export default ApplicationWebhooksList

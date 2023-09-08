@@ -20,7 +20,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
@@ -57,13 +57,13 @@ type rightsFetcher struct {
 
 func newContextWithRightsFetcher(ctx context.Context) context.Context {
 	return rights.NewContextWithFetcher(ctx, &rightsFetcher{
-		EntityFetcher: rights.EntityFetcherFunc(func(ctx context.Context, ids ttnpb.Identifiers) (*ttnpb.Rights, error) {
+		EntityFetcher: rights.EntityFetcherFunc(func(ctx context.Context, ids *ttnpb.EntityIdentifiers) (*ttnpb.Rights, error) {
 			md := rpcmetadata.FromIncomingContext(ctx)
 			if md.AuthType != "Bearer" {
 				return nil, nil
 			}
 			return ttnpb.RightsFrom(
-				ttnpb.RIGHT_GATEWAY_INFO,
+				ttnpb.Right_RIGHT_GATEWAY_INFO,
 			), nil
 		}),
 	})
@@ -93,10 +93,10 @@ func TestGetGateway(t *testing.T) {
 					Attributes: map[string]string{
 						"key": "some-key",
 					},
-					FrequencyPlanID:      "EU_863_870",
+					FrequencyPlanId:      "EU_863_870",
 					GatewayServerAddress: "gatewayserver",
-					Antennas: []ttnpb.GatewayAntenna{
-						{Location: ttnpb.Location{Latitude: 12.34, Longitude: 56.78, Altitude: 90}},
+					Antennas: []*ttnpb.GatewayAntenna{
+						{Location: &ttnpb.Location{Latitude: 12.34, Longitude: 56.78, Altitude: 90}},
 					},
 				}, nil
 			},
@@ -118,10 +118,10 @@ func TestGetGateway(t *testing.T) {
 					Attributes: map[string]string{
 						"key": "some-key",
 					},
-					FrequencyPlanID:      "EU_863_870",
+					FrequencyPlanId:      "EU_863_870",
 					GatewayServerAddress: "gatewayserver",
-					Antennas: []ttnpb.GatewayAntenna{
-						{Location: ttnpb.Location{Latitude: 12.34, Longitude: 56.78, Altitude: 90}},
+					Antennas: []*ttnpb.GatewayAntenna{
+						{Location: &ttnpb.Location{Latitude: 12.34, Longitude: 56.78, Altitude: 90}},
 					},
 				}, nil
 			},
@@ -143,10 +143,10 @@ func TestGetGateway(t *testing.T) {
 					Attributes: map[string]string{
 						"key": "some-key",
 					},
-					FrequencyPlanID:      "EU_863_870",
+					FrequencyPlanId:      "EU_863_870",
 					GatewayServerAddress: "gatewayserver",
-					Antennas: []ttnpb.GatewayAntenna{
-						{Location: ttnpb.Location{Latitude: 12.34, Longitude: 56.78, Altitude: 90}},
+					Antennas: []*ttnpb.GatewayAntenna{
+						{Location: &ttnpb.Location{Latitude: 12.34, Longitude: 56.78, Altitude: 90}},
 					},
 				}, nil
 			},
@@ -203,7 +203,7 @@ func TestGetFrequencyPlan(t *testing.T) {
 	for _, tc := range []struct {
 		Name              string
 		SetupRequest      func(*http.Request)
-		ErrorAssertion    func(actual interface{}, expected ...interface{}) string
+		ErrorAssertion    func(actual any, expected ...any) string
 		ResponseAssertion func(*assertions.Assertion, *httptest.ResponseRecorder) bool
 	}{
 		{
@@ -239,10 +239,13 @@ func TestGetFrequencyPlan(t *testing.T) {
 					HTTP: config.HTTP{
 						Listen: ":0",
 					},
+					FrequencyPlans: config.FrequencyPlansConfig{
+						ConfigSource: "static",
+						Static:       test.StaticFrequencyPlans,
+					},
 				},
 			}
 			c := componenttest.NewComponent(t, conf)
-			c.FrequencyPlans.Fetcher = test.FrequencyPlansFetcher
 			New(c)
 			componenttest.StartComponent(t, c)
 			defer c.Close()

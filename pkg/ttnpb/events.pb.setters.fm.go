@@ -2,10 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-)
+import fmt "fmt"
 
 func (dst *Event) SetFields(src *Event, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -27,8 +24,7 @@ func (dst *Event) SetFields(src *Event, paths ...string) error {
 			if src != nil {
 				dst.Time = src.Time
 			} else {
-				var zero time.Time
-				dst.Time = zero
+				dst.Time = nil
 			}
 		case "identifiers":
 			if len(subs) > 0 {
@@ -53,9 +49,9 @@ func (dst *Event) SetFields(src *Event, paths ...string) error {
 				return fmt.Errorf("'correlation_ids' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.CorrelationIDs = src.CorrelationIDs
+				dst.CorrelationIds = src.CorrelationIds
 			} else {
-				dst.CorrelationIDs = nil
+				dst.CorrelationIds = nil
 			}
 		case "origin":
 			if len(subs) > 0 {
@@ -131,10 +127,10 @@ func (dst *Event) SetFields(src *Event, paths ...string) error {
 				return fmt.Errorf("'remote_ip' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.RemoteIP = src.RemoteIP
+				dst.RemoteIp = src.RemoteIp
 			} else {
 				var zero string
-				dst.RemoteIP = zero
+				dst.RemoteIp = zero
 			}
 		case "user_agent":
 			if len(subs) > 0 {
@@ -151,10 +147,10 @@ func (dst *Event) SetFields(src *Event, paths ...string) error {
 				return fmt.Errorf("'unique_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.UniqueID = src.UniqueID
+				dst.UniqueId = src.UniqueId
 			} else {
 				var zero string
-				dst.UniqueID = zero
+				dst.UniqueId = zero
 			}
 
 		default:
@@ -195,6 +191,56 @@ func (dst *StreamEventsRequest) SetFields(src *StreamEventsRequest, paths ...str
 			} else {
 				dst.After = nil
 			}
+		case "names":
+			if len(subs) > 0 {
+				return fmt.Errorf("'names' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Names = src.Names
+			} else {
+				dst.Names = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *FindRelatedEventsRequest) SetFields(src *FindRelatedEventsRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "correlation_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'correlation_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.CorrelationId = src.CorrelationId
+			} else {
+				var zero string
+				dst.CorrelationId = zero
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *FindRelatedEventsResponse) SetFields(src *FindRelatedEventsResponse, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "events":
+			if len(subs) > 0 {
+				return fmt.Errorf("'events' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Events = src.Events
+			} else {
+				dst.Events = nil
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -231,10 +277,10 @@ func (dst *Event_Authentication) SetFields(src *Event_Authentication, paths ...s
 				return fmt.Errorf("'token_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.TokenID = src.TokenID
+				dst.TokenId = src.TokenId
 			} else {
 				var zero string
-				dst.TokenID = zero
+				dst.TokenId = zero
 			}
 
 		default:

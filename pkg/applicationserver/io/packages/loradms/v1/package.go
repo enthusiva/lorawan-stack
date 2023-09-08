@@ -17,10 +17,7 @@ package loraclouddevicemanagementv1
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/packages"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/packages/loradms/v1/api"
@@ -30,8 +27,11 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/jsonpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	lorautil "go.thethings.network/lorawan-stack/v3/pkg/util/lora"
 	urlutil "go.thethings.network/lorawan-stack/v3/pkg/util/url"
-	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PackageName defines the package name.
@@ -42,12 +42,6 @@ type DeviceManagementPackage struct {
 	server   io.Server
 	registry packages.Registry
 }
-
-// RegisterServices implements packages.ApplicationPackageHandler.
-func (p *DeviceManagementPackage) RegisterServices(s *grpc.Server) {}
-
-// RegisterHandlers implements packages.ApplicationPackageHandler.
-func (p *DeviceManagementPackage) RegisterHandlers(s *runtime.ServeMux, conn *grpc.ClientConn) {}
 
 var (
 	errDeviceEUIMissing    = errors.DefineNotFound("device_eui_missing", "device EUI `{dev_eui}` not found")
@@ -64,14 +58,14 @@ func (p *DeviceManagementPackage) HandleUp(ctx context.Context, def *ttnpb.Appli
 		return errNoAssociation.New()
 	}
 
-	if up.DevEUI == nil || up.DevEUI.IsZero() {
+	if types.MustEUI64(up.EndDeviceIds.DevEui).OrZero().IsZero() {
 		logger.Debug("Package configured for end device with no device EUI")
 		return nil
 	}
 
 	defer func() {
 		if err != nil {
-			registerPackageFail(ctx, up.EndDeviceIdentifiers, err)
+			registerPackageFail(ctx, up.EndDeviceIds, err)
 		}
 	}()
 
@@ -85,22 +79,23 @@ func (p *DeviceManagementPackage) HandleUp(ctx context.Context, def *ttnpb.Appli
 		join := m.JoinAccept
 		loraUp := &objects.LoRaUplink{
 			Type:      objects.JoiningUplinkType,
-			Timestamp: float64Ptr(float64(join.ReceivedAt.UTC().Unix())),
+			Timestamp: float64PtrOfTimestamp(join.ReceivedAt),
 		}
 		return p.sendUplink(ctx, up, loraUp, data)
 	case *ttnpb.ApplicationUp_UplinkMessage:
 		msg := m.UplinkMessage
 		settings := msg.GetSettings()
+		receivedAt := lorautil.GetAdjustedReceivedAt(msg)
 		loraUp := &objects.LoRaUplink{
 			Type:      objects.UplinkUplinkType,
 			FCnt:      uint32Ptr(msg.GetFCnt()),
 			Port:      uint8Ptr(uint8(msg.GetFPort())),
-			Payload:   hexPtr(objects.Hex(msg.FRMPayload)),
-			DR:        uint8Ptr(uint8(settings.DataRateIndex)),
+			Payload:   hexPtr(objects.Hex(msg.FrmPayload)),
 			Freq:      uint32Ptr(uint32(settings.Frequency)),
-			Timestamp: float64Ptr(float64(msg.ReceivedAt.UTC().Unix())),
+			Timestamp: float64PtrOfTimestamp(receivedAt),
 		}
-		if fPort != msg.FPort {
+
+		if _, ok := data.fPortSet[msg.FPort]; !ok && fPort != msg.FPort {
 			log.FromContext(ctx).Debug("Uplink received on unhandled FPort; drop payload")
 			loraUp.Payload = &objects.Hex{}
 		}
@@ -111,9 +106,9 @@ func (p *DeviceManagementPackage) HandleUp(ctx context.Context, def *ttnpb.Appli
 }
 
 func (p *DeviceManagementPackage) sendUplink(ctx context.Context, up *ttnpb.ApplicationUp, loraUp *objects.LoRaUplink, data *packageData) error {
-	ctx = events.ContextWithCorrelationID(ctx, append(up.CorrelationIDs, fmt.Sprintf("as:packages:loraclouddmsv1:%s", events.NewCorrelationID()))...)
+	ctx = events.ContextWithCorrelationID(ctx, append(up.CorrelationIds, fmt.Sprintf("as:packages:loraclouddmsv1:%s", events.NewCorrelationID()))...)
 	logger := log.FromContext(ctx)
-	eui := objects.EUI(*up.DevEUI)
+	eui := objects.EUI(types.MustEUI64(up.EndDeviceIds.DevEui).OrZero())
 
 	httpClient, err := p.server.HTTPClient(ctx)
 	if err != nil {
@@ -136,7 +131,7 @@ func (p *DeviceManagementPackage) sendUplink(ctx context.Context, up *ttnpb.Appl
 
 	response, ok := resp[eui]
 	if !ok {
-		return errDeviceEUIMissing.WithAttributes("dev_eui", up.DevEUI)
+		return errDeviceEUIMissing.WithAttributes("dev_eui", up.EndDeviceIds.DevEui)
 	}
 	if response.Error != "" {
 		return errUplinkRequestFailed.WithCause(errors.New(response.Error))
@@ -148,15 +143,15 @@ func (p *DeviceManagementPackage) sendUplink(ctx context.Context, up *ttnpb.Appl
 		return err
 	}
 
-	if err := p.sendDownlink(ctx, up.EndDeviceIdentifiers, result.Downlink, data); err != nil {
+	if err := p.sendDownlink(ctx, up.EndDeviceIds, result.Downlink, data); err != nil {
 		return err
 	}
 
-	if err := p.sendServiceData(ctx, up.EndDeviceIdentifiers, resultStruct); err != nil {
+	if err := p.sendServiceData(ctx, up.EndDeviceIds, resultStruct); err != nil {
 		return err
 	}
 
-	if err := p.sendLocationSolved(ctx, up.EndDeviceIdentifiers, result.Position); err != nil {
+	if err := p.sendLocationSolved(ctx, up.EndDeviceIds, result.Position); err != nil {
 		return err
 	}
 
@@ -167,7 +162,7 @@ func (p *DeviceManagementPackage) sendUplink(ctx context.Context, up *ttnpb.Appl
 	return nil
 }
 
-func (p *DeviceManagementPackage) sendDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, downlink *objects.LoRaDnlink, data *packageData) error {
+func (p *DeviceManagementPackage) sendDownlink(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, downlink *objects.LoRaDnlink, data *packageData) error {
 	if downlink == nil {
 		return nil
 	}
@@ -179,15 +174,19 @@ func (p *DeviceManagementPackage) sendDownlink(ctx context.Context, ids ttnpb.En
 	}
 	return p.server.DownlinkQueuePush(ctx, ids, []*ttnpb.ApplicationDownlink{{
 		FPort:      uint32(downlink.Port),
-		FRMPayload: []byte(downlink.Payload),
+		FrmPayload: []byte(downlink.Payload),
 	}})
 }
 
-func (p *DeviceManagementPackage) sendServiceData(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, data *types.Struct) error {
+func (p *DeviceManagementPackage) sendServiceData(
+	ctx context.Context,
+	ids *ttnpb.EndDeviceIdentifiers,
+	data *structpb.Struct,
+) error {
 	return p.server.Publish(ctx, &ttnpb.ApplicationUp{
-		EndDeviceIdentifiers: ids,
-		CorrelationIDs:       events.CorrelationIDsFromContext(ctx),
-		ReceivedAt:           timePtr(time.Now().UTC()),
+		EndDeviceIds:   ids,
+		CorrelationIds: events.CorrelationIDsFromContext(ctx),
+		ReceivedAt:     timestamppb.Now(),
 		Up: &ttnpb.ApplicationUp_ServiceData{
 			ServiceData: &ttnpb.ApplicationServiceData{
 				Data:    data,
@@ -197,7 +196,7 @@ func (p *DeviceManagementPackage) sendServiceData(ctx context.Context, ids ttnpb
 	})
 }
 
-func (p *DeviceManagementPackage) sendLocationSolved(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, position *objects.PositionSolution) error {
+func (p *DeviceManagementPackage) sendLocationSolved(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, position *objects.PositionSolution) error {
 	if position == nil {
 		return nil
 	}
@@ -205,21 +204,21 @@ func (p *DeviceManagementPackage) sendLocationSolved(ctx context.Context, ids tt
 		log.FromContext(ctx).WithField("len", len(position.LLH)).Warn("Invalid LLH length")
 		return nil
 	}
-	source := ttnpb.SOURCE_UNKNOWN
+	source := ttnpb.LocationSource_SOURCE_UNKNOWN
 	switch position.Algorithm {
-	case objects.GNSSPositionSolutionType:
-		source = ttnpb.SOURCE_GPS
+	case objects.GNSSPositionSolutionType, objects.GNSSNGPositionSolutionType:
+		source = ttnpb.LocationSource_SOURCE_GPS
 	case objects.WiFiPositionSolutionType:
-		source = ttnpb.SOURCE_WIFI_RSSI_GEOLOCATION
+		source = ttnpb.LocationSource_SOURCE_WIFI_RSSI_GEOLOCATION
 	}
 	return p.server.Publish(ctx, &ttnpb.ApplicationUp{
-		EndDeviceIdentifiers: ids,
-		CorrelationIDs:       events.CorrelationIDsFromContext(ctx),
-		ReceivedAt:           timePtr(time.Now().UTC()),
+		EndDeviceIds:   ids,
+		CorrelationIds: events.CorrelationIDsFromContext(ctx),
+		ReceivedAt:     timestamppb.Now(),
 		Up: &ttnpb.ApplicationUp_LocationSolved{
 			LocationSolved: &ttnpb.ApplicationLocation{
-				Service: fmt.Sprintf("%v-%s", PackageName, position.Algorithm),
-				Location: ttnpb.Location{
+				Service: PackageName,
+				Location: &ttnpb.Location{
 					Latitude:  position.LLH[0],
 					Longitude: position.LLH[1],
 					Altitude:  int32(position.LLH[2]),
@@ -231,11 +230,13 @@ func (p *DeviceManagementPackage) sendLocationSolved(ctx context.Context, ids tt
 	})
 }
 
+const tlvWiFiHeaderLength = 5
+
 func (p *DeviceManagementPackage) parseStreamRecords(ctx context.Context, records []objects.StreamRecord, up *ttnpb.ApplicationUp, data *packageData, originalTimestamp *float64) error {
 	if records == nil || !data.GetUseTLVEncoding() {
 		return nil
 	}
-	f := func(tag uint8, length int, bytes []byte) error {
+	f := func(tag uint8, bytes []byte) error {
 		loraUp := &objects.LoRaUplink{
 			Timestamp: originalTimestamp,
 		}
@@ -244,7 +245,13 @@ func (p *DeviceManagementPackage) parseStreamRecords(ctx context.Context, record
 			payload := objects.Hex(bytes)
 			loraUp.Type = objects.GNSSUplinkType
 			loraUp.Payload = &payload
-		case 0x08: // WiFi data
+		case 0x0E: // WiFi data
+			if len(bytes) < tlvWiFiHeaderLength {
+				return nil
+			}
+			bytes = bytes[tlvWiFiHeaderLength:]
+			fallthrough
+		case 0x08: // Legacy WiFi data
 			payload := append(objects.Hex{0x01}, bytes...)
 			loraUp.Type = objects.WiFiUplinkType
 			loraUp.Payload = &payload
@@ -269,13 +276,13 @@ func (p *DeviceManagementPackage) mergePackageData(def *ttnpb.ApplicationPackage
 		if err := defaultData.fromStruct(def.Data); err != nil {
 			return nil, 0, err
 		}
-		fPort = def.FPort
+		fPort = def.Ids.FPort
 	}
 	if assoc != nil {
 		if err := associationData.fromStruct(assoc.Data); err != nil {
 			return nil, 0, err
 		}
-		fPort = assoc.FPort
+		fPort = assoc.Ids.FPort
 	}
 	var merged packageData
 	for _, data := range []*packageData{
@@ -290,6 +297,9 @@ func (p *DeviceManagementPackage) mergePackageData(def *ttnpb.ApplicationPackage
 		}
 		if data.useTLVEncoding != nil {
 			merged.useTLVEncoding = data.useTLVEncoding
+		}
+		if data.fPortSet != nil {
+			merged.fPortSet = data.fPortSet
 		}
 	}
 	if merged.serverURL == nil {
@@ -322,27 +332,27 @@ func uint32Ptr(x uint32) *uint32 {
 	return &x
 }
 
-func float64Ptr(x float64) *float64 {
-	return &x
+func float64PtrOfTimestamp(x *timestamppb.Timestamp) *float64 {
+	if x == nil {
+		return nil
+	}
+	f := float64(ttnpb.StdTime(x).UnixNano()) / float64(1e9)
+	return &f
 }
 
 func hexPtr(x objects.Hex) *objects.Hex {
 	return &x
 }
 
-func timePtr(x time.Time) *time.Time {
-	return &x
-}
-
-func toStruct(i interface{}) (*types.Struct, error) {
+func toStruct(i any) (*structpb.Struct, error) {
 	b, err := jsonpb.TTN().Marshal(i)
 	if err != nil {
 		return nil, err
 	}
-	var st types.Struct
-	err = jsonpb.TTN().Unmarshal(b, &st)
+	st := &structpb.Struct{}
+	err = jsonpb.TTN().Unmarshal(b, st)
 	if err != nil {
 		return nil, err
 	}
-	return &st, nil
+	return st, nil
 }

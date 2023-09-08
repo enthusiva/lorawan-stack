@@ -17,106 +17,87 @@ package packages
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io"
-	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcserver"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/web"
+	"go.thethings.network/lorawan-stack/v3/pkg/workerpool"
 	"google.golang.org/grpc"
 )
 
 const namespace = "applicationserver/io/packages"
 
 type server struct {
+	ttnpb.UnimplementedApplicationPackageRegistryServer
+
 	ctx context.Context
 
 	server   io.Server
 	registry Registry
 
-	handlers      map[string]ApplicationPackageHandler
-	subscriptions map[string]*io.Subscription
+	handlers map[string]ApplicationPackageHandler
+	pools    map[string]workerpool.WorkerPool[*associatedApplicationUp]
 }
 
 // Server is an application packages frontend.
 type Server interface {
-	rpcserver.Registerer
+	rpcserver.ServiceRegisterer
+	web.Registerer
 }
 
-func startPackageWorker(ctx context.Context, as io.Server, name string, handler ApplicationPackageHandler, sub *io.Subscription, id int) {
-	as.StartTask(&component.TaskConfig{
-		Context: ctx,
-		ID:      fmt.Sprintf("run_application_packages_%v_%v", name, id),
-		Func: func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-sub.Context().Done():
-					return sub.Context().Err()
-				case up := <-sub.Up():
-					ctx := up.Context
-					pair := associationsPairFromContext(ctx)
-					if err := handler.HandleUp(ctx, pair.defaultAssociation, pair.association, up.ApplicationUp); err != nil {
-						log.FromContext(ctx).WithError(err).Warn("Failed to handle message")
-						registerMessageFailed(name, err)
-						continue
-					}
-					registerMessageProcessed(name)
-				}
-			}
-		},
-		Restart: component.TaskRestartOnFailure,
-		Backoff: component.DefaultTaskBackoffConfig,
-	})
-}
+func createPackagePoolHandler(
+	name string, handler ApplicationPackageHandler, timeout time.Duration,
+) workerpool.Handler[*associatedApplicationUp] {
+	h := func(ctx context.Context, associatedUp *associatedApplicationUp) {
+		pair, up := associatedUp.pair, associatedUp.up
 
-func startFrontendWorker(ctx context.Context, as io.Server, sub *io.Subscription, handler func(context.Context, *ttnpb.ApplicationUp) error) {
-	as.StartTask(&component.TaskConfig{
-		Context: ctx,
-		ID:      "run_application_packages",
-		Func: func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-sub.Context().Done():
-					return sub.Context().Err()
-				case up := <-sub.Up():
-					ctx := log.NewContextWithField(up.Context, "namespace", namespace)
-					if err := handler(ctx, up.ApplicationUp); err != nil {
-						log.FromContext(ctx).WithError(err).Warn("Failed to handle message")
-					}
-				}
-			}
-		},
-		Restart: component.TaskRestartOnFailure,
-		Backoff: component.DefaultTaskBackoffConfig,
-	})
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		if err := handler.HandleUp(ctx, pair.defaultAssociation, pair.association, up); err != nil {
+			log.FromContext(ctx).WithError(err).Warn("Failed to handle message")
+			registerMessageFailed(ctx, name, err)
+			return
+		}
+		registerMessageProcessed(ctx, name)
+	}
+	return h
 }
 
 // New returns an application packages server wrapping the given registries and handlers.
-func New(ctx context.Context, as io.Server, registry Registry, handlers map[string]ApplicationPackageHandler, workers int) (Server, error) {
+func New(ctx context.Context, as io.Server, registry Registry, handlers map[string]ApplicationPackageHandler, workers int, timeout time.Duration) (Server, error) {
 	ctx = log.NewContextWithField(ctx, "namespace", namespace)
 	s := &server{
-		ctx:           ctx,
-		server:        as,
-		registry:      registry,
-		handlers:      handlers,
-		subscriptions: make(map[string]*io.Subscription),
+		ctx:      ctx,
+		server:   as,
+		registry: registry,
+		handlers: handlers,
+		pools:    make(map[string]workerpool.WorkerPool[*associatedApplicationUp]),
 	}
 	for name, handler := range handlers {
-		s.subscriptions[name] = io.NewSubscription(ctx, name, nil)
-		for id := 0; id < workers; id++ {
-			startPackageWorker(ctx, as, name, handler, s.subscriptions[name], id)
-		}
+		s.pools[name] = workerpool.NewWorkerPool(workerpool.Config[*associatedApplicationUp]{
+			Component:  as,
+			Context:    ctx,
+			Name:       fmt.Sprintf("application_packages_%v", name),
+			Handler:    createPackagePoolHandler(name, handler, timeout),
+			MaxWorkers: workers,
+		})
 	}
 	sub, err := as.Subscribe(ctx, "applicationpackages", nil, false)
 	if err != nil {
 		return nil, err
 	}
-	startFrontendWorker(ctx, as, sub, s.handleUp)
+	wp := workerpool.NewWorkerPool(workerpool.Config[*ttnpb.ApplicationUp]{
+		Component: as,
+		Context:   ctx,
+		Name:      "application_packages_fanout",
+		Handler:   workerpool.HandlerFromUplinkHandler(s.handleUp),
+	})
+	sub.Pipe(ctx, as, "application_packages", wp.Publish)
 	return s, nil
 }
 
@@ -125,24 +106,14 @@ type associationsPair struct {
 	association        *ttnpb.ApplicationPackageAssociation
 }
 
-type associationsPairCtxKeyType struct{}
-
-var associationsPairCtxKey = &associationsPairCtxKeyType{}
-
-func contextWithAssociationsPair(ctx context.Context, pair *associationsPair) context.Context {
-	return context.WithValue(ctx, associationsPairCtxKey, pair)
-}
-
-func associationsPairFromContext(ctx context.Context) *associationsPair {
-	if val, ok := ctx.Value(associationsPairCtxKey).(*associationsPair); ok {
-		return val
-	}
-	return nil
+type associatedApplicationUp struct {
+	pair *associationsPair
+	up   *ttnpb.ApplicationUp
 }
 
 type associationsMap map[string]*associationsPair
 
-func (s *server) findAssociations(ctx context.Context, ids ttnpb.EndDeviceIdentifiers) (associationsMap, error) {
+func (s *server) findAssociations(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) (associationsMap, error) {
 	paths := []string{
 		"data",
 		"ids",
@@ -152,7 +123,7 @@ func (s *server) findAssociations(ctx context.Context, ids ttnpb.EndDeviceIdenti
 	if err != nil {
 		return nil, err
 	}
-	defaults, err := s.registry.ListDefaultAssociations(ctx, ids.ApplicationIdentifiers, paths)
+	defaults, err := s.registry.ListDefaultAssociations(ctx, ids.ApplicationIds, paths)
 	if err != nil {
 		return nil, err
 	}
@@ -175,42 +146,53 @@ func (s *server) findAssociations(ctx context.Context, ids ttnpb.EndDeviceIdenti
 }
 
 func (s *server) handleUp(ctx context.Context, msg *ttnpb.ApplicationUp) error {
-	associations, err := s.findAssociations(ctx, msg.EndDeviceIdentifiers)
+	ctx = log.NewContextWithField(ctx, "namespace", namespace)
+	associations, err := s.findAssociations(ctx, msg.EndDeviceIds)
 	if err != nil {
 		return err
 	}
 	for name, pair := range associations {
-		sub, ok := s.subscriptions[name]
+		pool, ok := s.pools[name]
 		if !ok {
 			continue
 		}
 		ctx := log.NewContextWithField(ctx, "package", name)
-		ctx = contextWithAssociationsPair(ctx, pair)
-		if err := sub.Publish(ctx, msg); err != nil {
+		if err := pool.Publish(ctx, &associatedApplicationUp{
+			pair: pair,
+			up:   msg,
+		}); err != nil {
 			log.FromContext(ctx).WithError(err).Warn("Failed to handle message")
-			registerMessageFailed(name, err)
+			registerMessageFailed(ctx, name, err)
 		}
 	}
 	return nil
 }
 
-// Roles implements the rpcserver.Registerer interface.
-func (s *server) Roles() []ttnpb.ClusterRole {
-	return nil
-}
-
-// RegisterServices registers the services of the registered application packages.
+// RegisterServices implements the rpcserver.ServiceRegisterer interface.
 func (s *server) RegisterServices(gs *grpc.Server) {
 	ttnpb.RegisterApplicationPackageRegistryServer(gs, s)
 	for _, subsystem := range s.handlers {
-		subsystem.RegisterServices(gs)
+		if subsystem, ok := subsystem.(rpcserver.ServiceRegisterer); ok {
+			subsystem.RegisterServices(gs)
+		}
 	}
 }
 
-// RegisterHandlers registers the handlers of the registered application packages.
+// RegisterHandlers implements the rpcserver.ServiceRegisterer interface.
 func (s *server) RegisterHandlers(rs *runtime.ServeMux, conn *grpc.ClientConn) {
 	ttnpb.RegisterApplicationPackageRegistryHandler(s.ctx, rs, conn)
 	for _, subsystem := range s.handlers {
-		subsystem.RegisterHandlers(rs, conn)
+		if subsystem, ok := subsystem.(rpcserver.ServiceRegisterer); ok {
+			subsystem.RegisterHandlers(rs, conn)
+		}
+	}
+}
+
+// RegisterRoutes implements the web.Registerer interface.
+func (s *server) RegisterRoutes(ws *web.Server) {
+	for _, subsystem := range s.handlers {
+		if subsystem, ok := subsystem.(web.Registerer); ok {
+			subsystem.RegisterRoutes(ws)
+		}
 	}
 }

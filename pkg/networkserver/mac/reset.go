@@ -33,7 +33,7 @@ var (
 	)()
 )
 
-func HandleResetInd(ctx context.Context, dev *ttnpb.EndDevice, pld *ttnpb.MACCommand_ResetInd, fps *frequencyplans.Store, defaults ttnpb.MACSettings) (events.Builders, error) {
+func HandleResetInd(ctx context.Context, dev *ttnpb.EndDevice, pld *ttnpb.MACCommand_ResetInd, fps *frequencyplans.Store, defaults *ttnpb.MACSettings) (events.Builders, error) {
 	if pld == nil {
 		return nil, ErrNoPayload.New()
 	}
@@ -49,13 +49,13 @@ func HandleResetInd(ctx context.Context, dev *ttnpb.EndDevice, pld *ttnpb.MACCom
 	if err != nil {
 		return evs, err
 	}
-	dev.MACState = macState
-	dev.MACState.LoRaWANVersion = ttnpb.MAC_V1_1
+	dev.MacState = macState
+	dev.MacState.LorawanVersion = dev.LorawanVersion
 
 	conf := &ttnpb.MACCommand_ResetConf{
 		MinorVersion: pld.MinorVersion,
 	}
-	dev.MACState.QueuedResponses = append(dev.MACState.QueuedResponses, conf.MACCommand())
+	dev.MacState.QueuedResponses = append(dev.MacState.QueuedResponses, conf.MACCommand())
 	return append(evs,
 		EvtEnqueueResetConfirmation.With(events.WithData(conf)),
 	), nil

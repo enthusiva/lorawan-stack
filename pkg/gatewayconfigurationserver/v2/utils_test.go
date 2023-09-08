@@ -17,7 +17,7 @@ package gatewayconfigurationserver
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -40,12 +40,12 @@ func TestSetTTKGFirmwareURL(t *testing.T) {
 		{
 			Name:          "No config, no channel",
 			UpdateChannel: "",
-			ExpectedURL:   "https://thethingsproducts.blob.core.windows.net/the-things-gateway/v1/stable",
+			ExpectedURL:   "https://ttkg-fw.thethingsindustries.com/v1/stable",
 		},
 		{
 			Name:          "No config, beta channel",
 			UpdateChannel: "beta",
-			ExpectedURL:   "https://thethingsproducts.blob.core.windows.net/the-things-gateway/v1/beta",
+			ExpectedURL:   "https://ttkg-fw.thethingsindustries.com/v1/beta",
 		},
 		{
 			Name:          "Config with defaults, no channel",

@@ -18,7 +18,9 @@ package commands
 import (
 	"context"
 	"os"
+	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/commands"
@@ -26,30 +28,42 @@ import (
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/shared/version"
 	conf "go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/experimental"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	logobservability "go.thethings.network/lorawan-stack/v3/pkg/log/middleware/observability"
 	logsentry "go.thethings.network/lorawan-stack/v3/pkg/log/middleware/sentry"
 	pkgversion "go.thethings.network/lorawan-stack/v3/pkg/version"
+	"go.uber.org/automaxprocs/maxprocs"
 )
 
 var errMissingFlag = errors.DefineInvalidArgument("missing_flag", "missing CLI flag `{flag}`")
 
 var (
 	ctx    = context.Background()
-	logger *log.Logger
+	logger log.Stack
 	name   = "ttn-lw-stack"
 	mgr    = conf.InitializeWithDefaults(name, "ttn_lw", DefaultConfig,
-		conf.WithDeprecatedFlag("interop.sender-client-cas", "use interop.sender-client-ca sub-fields instead"),
+		conf.WithDeprecatedFlag(
+			"interop.sender-client-cas",
+			"TLS client authentication with LoRaWAN Backend Interfaces is deprecated",
+		),
 	)
 	config = new(Config)
 
-	// Root command is the entrypoint of the program
+	versionUpdate       chan *pkgversion.Update
+	versionCheckTimeout = time.Second
+
+	// Root command is the entrypoint of the program.
 	Root = &cobra.Command{
 		Use:           name,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Short:         "The Things Stack for LoRaWAN",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Name() == "__complete" {
+				return nil
+			}
+
 			// read in config from file
 			err := mgr.ReadInConfig()
 			if err != nil {
@@ -61,16 +75,19 @@ var (
 				return err
 			}
 
+			// enable configured experimental features
+			experimental.EnableFeatures(config.Experimental.Features...)
+
 			// initialize configuration fallbacks
 			if err := shared.InitializeFallbacks(&config.ServiceBase); err != nil {
 				return err
 			}
 
 			// create logger
-			logger = log.NewLogger(
-				log.WithLevel(config.Base.Log.Level),
-				log.WithHandler(log.NewCLI(os.Stdout)),
-			)
+			logger, err = shared.InitializeLogger(&config.Log)
+			if err != nil {
+				return err
+			}
 
 			logger.Use(logobservability.New())
 
@@ -90,18 +107,87 @@ var (
 				logger.Use(logsentry.New())
 			}
 
+			if _, err := maxprocs.Set(); err != nil {
+				logger.WithError(err).Info("Failed to set GOMAXPROCS")
+			}
+			if _, err := memlimit.SetGoMemLimit(0.9); err != nil {
+				logger.WithError(err).Info("Failed to set GOMEMLIMIT")
+			}
+
 			ctx = log.NewContext(ctx, logger)
 
+			// Start the version check in background.
+			// The result is waited in the post run.
+			versionUpdate = make(chan *pkgversion.Update)
+			if config.SkipVersionCheck {
+				close(versionUpdate)
+			} else {
+				go func(ctx context.Context) {
+					defer close(versionUpdate)
+					update, err := pkgversion.CheckUpdate(ctx)
+					if err != nil {
+						log.FromContext(ctx).WithError(err).Warn("Failed to check version update")
+					} else if update != nil {
+						versionUpdate <- update
+					} else {
+						log.FromContext(ctx).Debug("No new version available")
+					}
+				}(ctx)
+			}
+
+			telemetryConfigFallback(ctx, config)
+
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Name() == "__complete" {
+				return nil
+			}
+
+			select {
+			case <-ctx.Done():
+			case <-time.After(versionCheckTimeout):
+				logger.Warn("Version check timed out")
+			case versionUpdate, ok := <-versionUpdate:
+				if ok {
+					pkgversion.LogUpdate(ctx, versionUpdate)
+				}
+			}
 			return nil
 		},
 	}
 )
 
+var (
+	versionCommand     = version.Print(Root)
+	genManPagesCommand = commands.GenManPages(Root)
+	genMDDocCommand    = commands.GenMDDoc(Root)
+	genJSONTreeCommand = commands.GenJSONTree(Root)
+	completeCommand    = commands.Complete()
+)
+
+func runNoop(cmd *cobra.Command, args []string) error { return nil }
+
 func init() {
 	Root.PersistentFlags().AddFlagSet(mgr.Flags())
-	Root.AddCommand(version.Print(Root))
-	Root.AddCommand(commands.GenManPages(Root))
-	Root.AddCommand(commands.GenMDDoc(Root))
-	Root.AddCommand(commands.GenYAMLDoc(Root))
-	Root.AddCommand(commands.Complete())
+
+	versionCommand.PersistentPreRunE = runNoop
+	versionCommand.PersistentPostRunE = runNoop
+	Root.AddCommand(versionCommand)
+
+	genManPagesCommand.PersistentPreRunE = runNoop
+	genManPagesCommand.PersistentPostRunE = runNoop
+	Root.AddCommand(genManPagesCommand)
+
+	genMDDocCommand.PersistentPreRunE = runNoop
+	genMDDocCommand.PersistentPostRunE = runNoop
+	Root.AddCommand(genMDDocCommand)
+
+	genJSONTreeCommand.PersistentPreRunE = runNoop
+	genJSONTreeCommand.PersistentPostRunE = runNoop
+	Root.AddCommand(genJSONTreeCommand)
+
+	completeCommand.PersistentPreRunE = runNoop
+	completeCommand.PersistentPostRunE = runNoop
+	Root.AddCommand(completeCommand)
 }

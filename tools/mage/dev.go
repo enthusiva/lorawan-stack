@@ -15,17 +15,20 @@
 package ttnmage
 
 import (
-	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
-	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
+	"go.thethings.network/lorawan-stack/v3/pkg/jsonpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
@@ -62,14 +65,15 @@ func (Dev) Misspell() error {
 }
 
 var (
-	sqlDatabase           = "cockroach"
+	sqlDatabase           = "postgres"
 	redisDatabase         = "redis"
 	devDatabases          = []string{sqlDatabase, redisDatabase}
 	devDataDir            = ".env/data"
 	devDir                = ".env"
 	devDatabaseName       = "ttn_lorawan_dev"
 	devDockerComposeFlags = []string{"-p", "lorawan-stack-dev"}
-	databaseURI           = fmt.Sprintf("postgresql://root@localhost:26257/%s?sslmode=disable", devDatabaseName)
+	databaseURI           = fmt.Sprintf("postgresql://root:root@localhost:5432/%s?sslmode=disable", devDatabaseName)
+	testDatabaseNames     = []string{"ttn_lorawan_is_test", "ttn_lorawan_is_store_test"}
 )
 
 func dockerComposeFlags(args ...string) []string {
@@ -100,59 +104,35 @@ func (Dev) SQLStop() error {
 	return execDockerCompose(append([]string{"stop"}, sqlDatabase)...)
 }
 
-// SQLRestoreSnapshot restores the previously taken snapshot, thus restoring all previously
-// snapshoted databases.
-func (d Dev) SQLRestoreSnapshot() error {
-	mg.Deps(Dev.SQLStop)
-	if mg.Verbose() {
-		fmt.Println("Restoring DB snapshot")
-	}
-	to := filepath.Join(devDataDir, "cockroach")
-	from := filepath.Join(devDataDir, "cockroach-snap")
-	if err := os.RemoveAll(to); err != nil {
-		return err
-	}
-	if err := sh.Copy(from, to); err != nil {
-		return err
-	}
-	return d.SQLStart()
-}
-
 // SQLDump performs an SQL database dump of the dev database to the .cache folder.
 func (Dev) SQLDump() error {
 	if mg.Verbose() {
 		fmt.Println("Saving sql database dump")
 	}
-	if err := os.MkdirAll(".cache", 0755); err != nil {
+	if err := os.MkdirAll(path.Join(".env", "cache"), 0o755); err != nil {
 		return err
 	}
-	output, err := sh.Output("docker-compose", dockerComposeFlags("exec", "-T", "cockroach", "./cockroach", "dump", devDatabaseName, "--insecure")...)
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(filepath.Join(".cache", "sqldump.sql"), []byte(output), 0644)
+	return execDockerCompose("exec", "-T", "postgres",
+		"pg_dump", "-Fc", "-f", "/var/lib/ttn-lorawan/cache/database.pgdump", devDatabaseName,
+	)
 }
 
 // SQLRestore restores the dev database using a previously generated dump.
-func (Dev) SQLRestore(ctx context.Context) error {
+func (Dev) SQLRestore() error {
 	if mg.Verbose() {
 		fmt.Println("Restoring database from dump")
 	}
-	db, err := store.Open(ctx, databaseURI)
-	if err != nil {
-		return err
+	d := filepath.Join(".env", "cache", "database.pgdump")
+	if _, err := os.Stat(d); errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("Dumpfile does not exist: %w", d)
 	}
-	defer db.Close()
-
-	b, err := ioutil.ReadFile(filepath.Join(".cache", "sqldump.sql"))
-	if err != nil {
-		return err
-	}
-	return db.Exec(fmt.Sprintf(`DROP DATABASE %s;
-		CREATE DATABASE %s;
-		%s`,
-		devDatabaseName, devDatabaseName, string(b)),
-	).Error
+	return execDockerCompose("exec", "-T", "postgres", "/bin/bash", "-c",
+		strings.Join([]string{
+			fmt.Sprintf("dropdb --if-exists --force %s", devDatabaseName),
+			fmt.Sprintf("createdb %s", devDatabaseName),
+			fmt.Sprintf("pg_restore -d %s -Fc /var/lib/ttn-lorawan/cache/database.pgdump", devDatabaseName),
+		}, " && "),
+	)
 }
 
 // RedisFlush deletes all keys from redis.
@@ -182,7 +162,50 @@ func (Dev) DBStart() error {
 	if err := execDockerCompose(append([]string{"up", "-d"}, devDatabases...)...); err != nil {
 		return err
 	}
-	return execDockerCompose("ps")
+
+	// When TimescaleDB starts for the first time, it restarts Postgres after initialization.
+	// Therefore, pg_isready may return a successful exit code during initialization, while the database shuts down
+	// shortly after. Therefore, the ready check goes in two cycles and only returns after 10 successive ready
+	// indications.
+	if mg.Verbose() {
+		fmt.Println("Waiting for Postgres to be ready")
+	}
+	flags := dockerComposeFlags("exec", "-T", "postgres", "pg_isready")
+nextCycle:
+	for i := 0; i < 2; i++ {
+		var (
+			wasReady        bool
+			successiveReady int
+		)
+		for j := 0; j < 30; j++ {
+			time.Sleep(time.Second)
+			_, err := sh.Exec(nil, nil, nil, "docker-compose", flags...)
+			isReady := err == nil
+			switch {
+			case wasReady && !isReady:
+				if mg.Verbose() {
+					fmt.Println("Postgres is not ready anymore")
+				}
+				continue nextCycle
+			case !wasReady && isReady:
+				if mg.Verbose() {
+					fmt.Println("Postgres is ready, checking if it stays ready")
+				}
+				successiveReady = 1
+			case wasReady && isReady:
+				successiveReady++
+				if successiveReady == 10 {
+					if mg.Verbose() {
+						fmt.Println("Postgres ready state seems stable")
+					}
+					return nil
+				}
+			}
+			wasReady = isReady
+		}
+		return errors.New("No ready indication within 30 checks")
+	}
+	return errors.New("Postgres is not ready")
 }
 
 // DBStop stops the databases of the development environment.
@@ -208,10 +231,21 @@ func (Dev) DBSQL() error {
 	if mg.Verbose() {
 		fmt.Println("Starting SQL shell")
 	}
-	return execDockerCompose("exec", "cockroach", "./cockroach", "sql",
-		"--insecure",
-		"-d", devDatabaseName,
-	)
+	return execDockerCompose("exec", "postgres", "psql", devDatabaseName)
+}
+
+// DBCreate creates the SQL databases used for unit tests.
+func (Dev) DBCreate() error {
+	mg.Deps(Dev.DBStart)
+	if mg.Verbose() {
+		fmt.Println("Creating dev databases")
+	}
+	for _, db := range testDatabaseNames {
+		if err := execDockerCompose("exec", "postgres", "psql", devDatabaseName, "-c", fmt.Sprintf("CREATE DATABASE %s;", db)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DBRedisCli starts a Redis-CLI shell.
@@ -223,15 +257,17 @@ func (Dev) DBRedisCli() error {
 	return execDockerCompose("exec", "redis", "redis-cli")
 }
 
+// InitDeviceRepo initializes the device repository.
+func (Dev) InitDeviceRepo() error {
+	return runGo("./cmd/ttn-lw-stack", "dr-db", "init")
+}
+
 // InitStack initializes the Stack.
 func (Dev) InitStack() error {
 	if mg.Verbose() {
 		fmt.Println("Initializing the Stack")
 	}
-	if err := runGo("./cmd/ttn-lw-stack", "is-db", "init"); err != nil {
-		return err
-	}
-	if err := runGo("./cmd/ttn-lw-stack", "dr-db", "init"); err != nil {
+	if err := runGo("./cmd/ttn-lw-stack", "is-db", "migrate"); err != nil {
 		return err
 	}
 	if err := runGo("./cmd/ttn-lw-stack", "is-db", "create-admin-user",
@@ -251,23 +287,7 @@ func (Dev) InitStack() error {
 	); err != nil {
 		return err
 	}
-	var key ttnpb.APIKey
-	var jsonVal []byte
-	var err error
-	if jsonVal, err = outputJSONGo("run", "./cmd/ttn-lw-stack", "is-db", "create-user-api-key",
-		"--user-id", "admin",
-		"--name", "Admin User API Key",
-	); err != nil {
-		return err
-	}
-	if err := json.Unmarshal(jsonVal, &key); err != nil {
-		return err
-	}
-
-	if err := writeToFile(filepath.Join(devDir, "admin_api_key.txt"), []byte(key.Key)); err != nil {
-		return err
-	}
-	return runGo("./cmd/ttn-lw-stack", "is-db", "create-oauth-client",
+	if err := runGo("./cmd/ttn-lw-stack", "is-db", "create-oauth-client",
 		"--id", "console",
 		"--name", "Console",
 		"--owner", "admin",
@@ -278,7 +298,25 @@ func (Dev) InitStack() error {
 		"--logout-redirect-uri", "https://localhost:8885/console",
 		"--logout-redirect-uri", "http://localhost:1885/console",
 		"--logout-redirect-uri", "/console",
-	)
+	); err != nil {
+		return err
+	}
+	var key ttnpb.APIKey
+	var jsonVal []byte
+	var err error
+	if jsonVal, err = outputJSONGo("run", "./cmd/ttn-lw-stack", "is-db", "create-user-api-key",
+		"--user-id", "admin",
+		"--name", "Admin User API Key",
+	); err != nil {
+		return err
+	}
+	if err := jsonpb.TTN().Unmarshal(jsonVal, &key); err != nil {
+		return err
+	}
+	if err := writeToFile(filepath.Join(devDir, "admin_api_key.txt"), []byte(key.Key)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // StartDevStack starts TTS in end-to-end test configuration.
@@ -288,17 +326,55 @@ func (Dev) StartDevStack() error {
 	if mg.Verbose() {
 		fmt.Println("Starting the Stack")
 	}
-	if err := os.MkdirAll(".cache", 0755); err != nil {
+	if err := os.MkdirAll(".cache", 0o755); err != nil {
 		return err
 	}
-	logFile, err := os.OpenFile(filepath.Join(".cache", "devStack.log"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	logFile, err := os.OpenFile(filepath.Join(".cache", "devStack.log"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
 	defer logFile.Close()
-	return execGo(logFile, logFile, "run", "./cmd/ttn-lw-stack", "start")
+	if os.Getenv("CI") == "true" {
+		return execFrom(
+			"",
+			map[string]string{},
+			logFile,
+			logFile,
+			"./ttn-lw-stack",
+			"start",
+			"--log.format=json",
+			"--config=config/stack/ttn-lw-stack-tls.yml",
+		)
+	}
+	return execGo(logFile, logFile, "run", "./cmd/ttn-lw-stack", "start", "--log.format=json")
 }
 
 func init() {
-	initDeps = append(initDeps, Dev.Certificates)
+	initDeps = append(initDeps, Dev.Certificates, Dev.InitDeviceRepo)
+}
+
+func execFrom(
+	dir string, env map[string]string, stdout, stderr io.Writer, cmd string, args ...string,
+) error {
+	c := exec.Command(cmd, args...)
+	c.Env = os.Environ()
+	for k, v := range env {
+		c.Env = append(c.Env, k+"="+v)
+	}
+	c.Dir = dir
+	c.Stderr = stderr
+	c.Stdout = stdout
+	c.Stdin = os.Stdin
+	if mg.Verbose() {
+		log.Println("exec:", cmd, strings.Join(args, " "))
+	}
+	err := c.Run()
+	if err == nil {
+		return nil
+	}
+	ran, code := sh.CmdRan(err), sh.ExitStatus(err)
+	if ran {
+		return mg.Fatalf(code, `running "%s %s" failed with exit code %d`, cmd, strings.Join(args, " "), code)
+	}
+	return fmt.Errorf(`failed to run "%s %s: %w"`, cmd, strings.Join(args, " "), err)
 }

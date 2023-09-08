@@ -18,9 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -40,12 +39,12 @@ func TestNeedsDutyCycleReq(t *testing.T) {
 		{
 			Name: "current(max-duty-cycle:1024),desired(max-duty-cycle:1024)",
 			InputDevice: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						MaxDutyCycle: ttnpb.DUTY_CYCLE_1024,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						MaxDutyCycle: ttnpb.AggregatedDutyCycle_DUTY_CYCLE_1024,
 					},
-					DesiredParameters: ttnpb.MACParameters{
-						MaxDutyCycle: ttnpb.DUTY_CYCLE_1024,
+					DesiredParameters: &ttnpb.MACParameters{
+						MaxDutyCycle: ttnpb.AggregatedDutyCycle_DUTY_CYCLE_1024,
 					},
 				},
 			},
@@ -53,12 +52,12 @@ func TestNeedsDutyCycleReq(t *testing.T) {
 		{
 			Name: "current(max-duty-cycle:1024),desired(max-duty-cycle:2048)",
 			InputDevice: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						MaxDutyCycle: ttnpb.DUTY_CYCLE_1024,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						MaxDutyCycle: ttnpb.AggregatedDutyCycle_DUTY_CYCLE_1024,
 					},
-					DesiredParameters: ttnpb.MACParameters{
-						MaxDutyCycle: ttnpb.DUTY_CYCLE_2048,
+					DesiredParameters: &ttnpb.MACParameters{
+						MaxDutyCycle: ttnpb.AggregatedDutyCycle_DUTY_CYCLE_2048,
 					},
 				},
 			},
@@ -70,7 +69,7 @@ func TestNeedsDutyCycleReq(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.InputDevice)
+				dev := ttnpb.Clone(tc.InputDevice)
 				res := DeviceNeedsDutyCycleReq(dev)
 				if tc.Needs {
 					a.So(res, should.BeTrue)
@@ -93,33 +92,42 @@ func TestHandleDutyCycleAns(t *testing.T) {
 		{
 			Name: "no request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Events: events.Builders{
 				EvtReceiveDutyCycleAnswer,
 			},
-			Error: ErrRequestNotFound,
+			Error: ErrRequestNotFound.WithAttributes("cid", ttnpb.MACCommandIdentifier_CID_DUTY_CYCLE),
 		},
 		{
 			Name: "2048",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_DutyCycleReq{
-							MaxDutyCycle: ttnpb.DUTY_CYCLE_2048,
+							MaxDutyCycle: ttnpb.AggregatedDutyCycle_DUTY_CYCLE_2048,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{},
-					CurrentParameters: ttnpb.MACParameters{
-						MaxDutyCycle: ttnpb.DUTY_CYCLE_2048,
+					CurrentParameters: &ttnpb.MACParameters{
+						MaxDutyCycle: ttnpb.AggregatedDutyCycle_DUTY_CYCLE_2048,
 					},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Events: events.Builders{
@@ -132,7 +140,7 @@ func TestHandleDutyCycleAns(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				evs, err := HandleDutyCycleAns(ctx, dev)
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||

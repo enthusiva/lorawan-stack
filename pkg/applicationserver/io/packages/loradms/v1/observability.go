@@ -23,10 +23,11 @@ import (
 
 var evtPackageFail = events.Define(
 	"as.packages.loraclouddmsv1.fail", "fail to process upstream message",
-	events.WithVisibility(ttnpb.RIGHT_APPLICATION_TRAFFIC_READ),
+	events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
 	events.WithErrorDataType(),
+	events.WithPropagateToParent(),
 )
 
-func registerPackageFail(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, err error) {
+func registerPackageFail(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, err error) {
 	events.Publish(evtPackageFail.NewWithIdentifiersAndData(ctx, ids, err))
 }

@@ -20,22 +20,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func uint8Ptr(v uint8) *uint8                    { return &v }
-func uint64Ptr(v uint64) *uint64                 { return &v }
-func float32Ptr(v float32) *float32              { return &v }
-func boolPtr(v bool) *bool                       { return &v }
-func durationPtr(v time.Duration) *time.Duration { return &v }
+func uint64Ptr(v uint64) *uint64 { return &v }
 
 func Example() {
-	fetcher, err := fetch.FromHTTP(http.DefaultClient, "https://raw.githubusercontent.com/TheThingsNetwork/lorawan-frequency-plans", true)
+	fetcher, err := fetch.FromHTTP(http.DefaultClient, "https://raw.githubusercontent.com/TheThingsNetwork/lorawan-frequency-plans")
 	if err != nil {
 		panic(err)
 	}
@@ -318,11 +315,11 @@ func TestProtoConversion(t *testing.T) {
 				},
 			},
 			Output: &ttnpb.ConcentratorConfig{
-				FSKChannel: &ttnpb.ConcentratorConfig_FSKChannel{
+				FskChannel: &ttnpb.ConcentratorConfig_FSKChannel{
 					Frequency: 868800000,
 					Radio:     1,
 				},
-				LoRaStandardChannel: &ttnpb.ConcentratorConfig_LoRaStandardChannel{
+				LoraStandardChannel: &ttnpb.ConcentratorConfig_LoRaStandardChannel{
 					Frequency:       868300000,
 					Radio:           1,
 					SpreadingFactor: 7,
@@ -334,7 +331,7 @@ func TestProtoConversion(t *testing.T) {
 			Input: &frequencyplans.FrequencyPlan{
 				BandID: "AS_923",
 				LBT: &frequencyplans.LBT{
-					ScanTime: 32,
+					ScanTime: 32 * time.Microsecond,
 				},
 				PingSlot: &frequencyplans.Channel{
 					Frequency: 923000000,
@@ -342,8 +339,8 @@ func TestProtoConversion(t *testing.T) {
 				},
 			},
 			Output: &ttnpb.ConcentratorConfig{
-				LBT: &ttnpb.ConcentratorConfig_LBTConfiguration{
-					ScanTime: 32,
+				Lbt: &ttnpb.ConcentratorConfig_LBTConfiguration{
+					ScanTime: durationpb.New(32 * time.Microsecond),
 				},
 				PingSlot: &ttnpb.ConcentratorConfig_Channel{
 					Frequency: 923000000,

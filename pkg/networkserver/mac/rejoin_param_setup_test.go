@@ -18,11 +18,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal/test"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
+	"go.thethings.network/lorawan-stack/v3/pkg/specification/macspec"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -42,41 +42,41 @@ func TestNeedsRejoinParamSetupReq(t *testing.T) {
 	}
 	for _, conf := range []struct {
 		Suffix                               string
-		CurrentParameters, DesiredParameters ttnpb.MACParameters
+		CurrentParameters, DesiredParameters *ttnpb.MACParameters
 		Needs                                bool
 	}{
 		{
 			Suffix: "current(count:128,time:10),desired(count:128,time:10)",
-			CurrentParameters: ttnpb.MACParameters{
-				RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_128,
-				RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_10,
+			CurrentParameters: &ttnpb.MACParameters{
+				RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+				RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 			},
-			DesiredParameters: ttnpb.MACParameters{
-				RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_128,
-				RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_10,
+			DesiredParameters: &ttnpb.MACParameters{
+				RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+				RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 			},
 		},
 		{
 			Suffix: "current(count:128,time:10),desired(count:128,time:12)",
-			CurrentParameters: ttnpb.MACParameters{
-				RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_128,
-				RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_10,
+			CurrentParameters: &ttnpb.MACParameters{
+				RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+				RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 			},
-			DesiredParameters: ttnpb.MACParameters{
-				RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_128,
-				RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_12,
+			DesiredParameters: &ttnpb.MACParameters{
+				RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+				RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_12,
 			},
 			Needs: true,
 		},
 		{
 			Suffix: "current(count:128,time:10),desired(count:256,time:10)",
-			CurrentParameters: ttnpb.MACParameters{
-				RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_128,
-				RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_10,
+			CurrentParameters: &ttnpb.MACParameters{
+				RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+				RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 			},
-			DesiredParameters: ttnpb.MACParameters{
-				RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_256,
-				RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_10,
+			DesiredParameters: &ttnpb.MACParameters{
+				RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_256,
+				RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 			},
 			Needs: true,
 		},
@@ -86,13 +86,13 @@ func TestNeedsRejoinParamSetupReq(t *testing.T) {
 				TestCase{
 					Name: makeMACName(conf.Suffix),
 					InputDevice: &ttnpb.EndDevice{
-						MACState: &ttnpb.MACState{
-							LoRaWANVersion:    macVersion,
+						MacState: &ttnpb.MACState{
+							LorawanVersion:    macVersion,
 							CurrentParameters: conf.CurrentParameters,
 							DesiredParameters: conf.DesiredParameters,
 						},
 					},
-					Needs: conf.Needs && macVersion.Compare(ttnpb.MAC_V1_1) >= 0,
+					Needs: conf.Needs && macspec.UseRejoinParamSetupReq(macVersion),
 				},
 			)
 		})
@@ -104,7 +104,7 @@ func TestNeedsRejoinParamSetupReq(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.InputDevice)
+				dev := ttnpb.Clone(tc.InputDevice)
 				res := DeviceNeedsRejoinParamSetupReq(dev)
 				if tc.Needs {
 					a.So(res, should.BeTrue)
@@ -128,20 +128,32 @@ func TestHandleRejoinParamSetupAns(t *testing.T) {
 		{
 			Name: "nil payload",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Error: ErrNoPayload,
 		},
 		{
 			Name: "no request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Payload: &ttnpb.MACCommand_RejoinParamSetupAns{
 				MaxTimeExponentAck: true,
@@ -151,27 +163,30 @@ func TestHandleRejoinParamSetupAns(t *testing.T) {
 					MaxTimeExponentAck: true,
 				})),
 			},
-			Error: ErrRequestNotFound,
+			Error: ErrRequestNotFound.WithAttributes("cid", ttnpb.MACCommandIdentifier_CID_REJOIN_PARAM_SETUP),
 		},
 		{
 			Name: "ack",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_RejoinParamSetupReq{
-							MaxCountExponent: ttnpb.REJOIN_COUNT_128,
-							MaxTimeExponent:  ttnpb.REJOIN_TIME_10,
+							MaxCountExponent: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+							MaxTimeExponent:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_128,
-						RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_10,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_128,
+						RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_10,
 					},
-					PendingRequests: []*ttnpb.MACCommand{},
+					DesiredParameters: &ttnpb.MACParameters{},
+					PendingRequests:   []*ttnpb.MACCommand{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_RejoinParamSetupAns{
@@ -186,25 +201,27 @@ func TestHandleRejoinParamSetupAns(t *testing.T) {
 		{
 			Name: "nack",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						RejoinTimePeriodicity: ttnpb.REJOIN_TIME_1,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						RejoinTimePeriodicity: ttnpb.RejoinTimeExponent_REJOIN_TIME_1,
 					},
+					DesiredParameters: &ttnpb.MACParameters{},
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_RejoinParamSetupReq{
-							MaxCountExponent: ttnpb.REJOIN_COUNT_1024,
-							MaxTimeExponent:  ttnpb.REJOIN_TIME_11,
+							MaxCountExponent: ttnpb.RejoinCountExponent_REJOIN_COUNT_1024,
+							MaxTimeExponent:  ttnpb.RejoinTimeExponent_REJOIN_TIME_11,
 						}).MACCommand(),
 					},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					CurrentParameters: ttnpb.MACParameters{
-						RejoinCountPeriodicity: ttnpb.REJOIN_COUNT_1024,
-						RejoinTimePeriodicity:  ttnpb.REJOIN_TIME_1,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{
+						RejoinCountPeriodicity: ttnpb.RejoinCountExponent_REJOIN_COUNT_1024,
+						RejoinTimePeriodicity:  ttnpb.RejoinTimeExponent_REJOIN_TIME_1,
 					},
-					PendingRequests: []*ttnpb.MACCommand{},
+					DesiredParameters: &ttnpb.MACParameters{},
+					PendingRequests:   []*ttnpb.MACCommand{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_RejoinParamSetupAns{
@@ -220,7 +237,7 @@ func TestHandleRejoinParamSetupAns(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				evs, err := HandleRejoinParamSetupAns(ctx, dev, tc.Payload)
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||

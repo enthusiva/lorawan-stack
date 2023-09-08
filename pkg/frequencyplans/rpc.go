@@ -20,12 +20,15 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
+// RPCServer is the RPC server that serves frequency plan information.
 type RPCServer struct {
 	store *Store
 }
 
+// NewRPCServer returns a new RPC server that serves frequency plan information.
 func NewRPCServer(store *Store) *RPCServer { return &RPCServer{store: store} }
 
+// ListFrequencyPlans lists frequency plans for the requested base frequency.
 func (s *RPCServer) ListFrequencyPlans(ctx context.Context, req *ttnpb.ListFrequencyPlansRequest) (*ttnpb.ListFrequencyPlansResponse, error) {
 	descriptions, err := s.store.descriptions()
 	if err != nil {
@@ -37,8 +40,8 @@ func (s *RPCServer) ListFrequencyPlans(ctx context.Context, req *ttnpb.ListFrequ
 			continue
 		}
 		res.FrequencyPlans = append(res.FrequencyPlans, &ttnpb.FrequencyPlanDescription{
-			ID:            desc.ID,
-			BaseID:        desc.BaseID,
+			Id:            desc.ID,
+			BaseId:        desc.BaseID,
 			Name:          desc.Name,
 			BaseFrequency: uint32(desc.BaseFrequency),
 		})

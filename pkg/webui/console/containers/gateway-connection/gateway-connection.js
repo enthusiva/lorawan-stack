@@ -14,14 +14,16 @@
 
 import React from 'react'
 import classnames from 'classnames'
-import { FormattedNumber } from 'react-intl'
+import { FormattedNumber, defineMessages } from 'react-intl'
 
 import Status from '@ttn-lw/components/status'
 import Icon from '@ttn-lw/components/icon'
+import DocTooltip from '@ttn-lw/components/tooltip/doc'
+import Tooltip from '@ttn-lw/components/tooltip'
 
 import Message from '@ttn-lw/lib/components/message'
 
-import EntityTitleSection from '@console/components/entity-title-section'
+import LastSeen from '@console/components/last-seen'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
@@ -29,14 +31,30 @@ import { isNotFoundError, isTranslated } from '@ttn-lw/lib/errors/utils'
 
 import style from './gateway-connection.styl'
 
-const { Content } = EntityTitleSection
+const m = defineMessages({
+  lastSeenAvailableTooltip:
+    'The elapsed time since the network registered the last activity of this gateway. This is determined from received uplinks, or sent status messages of this gateway.',
+  disconnectedTooltip:
+    'The gateway has currently no TCP connection established with the Gateway Server. For (rare) UDP based gateways, this can also mean that the gateway initiated no pull/push data request within the last 30 seconds.',
+  connectedTooltip:
+    'This gateway is connected to the Gateway Server but the network has not registered any activity (sent uplinks or status messages) from it yet.',
+  otherClusterTooltip:
+    'This gateway is connected to an external Gateway Server that is not handling messages for this cluster. You will hence not be able to see any activity from this gateway.',
+  messageCountTooltip:
+    'The amount of received uplinks and sent downlinks of this gateway since the last (re)connect. Note that some gateway types reconnect frequently causing the counter to be reset.',
+})
 
 class GatewayConnection extends React.PureComponent {
   static propTypes = {
     className: PropTypes.string,
     error: PropTypes.oneOfType([PropTypes.error, PropTypes.shape({ message: PropTypes.message })]),
     fetching: PropTypes.bool,
-    lastSeen: PropTypes.instanceOf(Date),
+    isOtherCluster: PropTypes.bool.isRequired,
+    lastSeen: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.number, // Support timestamps.
+      PropTypes.instanceOf(Date),
+    ]),
     startStatistics: PropTypes.func.isRequired,
     statistics: PropTypes.gatewayStats,
     stopStatistics: PropTypes.func.isRequired,
@@ -63,9 +81,10 @@ class GatewayConnection extends React.PureComponent {
   }
 
   get status() {
-    const { statistics, error, fetching, lastSeen } = this.props
+    const { statistics, error, fetching, lastSeen, isOtherCluster } = this.props
 
-    const isNotConnected = Boolean(error) && isNotFoundError(error)
+    const statsNotFound = Boolean(error) && isNotFoundError(error)
+    const isDisconnected = Boolean(statistics) && Boolean(statistics.disconnected_at)
     const isFetching = !Boolean(statistics) && fetching
     const isUnavailable = Boolean(error) && Boolean(error.message) && isTranslated(error.message)
     const hasStatistics = Boolean(statistics)
@@ -73,33 +92,84 @@ class GatewayConnection extends React.PureComponent {
 
     let statusIndicator = null
     let message = null
+    let tooltipMessage = undefined
+    let docPath = '/getting-started/console/troubleshooting'
+    let docTitle = sharedMessages.troubleshooting
 
-    if (isNotConnected) {
+    if (statsNotFound) {
       statusIndicator = 'bad'
       message = sharedMessages.disconnected
+      tooltipMessage = m.disconnectedTooltip
+      docPath = '/gateways/troubleshooting/#my-gateway-wont-connect-what-do-i-do'
+    } else if (isDisconnected) {
+      tooltipMessage = m.disconnectedTooltip
+      docPath = '/gateways/troubleshooting/#my-gateway-wont-connect-what-do-i-do'
     } else if (isFetching) {
       statusIndicator = 'mediocre'
       message = sharedMessages.connecting
     } else if (isUnavailable) {
       statusIndicator = 'unknown'
       message = error.message
+      if (isOtherCluster) {
+        tooltipMessage = m.otherClusterTooltip
+        docPath = '/gateways/troubleshooting/#my-gateway-shows-a-other-cluster-status-why'
+      }
     } else if (hasStatistics) {
       message = sharedMessages.connected
       statusIndicator = 'good'
+      if (hasLastSeen) {
+        tooltipMessage = m.lastSeenAvailableTooltip
+      } else {
+        docPath =
+          'gateways/troubleshooting/#my-gateway-is-shown-as-connected-in-the-console-but-i-dont-see-any-events-including-the-gateway-connection-stats-what-do-i-do'
+        tooltipMessage = m.connectedTooltip
+      }
+      docTitle = sharedMessages.moreInformation
     } else {
       message = sharedMessages.unknown
       statusIndicator = 'unknown'
+      docPath = '/gateways/troubleshooting'
     }
 
-    return (
-      <Status className={style.status} status={statusIndicator} flipped>
-        {statusIndicator === 'good' && hasLastSeen ? (
-          <Content.LastSeen lastSeen={lastSeen} />
-        ) : (
-          <Message content={message} />
-        )}
-      </Status>
-    )
+    let node
+
+    if (isDisconnected) {
+      node = (
+        <LastSeen
+          status="bad"
+          message={sharedMessages.disconnected}
+          lastSeen={statistics.disconnected_at}
+          flipped
+        >
+          <Icon icon="help_outline" textPaddedLeft small nudgeUp className="tc-subtle-gray" />
+        </LastSeen>
+      )
+    } else if (statusIndicator === 'good' && hasLastSeen) {
+      node = (
+        <LastSeen lastSeen={lastSeen} flipped>
+          <Icon icon="help_outline" textPaddedLeft small nudgeUp className="tc-subtle-gray" />
+        </LastSeen>
+      )
+    } else {
+      node = (
+        <Status className={style.status} status={statusIndicator} label={message} flipped>
+          <Icon icon="help_outline" textPaddedLeft small nudgeUp className="tc-subtle-gray" />
+        </Status>
+      )
+    }
+
+    if (tooltipMessage) {
+      return (
+        <DocTooltip
+          docPath={docPath}
+          docTitle={docTitle}
+          content={<Message content={tooltipMessage} />}
+          children={node}
+        />
+      )
+    }
+
+    return node
   }
 
   get messages() {
@@ -116,16 +186,18 @@ class GatewayConnection extends React.PureComponent {
     const downlinkCount = parseInt(downlinks) || 0
 
     return (
-      <div className={style.messages}>
-        <span className={style.messageCount}>
-          <Icon className={style.icon} icon="uplink" />
-          <FormattedNumber value={uplinkCount} />
-        </span>
-        <span className={style.messageCount}>
-          <Icon className={style.icon} icon="downlink" />
-          <FormattedNumber value={downlinkCount} />
-        </span>
-      </div>
+      <Tooltip content={<Message content={m.messageCountTooltip} />}>
+        <div className={style.messages}>
+          <span className={style.messageCount}>
+            <Icon className={style.icon} icon="uplink" />
+            <FormattedNumber value={uplinkCount} />
+          </span>
+          <span className={style.messageCount}>
+            <Icon className={style.icon} icon="downlink" />
+            <FormattedNumber value={downlinkCount} />
+          </span>
+        </div>
+      </Tooltip>
     )
   }
 
@@ -134,8 +206,8 @@ class GatewayConnection extends React.PureComponent {
 
     return (
       <div className={classnames(className, style.container)}>
-        {this.status}
         {this.messages}
+        {this.status}
       </div>
     )
   }

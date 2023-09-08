@@ -20,19 +20,15 @@ import (
 	"sync"
 )
 
-var defaultOptions = []Option{
-	WithLevel(InfoLevel),
-	WithHandler(NewCLI(os.Stdout)),
-}
-
 // NewLogger creates a new logger with the default options.
-func NewLogger(opts ...Option) *Logger {
-	logger := &Logger{}
-
-	for _, opt := range append(defaultOptions, opts...) {
+func NewLogger(handler Handler, opts ...Option) *Logger {
+	logger := &Logger{
+		Level:   InfoLevel,
+		Handler: handler,
+	}
+	for _, opt := range opts {
 		opt(logger)
 	}
-
 	return logger
 }
 
@@ -85,57 +81,57 @@ func (l *Logger) commit(e *entry) {
 }
 
 // Debug implements log.Interface.
-func (l *Logger) Debug(msg string) {
-	l.entry().commit(DebugLevel, msg)
+func (l *Logger) Debug(args ...any) {
+	l.entry().commit(DebugLevel, fmt.Sprint(args...))
 }
 
 // Info implements log.Interface.
-func (l *Logger) Info(msg string) {
-	l.entry().commit(InfoLevel, msg)
+func (l *Logger) Info(args ...any) {
+	l.entry().commit(InfoLevel, fmt.Sprint(args...))
 }
 
 // Warn implements log.Interface.
-func (l *Logger) Warn(msg string) {
-	l.entry().commit(WarnLevel, msg)
+func (l *Logger) Warn(args ...any) {
+	l.entry().commit(WarnLevel, fmt.Sprint(args...))
 }
 
 // Error implements log.Interface.
-func (l *Logger) Error(msg string) {
-	l.entry().commit(ErrorLevel, msg)
+func (l *Logger) Error(args ...any) {
+	l.entry().commit(ErrorLevel, fmt.Sprint(args...))
 }
 
 // Fatal implements log.Interface.
-func (l *Logger) Fatal(msg string) {
-	l.entry().commit(FatalLevel, msg)
+func (l *Logger) Fatal(args ...any) {
+	l.entry().commit(FatalLevel, fmt.Sprint(args...))
 }
 
 // Debugf implements log.Interface.
-func (l *Logger) Debugf(msg string, v ...interface{}) {
+func (l *Logger) Debugf(msg string, v ...any) {
 	l.Debug(fmt.Sprintf(msg, v...))
 }
 
 // Infof implements log.Interface.
-func (l *Logger) Infof(msg string, v ...interface{}) {
+func (l *Logger) Infof(msg string, v ...any) {
 	l.Info(fmt.Sprintf(msg, v...))
 }
 
 // Warnf implements log.Interface.
-func (l *Logger) Warnf(msg string, v ...interface{}) {
+func (l *Logger) Warnf(msg string, v ...any) {
 	l.Warn(fmt.Sprintf(msg, v...))
 }
 
 // Errorf implements log.Interface.
-func (l *Logger) Errorf(msg string, v ...interface{}) {
+func (l *Logger) Errorf(msg string, v ...any) {
 	l.Error(fmt.Sprintf(msg, v...))
 }
 
 // Fatalf implements log.Interface.
-func (l *Logger) Fatalf(msg string, v ...interface{}) {
+func (l *Logger) Fatalf(msg string, v ...any) {
 	l.Fatal(fmt.Sprintf(msg, v...))
 }
 
 // WithField implements log.Interface.
-func (l *Logger) WithField(name string, val interface{}) Interface {
+func (l *Logger) WithField(name string, val any) Interface {
 	return l.entry().WithField(name, val)
 }
 

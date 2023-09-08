@@ -82,19 +82,18 @@ var errInvalidPBKDF2 = errors.DefineInternal( // internal because hash is in DB.
 
 var errIterations = errors.DefineInternal(
 	"pbkdf2_iterations",
-	"could not determine number of iterations from `{iterations}`",
+	"determine number of iterations from `{iterations}`",
 )
 
 var errKeyLength = errors.DefineInternal(
 	"pbkdf2_key_length",
-	"could not determine key length",
+	"determine key length",
 )
 
 // Validate validates a plaintext password against a hashed one.
 // The format of the hashed password should be:
 //
-//     PBKDF2$<algorithm>$<iterations>$<salt>$<key in base64>
-//
+//	PBKDF2$<algorithm>$<iterations>$<salt>$<key in base64>
 func (PBKDF2) Validate(hashed, plain string) (bool, error) {
 	parts := strings.Split(hashed, "$")
 	if len(parts) != 5 {

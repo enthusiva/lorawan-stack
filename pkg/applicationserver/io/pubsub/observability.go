@@ -28,23 +28,23 @@ import (
 )
 
 var withIdentifiersOption = events.WithDataType(&ttnpb.ApplicationPubSubIdentifiers{
-	ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-		ApplicationID: "application-id",
+	ApplicationIds: &ttnpb.ApplicationIdentifiers{
+		ApplicationId: "application-id",
 	},
-	PubSubID: "pubsub-id",
+	PubSubId: "pubsub-id",
 })
 
 var (
 	evtSetPubSub = events.Define(
 		"as.pubsub.set", "set pub/sub",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC),
 		withIdentifiersOption,
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
 	)
 	evtDeletePubSub = events.Define(
 		"as.pubsub.delete", "delete pub/sub",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC),
 		withIdentifiersOption,
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
@@ -52,27 +52,27 @@ var (
 	evtPubSubStart = events.Define(
 		"as.pubsub.start", "start pub/sub",
 		events.WithVisibility(
-			ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC,
-			ttnpb.RIGHT_APPLICATION_TRAFFIC_READ,
-			ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+			ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+			ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+			ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
 		),
 		withIdentifiersOption,
 	)
 	evtPubSubStop = events.Define(
 		"as.pubsub.stop", "stop pub/sub",
 		events.WithVisibility(
-			ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC,
-			ttnpb.RIGHT_APPLICATION_TRAFFIC_READ,
-			ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+			ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+			ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+			ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
 		),
 		withIdentifiersOption,
 	)
 	evtPubSubFail = events.Define(
 		"as.pubsub.fail", "fail pub/sub",
 		events.WithVisibility(
-			ttnpb.RIGHT_APPLICATION_SETTINGS_BASIC,
-			ttnpb.RIGHT_APPLICATION_TRAFFIC_READ,
-			ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+			ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+			ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+			ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
 		),
 		events.WithErrorDataType(),
 	)
@@ -140,14 +140,14 @@ func providerLabelValue(i *integration) string {
 }
 
 func registerIntegrationStart(ctx context.Context, i *integration) {
-	events.Publish(evtPubSubStart.NewWithIdentifiersAndData(ctx, i.ApplicationIdentifiers, i.ApplicationPubSubIdentifiers))
+	events.Publish(evtPubSubStart.NewWithIdentifiersAndData(ctx, i.Ids.ApplicationIds, i.Ids))
 	labelValue := providerLabelValue(i)
 	pubsubMetrics.integrationsStarted.WithLabelValues(ctx, labelValue).Inc()
 	pubsubMetrics.integrationsStopped.WithLabelValues(ctx, labelValue) // Initialize the "stopped" counter.
 }
 
 func registerIntegrationStop(ctx context.Context, i *integration) {
-	events.Publish(evtPubSubStop.NewWithIdentifiersAndData(ctx, i.ApplicationIdentifiers, i.ApplicationPubSubIdentifiers))
+	events.Publish(evtPubSubStop.NewWithIdentifiersAndData(ctx, i.Ids.ApplicationIds, i.Ids))
 	pubsubMetrics.integrationsStopped.WithLabelValues(ctx, providerLabelValue(i)).Inc()
 }
 
@@ -156,10 +156,10 @@ var errIntegrationFailed = errors.DefineAborted("integration_failed", "integrati
 func registerIntegrationFail(ctx context.Context, i *integration, err error) {
 	err = errIntegrationFailed.
 		WithAttributes(
-			"application_uid", unique.ID(ctx, i.ApplicationIdentifiers),
-			"pub_sub_id", i.PubSubID,
+			"application_uid", unique.ID(ctx, i.Ids.ApplicationIds),
+			"pub_sub_id", i.Ids.PubSubId,
 		).
 		WithCause(err)
-	events.Publish(evtPubSubFail.NewWithIdentifiersAndData(ctx, i.ApplicationIdentifiers, err))
+	events.Publish(evtPubSubFail.NewWithIdentifiersAndData(ctx, i.Ids.ApplicationIds, err))
 	pubsubMetrics.integrationsFailed.WithLabelValues(ctx, providerLabelValue(i)).Inc()
 }

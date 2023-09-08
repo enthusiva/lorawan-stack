@@ -16,11 +16,10 @@ package web
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -28,13 +27,12 @@ import (
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
-	echo "github.com/labstack/echo/v4"
-	echomiddleware "github.com/labstack/echo/v4/middleware"
-	"go.thethings.network/lorawan-stack/v3/pkg/auth"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/fillcontext"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/random"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/tracing"
 	"go.thethings.network/lorawan-stack/v3/pkg/webhandlers"
 	"go.thethings.network/lorawan-stack/v3/pkg/webmiddleware"
 	"go.thethings.network/lorawan-stack/v3/pkg/webui"
@@ -56,12 +54,11 @@ type Server struct {
 
 	// The HTTP router for API.
 	apiRouter *mux.Router
-
-	// The legacy HTTP framework.
-	echo *echo.Echo
 }
 
 type options struct {
+	disableWarnings bool
+
 	cookieHashKey  []byte
 	cookieBlockKey []byte
 
@@ -80,6 +77,13 @@ type options struct {
 
 // Option for the web server
 type Option func(*options)
+
+// WithDisableWarnings configures if the webserver should emit misconfiguration warnings.
+func WithDisableWarnings(disable bool) Option {
+	return func(o *options) {
+		o.disableWarnings = disable
+	}
+}
 
 // WithContextFiller sets context fillers that are executed on every request context.
 func WithContextFiller(contextFillers ...fillcontext.Filler) Option {
@@ -146,7 +150,9 @@ func New(ctx context.Context, opts ...Option) (*Server, error) {
 
 	if len(hashKey) == 0 || isZeros(hashKey) {
 		hashKey = random.Bytes(64)
-		logger.Warn("No cookie hash key configured, generated a random one")
+		if !options.disableWarnings {
+			logger.Warn("No cookie hash key configured, generated a random one")
+		}
 	}
 
 	if len(hashKey) != 32 && len(hashKey) != 64 {
@@ -155,7 +161,9 @@ func New(ctx context.Context, opts ...Option) (*Server, error) {
 
 	if len(blockKey) == 0 || isZeros(blockKey) {
 		blockKey = random.Bytes(32)
-		logger.Warn("No cookie block key configured, generated a random one")
+		if !options.disableWarnings {
+			logger.Warn("No cookie block key configured, generated a random one")
+		}
 	}
 
 	if len(blockKey) != 32 {
@@ -167,17 +175,22 @@ func New(ctx context.Context, opts ...Option) (*Server, error) {
 	root := mux.NewRouter()
 	root.NotFoundHandler = http.HandlerFunc(webhandlers.NotFound)
 	root.Use(
+		webhandlers.WithErrorHandlers(map[string]http.Handler{
+			"text/html": webhandlers.Template,
+		}),
 		mux.MiddlewareFunc(webmiddleware.Recover()),
+		otelmux.Middleware("ttn-lw-stack", otelmux.WithTracerProvider(tracing.FromContext(ctx))),
 		mux.MiddlewareFunc(webmiddleware.FillContext(options.contextFillers...)),
 		mux.MiddlewareFunc(webmiddleware.Peer()),
 		mux.MiddlewareFunc(webmiddleware.RequestURL()),
 		mux.MiddlewareFunc(webmiddleware.RequestID()),
 		mux.MiddlewareFunc(webmiddleware.ProxyHeaders(proxyConfiguration)),
 		mux.MiddlewareFunc(webmiddleware.Metadata("X-Forwarded-For", "User-Agent")),
-		mux.MiddlewareFunc(webmiddleware.MaxBody(1<<24)), // 16 MB.
+		mux.MiddlewareFunc(webmiddleware.MaxBody(1024*1024*16)),
 		mux.MiddlewareFunc(webmiddleware.SecurityHeaders()),
 		mux.MiddlewareFunc(webmiddleware.Log(logger, options.logIgnorePaths)),
 		mux.MiddlewareFunc(webmiddleware.Cookies(hashKey, blockKey)),
+		mux.MiddlewareFunc(webmiddleware.NoCache),
 	)
 
 	var redirectConfig webmiddleware.RedirectConfiguration
@@ -208,71 +221,45 @@ func New(ctx context.Context, opts ...Option) (*Server, error) {
 		mux.MiddlewareFunc(webmiddleware.Redirect(redirectConfig)),
 	)
 
-	corsSkip := func(r *http.Request) bool {
-		authVal := r.Header.Get("Authorization")
-		if authVal != "" || !(strings.HasPrefix(authVal, "Bearer ")) {
-			token := strings.TrimPrefix(authVal, "Bearer ")
-			tokenType, _, _, err := auth.SplitToken(token)
-			if err == nil {
-				if tokenType == auth.SessionToken {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	csrfSkip := func(r *http.Request) bool {
-		return !corsSkip(r)
-	}
-
 	apiRouter := mux.NewRouter()
 	apiRouter.NotFoundHandler = http.HandlerFunc(webhandlers.NotFound)
 	apiRouter.Use(
+		webhandlers.WithErrorHandlers(map[string]http.Handler{
+			"text/html": webhandlers.Template,
+		}),
 		mux.MiddlewareFunc(webmiddleware.CookieAuth("_session")),
-		mux.MiddlewareFunc(webmiddleware.Conditional(
-			webmiddleware.CSRF(hashKey, csrf.CookieName("_csrf"), csrf.Path("/"), csrf.SameSite(csrf.SameSiteStrictMode)),
-			csrfSkip,
+		mux.MiddlewareFunc(webmiddleware.CSRF(
+			hashKey,
+			csrf.CookieName("_csrf"),
+			csrf.FieldName("_csrf"),
+			csrf.Path("/"),
 		)),
 		mux.MiddlewareFunc(
-			webmiddleware.Conditional(
-				webmiddleware.CORS(webmiddleware.CORSConfig{
-					AllowedHeaders: []string{"Authorization", "Content-Type", "X-CSRF-Token"},
-					AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
-					AllowedOrigins: []string{"*"},
-					ExposedHeaders: []string{
-						"Date",
-						"Content-Length",
-						"X-Rate-Limit-Limit",
-						"X-Rate-Limit-Available",
-						"X-Rate-Limit-Reset",
-						"X-Rate-Limit-Retry",
-						"X-Request-Id",
-						"X-Total-Count",
-						"X-Warning",
-					},
-					MaxAge:           600,
-					AllowCredentials: true,
-				}),
-				corsSkip,
-			),
+			webmiddleware.CORS(webmiddleware.CORSConfig{
+				AllowedHeaders: []string{"Authorization", "Content-Type", "X-CSRF-Token"},
+				AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
+				AllowedOrigins: []string{"*"},
+				ExposedHeaders: []string{
+					"Date",
+					"Content-Length",
+					"X-Rate-Limit-Limit",
+					"X-Rate-Limit-Available",
+					"X-Rate-Limit-Reset",
+					"X-Rate-Limit-Retry",
+					"X-Request-Id",
+					"X-Total-Count",
+					"X-Warning",
+				},
+				MaxAge: 600,
+			}),
 		),
 	)
 	root.PathPrefix("/api/").Handler(apiRouter)
-
-	server := echo.New()
-
-	server.Logger = &noopLogger{}
-	server.HTTPErrorHandler = errorHandler
-
-	server.Use(
-		echomiddleware.Gzip(),
-	)
 
 	s := &Server{
 		root:      root,
 		router:    router,
 		apiRouter: apiRouter,
-		echo:      server,
 	}
 
 	var staticPath string
@@ -288,7 +275,7 @@ func New(ctx context.Context, opts ...Option) (*Server, error) {
 		s.Static(options.staticMount, staticDir)
 
 		// register hashed filenames
-		manifest, err := ioutil.ReadFile(filepath.Join(staticPath, "manifest.yaml"))
+		manifest, err := os.ReadFile(filepath.Join(staticPath, "manifest.yaml"))
 		if err != nil {
 			logger.WithError(err).Warn("Failed to load manifest.yaml")
 			return s, nil
@@ -303,7 +290,7 @@ func New(ctx context.Context, opts ...Option) (*Server, error) {
 		}
 		logger.Debug("Loaded manifest.yaml")
 		logger.Debug("Serving static assets")
-	} else {
+	} else if !options.disableWarnings {
 		logger.WithField("search_paths", options.staticSearchPaths).Warn("No static assets found in any search path")
 	}
 
@@ -348,63 +335,35 @@ func (s *Server) getRouter(path string) *mux.Router {
 	return s.router
 }
 
-var echoVar = regexp.MustCompile(":[^/]+")
-
-// replaceEchoVars replaces Echo path variables with Mux path variables.
-// "/users/:user_id" will become "/users/{user_id}"
-func replaceEchoVars(path string) string {
-	return echoVar.ReplaceAllStringFunc(path, func(s string) string {
-		return fmt.Sprintf("{%s}", strings.TrimPrefix(s, ":"))
-	})
-}
-
-// Group creates a sub group.
-func (s *Server) Group(prefix string, middleware ...echo.MiddlewareFunc) *echo.Group {
-	path := "/" + strings.Trim(prefix, "/")
-	pathWithSlash := path + "/"
-	router := s.getRouter(pathWithSlash)
-	router.PathPrefix(replaceEchoVars(pathWithSlash)).Handler(s.echo)
-	if !strings.HasSuffix(path, "/") {
-		router.Handle(replaceEchoVars(path), http.RedirectHandler(pathWithSlash, http.StatusPermanentRedirect))
-	}
-	return s.echo.Group(path, middleware...)
-}
-
-// GET registers a GET handler at path.
-func (s *Server) GET(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
-	router := s.getRouter(path)
-	router.Path(path).Methods(http.MethodGet).Handler(s.echo)
-	return s.echo.GET(replaceEchoVars(path), h, m...)
-}
-
-// HEAD registers a HEAD handler at path.
-func (s *Server) HEAD(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
-	router := s.getRouter(path)
-	router.Path(path).Methods(http.MethodHead).Handler(s.echo)
-	return s.echo.HEAD(replaceEchoVars(path), h, m...)
-}
-
-// POST registers a POST handler at path.
-func (s *Server) POST(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
-	router := s.getRouter(path)
-	router.Path(path).Methods(http.MethodPost).Handler(s.echo)
-	return s.echo.POST(replaceEchoVars(path), h, m...)
-}
-
-// DELETE registers a DELETE handler at path.
-func (s *Server) DELETE(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route {
-	router := s.getRouter(path)
-	router.Path(path).Methods(http.MethodDelete).Handler(s.echo)
-	return s.echo.DELETE(replaceEchoVars(path), h, m...)
-}
+var hashRegex = regexp.MustCompile(`\.([a-f0-9]{20}|[a-f0-9]{32})(\.bundle)?\.(js|css|woff|woff2|ttf|eot|jpg|jpeg|png|svg)$`)
 
 // Static adds the http.FileSystem under the defined prefix.
 func (s *Server) Static(prefix string, fs http.FileSystem) {
 	prefix = "/" + strings.Trim(prefix, "/") + "/"
-	s.router.PathPrefix(prefix).Handler(http.StripPrefix(prefix, http.FileServer(fs)))
+	fileServer := http.StripPrefix(prefix, http.FileServer(fs))
+	s.router.PathPrefix(prefix).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hashRegex.MatchString(path.Base(r.URL.String())) {
+			w.Header().Set("Cache-Control", "public, max-age=604800, immutable")
+			w.Header().Del("Pragma")
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 // Prefix returns a route for the given path prefix.
 func (s *Server) Prefix(prefix string) *mux.Route {
 	return s.getRouter(prefix).PathPrefix(prefix)
+}
+
+// PrefixWithRedirect will create a route ending in slash.
+// Paths which coincide with the route, but do not end with slash, will be
+// redirect to the slash ending route.
+func (s *Server) PrefixWithRedirect(prefix string) *mux.Route {
+	prefix = "/" + strings.Trim(prefix, "/")
+	prefixWithSlash := prefix
+	if prefix != "/" {
+		prefixWithSlash = prefix + "/"
+		s.getRouter(prefix).Path(prefix).Handler(http.RedirectHandler(prefixWithSlash, http.StatusPermanentRedirect))
+	}
+	return s.getRouter(prefixWithSlash).PathPrefix(prefixWithSlash)
 }

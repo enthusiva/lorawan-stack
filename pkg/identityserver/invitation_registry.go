@@ -18,16 +18,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/jinzhu/gorm"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth"
 	"go.thethings.network/lorawan-stack/v3/pkg/email"
+	"go.thethings.network/lorawan-stack/v3/pkg/email/templates"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/emails"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
-	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var evtCreateInvitation = events.Define(
@@ -46,7 +45,7 @@ func (is *IdentityServer) sendInvitation(ctx context.Context, in *ttnpb.SendInvi
 	if err != nil {
 		return nil, err
 	}
-	if !authInfo.GetUniversalRights().IncludesAll(ttnpb.RIGHT_SEND_INVITES) {
+	if !authInfo.GetUniversalRights().IncludesAll(ttnpb.Right_RIGHT_SEND_INVITES) {
 		return nil, errNoInviteRights.New()
 	}
 	token, err := auth.GenerateKey(ctx)
@@ -59,27 +58,24 @@ func (is *IdentityServer) sendInvitation(ctx context.Context, in *ttnpb.SendInvi
 	invitation := &ttnpb.Invitation{
 		Email:     in.Email,
 		Token:     token,
-		ExpiresAt: expires,
+		ExpiresAt: timestamppb.New(expires),
 	}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		invitation, err = store.GetInvitationStore(db).CreateInvitation(ctx, invitation)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		invitation, err = st.CreateInvitation(ctx, invitation)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	events.Publish(evtCreateInvitation.NewWithIdentifiersAndData(ctx, nil, invitation))
-	err = is.SendEmail(ctx, func(data emails.Data) email.MessageData {
-		data.User.Email = in.Email
-		return &emails.Invitation{
-			Data:            data,
+	go is.SendTemplateEmailToUsers(is.FromRequestContext(ctx), "invitation", func(ctx context.Context, data email.TemplateData) (email.TemplateData, error) {
+		return &templates.InvitationData{
+			TemplateData:    data,
+			SenderIds:       authInfo.GetEntityIdentifiers().GetUserIds(),
 			InvitationToken: invitation.Token,
 			TTL:             ttl,
-		}
-	})
-	if err != nil {
-		log.FromContext(ctx).WithError(err).Error("Could not send invitation email")
-	}
+		}, nil
+	}, &ttnpb.User{PrimaryEmailAddress: in.Email})
 	return invitation, nil
 }
 
@@ -88,12 +84,19 @@ func (is *IdentityServer) listInvitations(ctx context.Context, req *ttnpb.ListIn
 	if err != nil {
 		return nil, err
 	}
-	if !authInfo.GetUniversalRights().IncludesAll(ttnpb.RIGHT_SEND_INVITES) {
+	if !authInfo.GetUniversalRights().IncludesAll(ttnpb.Right_RIGHT_SEND_INVITES) {
 		return nil, errNoInviteRights.New()
 	}
+	var total uint64
+	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
+	defer func() {
+		if err == nil {
+			setTotalHeader(ctx, total)
+		}
+	}()
 	invitations = &ttnpb.Invitations{}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		invitations.Invitations, err = store.GetInvitationStore(db).FindInvitations(ctx)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		invitations.Invitations, err = st.FindInvitations(ctx)
 		return err
 	})
 	if err != nil {
@@ -102,16 +105,16 @@ func (is *IdentityServer) listInvitations(ctx context.Context, req *ttnpb.ListIn
 	return invitations, nil
 }
 
-func (is *IdentityServer) deleteInvitation(ctx context.Context, in *ttnpb.DeleteInvitationRequest) (*types.Empty, error) {
+func (is *IdentityServer) deleteInvitation(ctx context.Context, in *ttnpb.DeleteInvitationRequest) (*emptypb.Empty, error) {
 	authInfo, err := is.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !authInfo.GetUniversalRights().IncludesAll(ttnpb.RIGHT_SEND_INVITES) {
+	if !authInfo.GetUniversalRights().IncludesAll(ttnpb.Right_RIGHT_SEND_INVITES) {
 		return nil, errNoInviteRights.New()
 	}
-	err = is.withDatabase(ctx, func(db *gorm.DB) error {
-		return store.GetInvitationStore(db).DeleteInvitation(ctx, in.Email)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		return st.DeleteInvitation(ctx, in.Email)
 	})
 	if err != nil {
 		return nil, err
@@ -120,6 +123,8 @@ func (is *IdentityServer) deleteInvitation(ctx context.Context, in *ttnpb.Delete
 }
 
 type invitationRegistry struct {
+	ttnpb.UnimplementedUserInvitationRegistryServer
+
 	*IdentityServer
 }
 
@@ -131,6 +136,6 @@ func (ir *invitationRegistry) List(ctx context.Context, req *ttnpb.ListInvitatio
 	return ir.listInvitations(ctx, req)
 }
 
-func (ir *invitationRegistry) Delete(ctx context.Context, req *ttnpb.DeleteInvitationRequest) (*types.Empty, error) {
+func (ir *invitationRegistry) Delete(ctx context.Context, req *ttnpb.DeleteInvitationRequest) (*emptypb.Empty, error) {
 	return ir.deleteInvitation(ctx, req)
 }

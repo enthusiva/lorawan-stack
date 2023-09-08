@@ -17,12 +17,12 @@ package devicetemplateconverter_test
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	. "go.thethings.network/lorawan-stack/v3/pkg/devicetemplateconverter"
@@ -34,6 +34,7 @@ import (
 )
 
 func TestConvertEndDeviceTemplate(t *testing.T) {
+	t.Parallel()
 	a := assertions.New(t)
 	ctx := log.NewContext(test.Context(), test.GetLogger(t))
 
@@ -42,26 +43,25 @@ func TestConvertEndDeviceTemplate(t *testing.T) {
 			Name:        "Test",
 			Description: "Test",
 		},
-		ConvertFunc: func(ctx context.Context, r io.Reader, ch chan<- *ttnpb.EndDeviceTemplate) error {
+		ConvertFunc: func(ctx context.Context, r io.Reader, f func(*ttnpb.EndDeviceTemplate) error) error {
 			reader := bufio.NewReader(r)
 			for {
 				b, err := reader.ReadByte()
 				if err != nil {
-					if err == io.EOF {
-						close(ch)
+					if errors.Is(err, io.EOF) {
 						return nil
 					}
 					return err
 				}
-				ch <- &ttnpb.EndDeviceTemplate{
-					EndDevice: ttnpb.EndDevice{
-						EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-							DeviceID: fmt.Sprintf("sn-%d", b),
+				if err := f(&ttnpb.EndDeviceTemplate{
+					EndDevice: &ttnpb.EndDevice{
+						Ids: &ttnpb.EndDeviceIdentifiers{
+							DeviceId: fmt.Sprintf("sn-%d", b),
 						},
 					},
-					FieldMask: pbtypes.FieldMask{
-						Paths: []string{"ids.device_id"},
-					},
+					FieldMask: ttnpb.FieldMask("ids.device_id"),
+				}); err != nil {
+					return err
 				}
 			}
 		},
@@ -85,42 +85,39 @@ func TestConvertEndDeviceTemplate(t *testing.T) {
 			Name:        "Test",
 			Description: "Test",
 		},
-		devicetemplates.TTS: devicetemplates.GetConverter(devicetemplates.TTS).Format(),
+		devicetemplates.TTSJSON: devicetemplates.GetConverter(devicetemplates.TTSJSON).Format(),
+		devicetemplates.TTSCSV:  devicetemplates.GetConverter(devicetemplates.TTSCSV).Format(),
 	})
 
 	stream, err := client.Convert(ctx, &ttnpb.ConvertEndDeviceTemplateRequest{
-		FormatID: "test",
+		FormatId: "test",
 		Data:     []byte{0x1, 0x2},
 	})
 	a.So(err, should.BeNil)
 	tmpls := make([]*ttnpb.EndDeviceTemplate, 0, 2)
 	for {
 		tmpl, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		tmpls = append(tmpls, tmpl)
 	}
 	a.So(tmpls, should.Resemble, []*ttnpb.EndDeviceTemplate{
 		{
-			EndDevice: ttnpb.EndDevice{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID: "sn-1",
+			EndDevice: &ttnpb.EndDevice{
+				Ids: &ttnpb.EndDeviceIdentifiers{
+					DeviceId: "sn-1",
 				},
 			},
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"ids.device_id"},
-			},
+			FieldMask: ttnpb.FieldMask("ids.device_id"),
 		},
 		{
-			EndDevice: ttnpb.EndDevice{
-				EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-					DeviceID: "sn-2",
+			EndDevice: &ttnpb.EndDevice{
+				Ids: &ttnpb.EndDeviceIdentifiers{
+					DeviceId: "sn-2",
 				},
 			},
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"ids.device_id"},
-			},
+			FieldMask: ttnpb.FieldMask("ids.device_id"),
 		},
 	})
 }

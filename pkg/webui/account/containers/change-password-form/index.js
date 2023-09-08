@@ -44,9 +44,7 @@ const m = defineMessages({
 })
 
 const validationSchemaOldPassword = Yup.object().shape({
-  old: Yup.string()
-    .required(sharedMessages.validateRequired)
-    .default(''),
+  old: Yup.string().required(sharedMessages.validateRequired).default(''),
   revoke_all_access: Yup.bool().default(false),
 })
 
@@ -127,7 +125,7 @@ const ChangePasswordForm = ({ userId, old, cancelRoute, onSubmitSuccess }) => {
       {usesTemporaryPw ? (
         <>
           <Form.Submit component={SubmitButton} message={sharedMessages.changePassword} />
-          <Button.Link to={cancelRoute} naked secondary message={sharedMessages.cancel} />
+          <Button.Link to={cancelRoute} naked message={sharedMessages.cancel} />
         </>
       ) : (
         <SubmitBar>

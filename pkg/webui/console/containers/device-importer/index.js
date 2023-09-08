@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,279 +12,315 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
-import { connect } from 'react-redux'
-import { push } from 'connected-react-router'
-import bind from 'autobind-decorator'
-import { defineMessages } from 'react-intl'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { isObject } from 'lodash'
+import { useParams } from 'react-router-dom'
 
-import api from '@console/api'
+import tts from '@console/api/tts'
 
-import CodeEditor from '@ttn-lw/components/code-editor'
-import ProgressBar from '@ttn-lw/components/progress-bar'
-import SubmitBar from '@ttn-lw/components/submit-bar'
-import Button from '@ttn-lw/components/button'
-import ErrorNotification from '@ttn-lw/components/error-notification'
-import Status from '@ttn-lw/components/status'
-
-import Message from '@ttn-lw/lib/components/message'
-
-import DeviceImportForm from '@console/components/device-import-form'
-
-import PropTypes from '@ttn-lw/lib/prop-types'
-import { selectNsConfig, selectJsConfig, selectAsConfig } from '@ttn-lw/lib/selectors/env'
+import { createFrontendError, isFrontend } from '@ttn-lw/lib/errors/utils'
+import { getDeviceId } from '@ttn-lw/lib/selectors/id'
+import { selectAsConfig, selectJsConfig, selectNsConfig } from '@ttn-lw/lib/selectors/env'
+import attachPromise from '@ttn-lw/lib/store/actions/attach-promise'
 
 import randomByteString from '@console/lib/random-bytes'
 
-import { selectSelectedApplicationId } from '@console/store/selectors/applications'
+import { convertTemplate } from '@console/store/actions/device-template-formats'
 
-import style from './device-importer.styl'
+import { selectDeviceTemplate } from '@console/store/selectors/device-repository'
 
-const m = defineMessages({
-  proceed: 'Proceed',
-  retry: 'Retry',
-  converting: 'Converting templates…',
-  creating: 'Creating end devices…',
-  operationInProgress: 'Operation in progress',
-  operationHalted: 'Operation halted',
-  operationFinished: 'Operation finished',
-  errorTitle: 'There was an error and the operation could not be completed',
-})
+import Form from './form'
+import Processor from './processor'
+import m from './messages'
 
-const initialState = {
-  log: '',
-  totalDevices: undefined,
-  devicesComplete: 0,
-  status: 'initial',
-  step: 'inital',
-  error: undefined,
-}
+const conversionError = createFrontendError(m.conversionErrorTitle, m.conversionErrorMessage)
 
-const statusMap = {
-  processing: 'good',
-  error: 'bad',
-  finished: 'good',
-}
+const DeviceImporter = () => {
+  const { appId } = useParams()
+  const deviceRepoTemplate = useSelector(selectDeviceTemplate)
+  const asConfig = useSelector(selectAsConfig)
+  const nsConfig = useSelector(selectNsConfig)
+  const jsConfig = useSelector(selectJsConfig)
+  const availableComponents = ['is']
+  if (nsConfig.enabled) availableComponents.push('ns')
+  if (jsConfig.enabled) availableComponents.push('js')
+  if (asConfig.enabled) availableComponents.push('as')
+  const editorRef = useRef()
+  const [log, setLog] = useState('')
+  const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0)
+  const [convertedDevices, setConvertedDevices] = useState([])
+  const [deviceErrors, setDeviceErrors] = useState([])
+  const [status, setStatus] = useState('initial')
+  const prevStatus = useRef()
+  const [step, setStep] = useState('initial')
+  const [error, setError] = useState(undefined)
+  const [aborted, setAborted] = useState(false)
+  const createStream = useRef(null)
+  const dispatch = useDispatch()
 
-@connect(
-  state => {
-    const asConfig = selectAsConfig()
-    const nsConfig = selectNsConfig()
-    const jsConfig = selectJsConfig()
-    const availableComponents = ['is']
-    if (nsConfig.enabled) availableComponents.push('ns')
-    if (jsConfig.enabled) availableComponents.push('js')
-    if (asConfig.enabled) availableComponents.push('as')
-
-    return {
-      appId: selectSelectedApplicationId(state),
-      nsConfig,
-      jsConfig,
-      asConfig,
-      availableComponents,
+  useEffect(() => {
+    // Disable undo manager of the code editor to release old logs from the heap.
+    // Without this fix the browser can run out of memory when importing many end devices.
+    prevStatus.current = status
+    if (prevStatus !== 'initial' && status !== 'initial') {
+      editorRef.current.editor.session.setUndoManager(null)
     }
-  },
-  dispatch => ({
-    redirectToList: appId => dispatch(push(`/applications/${appId}/devices`)),
-  }),
-  (stateProps, dispatchProps, ownProps) => ({
-    ...stateProps,
-    ...dispatchProps,
-    ...ownProps,
-    redirectToList: () => dispatchProps.redirectToList(stateProps.appId),
-  }),
-)
-export default class DeviceImporter extends Component {
-  static propTypes = {
-    appId: PropTypes.string.isRequired,
-    asConfig: PropTypes.stackComponent.isRequired,
-    availableComponents: PropTypes.components.isRequired,
-    jsConfig: PropTypes.stackComponent.isRequired,
-    nsConfig: PropTypes.stackComponent.isRequired,
-    redirectToList: PropTypes.func.isRequired,
-  }
+  }, [status])
 
-  state = { ...initialState }
+  const appendToLog = useCallback(
+    message => {
+      const text = typeof message !== 'string' ? JSON.stringify(message, null, 2) : message
+      setLog(log => `${log}\n${text}`)
+    },
+    [setLog],
+  )
 
-  @bind
-  appendToLog(message) {
-    const { log } = this.state
-    const text = typeof message !== 'string' ? JSON.stringify(message, null, 2) : message
-    this.setState({
-      log: `${log}\n${text}`,
-    })
-  }
+  const handleCreationSuccess = useCallback(
+    device => {
+      appendToLog(device)
+      setCurrentDeviceIndex(currentDeviceIndex => currentDeviceIndex + 1)
+    },
+    [appendToLog],
+  )
 
-  @bind
-  handleCreationProgress(device) {
-    const { devicesComplete } = this.state
+  const logError = useCallback(
+    error => {
+      if (isObject(error)) {
+        if (!isFrontend(error)) {
+          const json = JSON.stringify(error, null, 2)
+          setLog(log => `${log}\n${json}`)
+        }
+      }
+    },
+    [setLog],
+  )
 
-    this.appendToLog(device)
-    this.setState({ devicesComplete: devicesComplete + 1 })
-  }
+  const handleCreationError = useCallback(
+    error => {
+      logError(error)
+      const currentDevice =
+        convertedDevices.length > currentDeviceIndex ? convertedDevices[currentDeviceIndex] : {}
+      const currentDeviceId =
+        'end_device' in currentDevice
+          ? getDeviceId(currentDevice.end_device)
+          : `unknown device ID ${Date.now()}`
+      setCurrentDeviceIndex(currentDeviceIndex => currentDeviceIndex + 1)
+      setDeviceErrors(errors => [...errors, { deviceId: currentDeviceId, error }])
+    },
+    [convertedDevices, currentDeviceIndex, logError],
+  )
 
-  @bind
-  handleError(error) {
-    const { log } = this.state
-    const json = JSON.stringify(error, null, 2)
-    this.setState({ error, status: 'error', log: `${log}\n${json}` })
-  }
+  const handleFatalError = useCallback(
+    error => {
+      logError(error)
 
-  @bind
-  async handleSubmit(values) {
-    const { appId, jsConfig, nsConfig, asConfig } = this.props
-    const {
-      format_id,
-      data,
-      set_claim_auth_code,
-      components: { js: jsSelected, as: asSelected, ns: nsSelected },
-    } = values
+      const logAppend = '\n\nImport process cancelled due to error.'
+      setStatus('error')
+      setError(error)
+      setLog(log => `${log}\n${logAppend}`)
+    },
+    [logError],
+  )
 
-    try {
-      // Start template conversion.
-      this.setState({ step: 'conversion', status: 'processing' })
-      this.appendToLog('Converting end device templates…')
-      const templateStream = await api.deviceTemplates.convert(format_id, data)
-      const devices = await new Promise((resolve, reject) => {
-        const chunks = []
+  const handleAbort = useCallback(() => {
+    if (createStream.current !== null) {
+      createStream.current.abort()
+      setAborted(true)
+    }
+  }, [createStream])
 
-        templateStream.on('chunk', message => {
-          this.appendToLog(message)
-          chunks.push(message)
+  const handleSubmit = useCallback(
+    async values => {
+      const {
+        format_id,
+        data,
+        set_claim_auth_code,
+        frequency_plan_id,
+        lorawan_version,
+        lorawan_phy_version,
+        version_ids,
+        _inputMethod,
+      } = values
+
+      let devices = []
+
+      try {
+        // Start template conversion.
+        setStep('conversion')
+        setStatus('processing')
+        appendToLog('Converting end device templates…')
+        const templateStream = await dispatch(attachPromise(convertTemplate(format_id, data)))
+
+        devices = await new Promise((resolve, reject) => {
+          const chunks = []
+
+          templateStream.on('chunk', message => {
+            appendToLog(message)
+            chunks.push(message)
+          })
+          templateStream.on('error', reject)
+          templateStream.on('close', () => resolve(chunks))
+
+          templateStream.open()
         })
-        templateStream.on('error', reject)
-        templateStream.on('close', () => resolve(chunks))
-      })
 
-      // Apply default values.
-      for (const deviceAndFieldMask of devices) {
-        const { end_device: device, field_mask } = deviceAndFieldMask
-        if (set_claim_auth_code && jsSelected) {
-          device.claim_authentication_code = { value: randomByteString(4 * 2) }
-          field_mask.paths.push('claim_authentication_code')
+        if (devices.length === 0) {
+          throw conversionError
         }
-        if (device.supports_join && !device.join_server_address && jsConfig.enabled && jsSelected) {
-          device.join_server_address = new URL(jsConfig.base_url).hostname
-          field_mask.paths.push('join_server_address')
+
+        setConvertedDevices(devices)
+        // Apply default values.
+        for (const deviceAndFieldMask of devices) {
+          const { end_device: device, field_mask } = deviceAndFieldMask
+
+          if (set_claim_auth_code && jsConfig.enabled) {
+            device.claim_authentication_code = { value: randomByteString(4 * 2) }
+            field_mask.paths.push('claim_authentication_code')
+          }
+          if (device.supports_join && !device.join_server_address && jsConfig.enabled) {
+            device.join_server_address = new URL(jsConfig.base_url).hostname
+            field_mask.paths.push('join_server_address')
+          }
+          if (!device.application_server_address && asConfig.enabled) {
+            device.application_server_address = new URL(asConfig.base_url).hostname
+            field_mask.paths.push('application_server_address')
+          }
+          if (!device.network_server_address && nsConfig.enabled) {
+            device.network_server_address = new URL(nsConfig.base_url).hostname
+            field_mask.paths.push('network_server_address')
+          }
+
+          // Fallback values
+          if (
+            !device.frequency_plan_id &&
+            Boolean(frequency_plan_id) &&
+            nsConfig.enabled &&
+            _inputMethod === 'manual'
+          ) {
+            device.frequency_plan_id = frequency_plan_id
+            field_mask.paths.push('frequency_plan_id')
+          }
+          if (!device.lorawan_version && Boolean(lorawan_version) && _inputMethod === 'manual') {
+            device.lorawan_version = lorawan_version
+            field_mask.paths.push('lorawan_version')
+          }
+          if (
+            !device.lorawan_phy_version &&
+            Boolean(lorawan_phy_version) &&
+            _inputMethod === 'manual'
+          ) {
+            device.lorawan_phy_version = lorawan_phy_version
+            field_mask.paths.push('lorawan_phy_version')
+          }
+          if (!device.version_ids && Boolean(version_ids) && _inputMethod === 'device-repository') {
+            device.version_ids = version_ids
+            field_mask.paths.push('version_ids')
+
+            if (!device.lorawan_version && deviceRepoTemplate) {
+              device.lorawan_version = deviceRepoTemplate.end_device.lorawan_version
+              field_mask.paths.push('lorawan_version')
+            }
+            if (!device.lorawan_phy_version && deviceRepoTemplate) {
+              device.lorawan_phy_version = deviceRepoTemplate.end_device.lorawan_phy_version
+              field_mask.paths.push('lorawan_phy_version')
+            }
+            if (!device.supports_join && deviceRepoTemplate) {
+              device.supports_join = deviceRepoTemplate.end_device.supports_join
+              field_mask.paths.push('supports_join')
+            }
+            if (!device.mac_settings && deviceRepoTemplate) {
+              device.mac_settings = deviceRepoTemplate.end_device.mac_settings
+              field_mask.paths.push('mac_settings')
+            }
+            if (!device.frequency_plan_id && Boolean(frequency_plan_id)) {
+              device.frequency_plan_id = frequency_plan_id
+              field_mask.paths.push('frequency_plan_id')
+            }
+          }
         }
-        if (!device.application_server_address && asConfig.enabled && asSelected) {
-          device.application_server_address = new URL(asConfig.base_url).hostname
-          field_mask.paths.push('application_server_address')
-        }
-        if (!device.network_server_address && nsConfig.enabled && nsSelected) {
-          device.network_server_address = new URL(nsConfig.base_url).hostname
-          field_mask.paths.push('network_server_address')
-        }
+      } catch (error) {
+        handleFatalError(error)
+        return
       }
 
       // Start batch device creation.
-      this.setState({
-        step: 'creation',
-        totalDevices: devices.length,
-      })
-      this.appendToLog('Creating end devices…')
-      const createStream = api.device.bulkCreate(appId, devices)
+      setStep('creation')
+      appendToLog('Creating end devices…')
 
-      await new Promise((resolve, reject) => {
-        createStream.on('chunk', this.handleCreationProgress)
-        createStream.on('error', reject)
-        createStream.on('close', resolve)
-      })
+      try {
+        createStream.current = tts.Applications.Devices.bulkCreate(appId, devices)
 
-      this.setState({ status: 'finished' })
-    } catch (error) {
-      this.handleError(error)
-    }
-  }
+        await new Promise(resolve => {
+          createStream.current.on('chunk', handleCreationSuccess)
+          createStream.current.on('error', handleCreationError)
+          createStream.current.on('close', resolve)
 
-  @bind
-  handleReset() {
-    this.setState(initialState)
-  }
+          createStream.current.start()
+        })
 
-  get processor() {
-    const { log, totalDevices, devicesComplete, status, step, error } = this.state
-    const hasErrored = status === 'error'
-    const { redirectToList } = this.props
-    const operationMessage = step === 'conversion' ? m.converting : m.creating
-    let statusMessage = m.operationInProgress
-    if (status === 'error') {
-      statusMessage = m.operationHalted
-    } else if (status === 'finished') {
-      statusMessage = m.operationFinished
-    }
+        if (!aborted) {
+          appendToLog('\nImport operation complete')
+        } else {
+          appendToLog('\nImport operation aborted')
+        }
+        setStatus('finished')
+      } catch (error) {
+        handleCreationError(error)
+      }
+    },
+    [
+      appId,
+      asConfig,
+      dispatch,
+      handleCreationError,
+      handleCreationSuccess,
+      handleFatalError,
+      jsConfig,
+      nsConfig,
+      setConvertedDevices,
+      setStatus,
+      setStep,
+      aborted,
+      appendToLog,
+      deviceRepoTemplate,
+      createStream,
+    ],
+  )
 
-    return (
-      <div>
-        <Message className={style.title} component="h4" content={operationMessage} />
-        {!hasErrored ? (
-          <React.Fragment>
-            <Status
-              label={statusMessage}
-              pulse={status === 'processing'}
-              status={statusMap[status] || 'unknown'}
-            />
-            <ProgressBar
-              current={devicesComplete}
-              target={totalDevices}
-              showStatus
-              showEstimation={!hasErrored}
-              className={style.progressBar}
-            />
-          </React.Fragment>
-        ) : (
-          <ErrorNotification small content={error} title={m.errorTitle} />
-        )}
-        <CodeEditor
-          className={style.logOutput}
-          minLines={20}
-          maxLines={20}
-          mode="json"
-          name="process_log"
-          readOnly
-          value={log}
-          editorOptions={{ useWorker: false }}
-          showGutter={false}
-          scrollToBottom
+  const handleReset = useCallback(() => {
+    setLog('')
+    setCurrentDeviceIndex(0)
+    setConvertedDevices([])
+    setDeviceErrors([])
+    setStatus('initial')
+    setStep('initial')
+    setError(undefined)
+    setAborted(false)
+  }, [])
+
+  switch (step) {
+    case 'conversion':
+    case 'creation':
+      return (
+        <Processor
+          log={log}
+          currentDeviceIndex={currentDeviceIndex}
+          deviceErrors={deviceErrors}
+          status={status}
+          step={step}
+          error={error}
+          convertedDevices={convertedDevices}
+          aborted={aborted}
+          handleAbort={handleAbort}
+          handleReset={handleReset}
+          editorRef={editorRef}
         />
-        <SubmitBar>
-          <Button
-            busy={status !== 'finished' && !hasErrored}
-            message={hasErrored ? m.retry : m.proceed}
-            onClick={hasErrored ? this.handleReset : redirectToList}
-          />
-        </SubmitBar>
-      </div>
-    )
-  }
-
-  get form() {
-    const { availableComponents } = this.props
-    const initialValues = {
-      format_id: '',
-      data: '',
-      set_claim_auth_code: false,
-      components: availableComponents.reduce((o, c) => ({ ...o, [c]: true }), {}),
-    }
-    return (
-      <DeviceImportForm
-        components={availableComponents}
-        initialValues={initialValues}
-        onSubmit={this.handleSubmit}
-      />
-    )
-  }
-
-  render() {
-    const { step } = this.state
-
-    switch (step) {
-      case 'conversion':
-      case 'creation':
-        return this.processor
-      case 'initial':
-      default:
-        return this.form
-    }
+      )
+    case 'initial':
+    default:
+      return <Form handleSubmit={handleSubmit} jsEnabled={availableComponents.includes('js')} />
   }
 }
+
+export default DeviceImporter

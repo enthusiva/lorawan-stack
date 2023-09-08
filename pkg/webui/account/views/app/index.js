@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { hot } from 'react-hot-loader/root'
 import { useSelector, useDispatch } from 'react-redux'
 import React, { useEffect } from 'react'
-import { Switch, Route } from 'react-router-dom'
-import { ConnectedRouter } from 'connected-react-router'
+import { Routes, Route, BrowserRouter } from 'react-router-dom'
 import { Helmet } from 'react-helmet'
 
 import { ToastContainer } from '@ttn-lw/components/toast'
@@ -24,11 +22,12 @@ import { ToastContainer } from '@ttn-lw/components/toast'
 import ErrorView from '@ttn-lw/lib/components/error-view'
 import FullViewError from '@ttn-lw/lib/components/full-view-error'
 
+import Header from '@account/containers/header'
+
 import Landing from '@account/views/landing'
 import Authorize from '@account/views/authorize'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
-import dev from '@ttn-lw/lib/dev'
 import {
   selectApplicationSiteName,
   selectApplicationSiteTitle,
@@ -43,6 +42,8 @@ import Front from '../front'
 const siteName = selectApplicationSiteName()
 const siteTitle = selectApplicationSiteTitle()
 const pageData = selectPageData()
+
+const errorRender = error => <FullViewError error={error} header={<Header />} />
 
 const AccountApp = ({ history }) => {
   const user = useSelector(selectUser)
@@ -64,29 +65,29 @@ const AccountApp = ({ history }) => {
 
   if (pageData && pageData.error) {
     return (
-      <ConnectedRouter history={history}>
-        <FullViewError error={pageData.error} />
-      </ConnectedRouter>
+      <BrowserRouter history={history} basename="/oauth">
+        <FullViewError error={pageData.error} header={<Header />} />
+      </BrowserRouter>
     )
   }
 
   return (
     <>
       <ToastContainer />
-      <ConnectedRouter history={history}>
-        <ErrorView ErrorComponent={FullViewError}>
+      <BrowserRouter history={history} basename="/oauth">
+        <ErrorView errorRender={errorRender}>
           <React.Fragment>
             <Helmet
               titleTemplate={`%s - ${siteTitle ? `${siteTitle} - ` : ''}${siteName}`}
               defaultTitle={`${siteTitle ? `${siteTitle} - ` : ''}${siteName}`}
             />
-            <Switch>
-              <Route path="/authorize" component={Authorize} />
-              <Route path="/" component={Boolean(user) ? Landing : Front} />
-            </Switch>
+            <Routes>
+              <Route path="/authorize/*" Component={Authorize} />
+              <Route path="*" Component={Boolean(user) ? Landing : Front} />
+            </Routes>
           </React.Fragment>
         </ErrorView>
-      </ConnectedRouter>
+      </BrowserRouter>
     </>
   )
 }
@@ -95,6 +96,4 @@ AccountApp.propTypes = {
   history: PropTypes.history.isRequired,
 }
 
-const ExportedApp = dev ? hot(AccountApp) : AccountApp
-
-export default ExportedApp
+export default AccountApp

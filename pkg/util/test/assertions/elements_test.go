@@ -12,24 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package assertions
+package assertions_test
 
 import (
 	"reflect"
 	"strconv"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	. "go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestShouldHaveSameElements(t *testing.T) {
 	for i, tc := range []struct {
-		A             interface{}
-		B             interface{}
-		ShouldFunc    func(actual interface{}, expected ...interface{}) string
-		ShouldNotFunc func(actual interface{}, expected ...interface{}) string
+		A             any
+		B             any
+		ShouldFunc    func(actual any, expected ...any) string
+		ShouldNotFunc func(actual any, expected ...any) string
 	}{
 		{
 			[][]byte{{42}, {43}},

@@ -16,14 +16,16 @@ package test
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
 	ulid "github.com/oklog/ulid/v2"
+	"github.com/redis/go-redis/v9"
 	ttnredis "go.thethings.network/lorawan-stack/v3/pkg/redis"
 )
 
@@ -35,6 +37,8 @@ const (
 var defaultNamespace = [...]string{
 	"redistest",
 }
+
+var _ redis.Hook = (*redisHook)(nil)
 
 type redisHook struct {
 	testing.TB
@@ -48,31 +52,36 @@ func (redisHook) formatCommand(cmd redis.Cmder) string {
 	return strings.Join(ss, " ")
 }
 
-func (h redisHook) BeforeProcess(ctx context.Context, cmd redis.Cmder) (context.Context, error) {
-	GetLogger(h.TB).Debugf("Executing `%s`", h.formatCommand(cmd))
-	return ctx, nil
+// DialHook implements redis.Hook.
+func (redisHook) DialHook(hook redis.DialHook) redis.DialHook {
+	return hook
 }
 
-func (h redisHook) AfterProcess(context.Context, redis.Cmder) error {
-	return nil
-}
-
-func (h redisHook) BeforeProcessPipeline(ctx context.Context, cmds []redis.Cmder) (context.Context, error) {
-	printLog := GetLogger(h.TB).Debug
-	if len(cmds) == 0 {
-		printLog("Executing empty pipeline")
-	} else {
-		s := fmt.Sprintf("Executing %d commands in pipeline:", len(cmds))
-		for _, cmd := range cmds {
-			s += fmt.Sprintf("\n   %s", h.formatCommand(cmd))
-		}
-		printLog(s)
+// ProcessHook implements redis.Hook.
+func (h redisHook) ProcessHook(hook redis.ProcessHook) redis.ProcessHook {
+	f := func(ctx context.Context, cmd redis.Cmder) error {
+		GetLogger(h.TB).Debugf("Executing `%s`", h.formatCommand(cmd))
+		return hook(ctx, cmd)
 	}
-	return ctx, nil
+	return f
 }
 
-func (h redisHook) AfterProcessPipeline(context.Context, []redis.Cmder) error {
-	return nil
+// ProcessPipelineHook implements redis.Hook.
+func (h redisHook) ProcessPipelineHook(hook redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	f := func(ctx context.Context, cmds []redis.Cmder) error {
+		printLog := GetLogger(h.TB).Debug
+		if len(cmds) == 0 {
+			printLog("Executing empty pipeline")
+		} else {
+			s := fmt.Sprintf("Executing %d commands in pipeline:", len(cmds))
+			for _, cmd := range cmds {
+				s += fmt.Sprintf("\n   %s", h.formatCommand(cmd))
+			}
+			printLog(s)
+		}
+		return hook(ctx, cmds)
+	}
+	return f
 }
 
 // NewRedis returns a new namespaced *redis.Client ready to use
@@ -89,7 +98,11 @@ func NewRedis(ctx context.Context, namespace ...string) (*ttnredis.Client, func(
 		Address:       defaultAddress,
 		Database:      defaultDatabase,
 		RootNamespace: defaultNamespace[:],
-	}.WithNamespace(append(append([]string{ulid.MustNew(ulid.Now(), Randy).String()}, namespace...), t.Name())...)
+		// CI has at most 1 virtual CPU available, resulting in a default pool size of 10.
+		// Tests that require more than 10 concurrent connections, such as the ones which
+		// subscribe to messages, will fail since no connection will be available.
+		PoolSize: 32 * runtime.NumCPU(),
+	}.WithNamespace(append(append([]string{ulid.MustNew(ulid.Now(), rand.Reader).String()}, namespace...), t.Name())...)
 
 	if addr := os.Getenv("REDIS_ADDRESS"); addr != "" {
 		conf.Address = addr
@@ -121,7 +134,7 @@ func NewRedis(ctx context.Context, namespace ...string) (*ttnredis.Client, func(
 		q := cl.Key("*")
 		keys, err := cl.Client.Keys(ctx, q).Result()
 		if err != nil {
-			logger.WithField("query", q).Fatal("Failed to query Redis for keys")
+			logger.WithError(err).WithField("query", q).Fatal("Failed to query Redis for keys")
 			return
 		}
 

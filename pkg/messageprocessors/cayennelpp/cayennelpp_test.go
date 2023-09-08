@@ -18,13 +18,13 @@ import (
 	"testing"
 
 	lpp "github.com/TheThingsNetwork/go-cayenne-lib"
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
-	"go.thethings.network/lorawan-stack/v3/pkg/gogoproto"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestEncode(t *testing.T) {
@@ -34,21 +34,21 @@ func TestEncode(t *testing.T) {
 	host := New()
 
 	eui := types.EUI64{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	ids := ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-			ApplicationID: "foo-app",
+	ids := &ttnpb.EndDeviceIdentifiers{
+		ApplicationIds: &ttnpb.ApplicationIdentifiers{
+			ApplicationId: "foo-app",
 		},
-		DeviceID: "foo-device",
-		DevEUI:   &eui,
+		DeviceId: "foo-device",
+		DevEui:   eui.Bytes(),
 	}
 
 	// Happy flow.
 	{
 		message := &ttnpb.ApplicationDownlink{
-			DecodedPayload: &pbtypes.Struct{
-				Fields: map[string]*pbtypes.Value{
+			DecodedPayload: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
 					"value_2": {
-						Kind: &pbtypes.Value_NumberValue{
+						Kind: &structpb.Value_NumberValue{
 							NumberValue: -50.51,
 						},
 					},
@@ -58,12 +58,12 @@ func TestEncode(t *testing.T) {
 
 		err := host.EncodeDownlink(ctx, ids, nil, message, "")
 		a.So(err, should.BeNil)
-		a.So(message.FRMPayload, should.Resemble, []byte{2, 236, 69})
+		a.So(message.FrmPayload, should.Resemble, []byte{2, 236, 69})
 
 		message.DecodedPayload = nil
 		err = host.DecodeDownlink(ctx, ids, nil, message, "")
 		a.So(err, should.BeNil)
-		m, err := gogoproto.Map(message.DecodedPayload)
+		m, err := goproto.Map(message.DecodedPayload)
 		a.So(err, should.BeNil)
 		a.So(m["value_2"], should.AlmostEqual, -50.51, 0.01)
 	}
@@ -71,29 +71,29 @@ func TestEncode(t *testing.T) {
 	// Test resilience against custom fields from the user. Should be fine.
 	{
 		message := &ttnpb.ApplicationDownlink{
-			DecodedPayload: &pbtypes.Struct{
-				Fields: map[string]*pbtypes.Value{
+			DecodedPayload: &structpb.Struct{
+				Fields: map[string]*structpb.Value{
 					"custom": {
-						Kind: &pbtypes.Value_NumberValue{
+						Kind: &structpb.Value_NumberValue{
 							NumberValue: 8,
 						},
 					},
 					"digital_in_8": {
-						Kind: &pbtypes.Value_StringValue{
+						Kind: &structpb.Value_StringValue{
 							StringValue: "shouldn't be a string",
 						},
 					},
 					"custom_5": {
-						Kind: &pbtypes.Value_NumberValue{
+						Kind: &structpb.Value_NumberValue{
 							NumberValue: 5,
 						},
 					},
 					"accelerometer_1": {
-						Kind: &pbtypes.Value_StructValue{
-							StructValue: &pbtypes.Struct{
-								Fields: map[string]*pbtypes.Value{
+						Kind: &structpb.Value_StructValue{
+							StructValue: &structpb.Struct{
+								Fields: map[string]*structpb.Value{
 									"x": {
-										Kind: &pbtypes.Value_StringValue{
+										Kind: &structpb.Value_StringValue{
 											StringValue: "test",
 										},
 									},
@@ -107,7 +107,7 @@ func TestEncode(t *testing.T) {
 
 		err := host.EncodeDownlink(ctx, ids, nil, message, "")
 		a.So(err, should.BeNil)
-		a.So(message.FRMPayload, should.BeEmpty)
+		a.So(message.FrmPayload, should.BeEmpty)
 	}
 }
 
@@ -118,16 +118,16 @@ func TestDecode(t *testing.T) {
 	host := New()
 
 	eui := types.EUI64{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	ids := ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-			ApplicationID: "foo-app",
+	ids := &ttnpb.EndDeviceIdentifiers{
+		ApplicationIds: &ttnpb.ApplicationIdentifiers{
+			ApplicationId: "foo-app",
 		},
-		DeviceID: "foo-device",
-		DevEUI:   &eui,
+		DeviceId: "foo-device",
+		DevEui:   eui.Bytes(),
 	}
 
 	message := &ttnpb.ApplicationUplink{
-		FRMPayload: []byte{
+		FrmPayload: []byte{
 			1, lpp.DigitalInput, 255,
 			2, lpp.DigitalOutput, 100,
 			3, lpp.AnalogInput, 21, 74,
@@ -145,7 +145,7 @@ func TestDecode(t *testing.T) {
 
 	err := host.DecodeUplink(ctx, ids, nil, message, "")
 	a.So(err, should.BeNil)
-	m, err := gogoproto.Map(message.DecodedPayload)
+	m, err := goproto.Map(message.DecodedPayload)
 	a.So(err, should.BeNil)
 	a.So(m, should.HaveLength, 12)
 	a.So(m["digital_in_1"], should.Equal, 255)
@@ -156,14 +156,14 @@ func TestDecode(t *testing.T) {
 	a.So(m["presence_6"], should.Equal, 50)
 	a.So(m["temperature_7"], should.AlmostEqual, -15.6, 0.00001)
 	a.So(m["relative_humidity_8"], should.AlmostEqual, 49.5, 0.00001)
-	a.So(m["accelerometer_9"].(map[string]interface{})["x"], should.AlmostEqual, -0.424, 0.00001)
-	a.So(m["accelerometer_9"].(map[string]interface{})["y"], should.AlmostEqual, 0.015, 0.00001)
-	a.So(m["accelerometer_9"].(map[string]interface{})["z"], should.AlmostEqual, 1.666, 0.00001)
+	a.So(m["accelerometer_9"].(map[string]any)["x"], should.AlmostEqual, -0.424, 0.00001)
+	a.So(m["accelerometer_9"].(map[string]any)["y"], should.AlmostEqual, 0.015, 0.00001)
+	a.So(m["accelerometer_9"].(map[string]any)["z"], should.AlmostEqual, 1.666, 0.00001)
 	a.So(m["barometric_pressure_10"], should.AlmostEqual, 1073.5, 0.00001)
-	a.So(m["gyrometer_11"].(map[string]interface{})["x"], should.AlmostEqual, 3.55, 0.00001)
-	a.So(m["gyrometer_11"].(map[string]interface{})["y"], should.AlmostEqual, 5.61, 0.00001)
-	a.So(m["gyrometer_11"].(map[string]interface{})["z"], should.AlmostEqual, -4.10, 0.00001)
-	a.So(m["gps_12"].(map[string]interface{})["latitude"], should.AlmostEqual, 52.3655, 0.00001)
-	a.So(m["gps_12"].(map[string]interface{})["longitude"], should.AlmostEqual, 4.8885, 0.00001)
-	a.So(m["gps_12"].(map[string]interface{})["altitude"], should.AlmostEqual, 21.54, 0.00001)
+	a.So(m["gyrometer_11"].(map[string]any)["x"], should.AlmostEqual, 3.55, 0.00001)
+	a.So(m["gyrometer_11"].(map[string]any)["y"], should.AlmostEqual, 5.61, 0.00001)
+	a.So(m["gyrometer_11"].(map[string]any)["z"], should.AlmostEqual, -4.10, 0.00001)
+	a.So(m["gps_12"].(map[string]any)["latitude"], should.AlmostEqual, 52.3655, 0.00001)
+	a.So(m["gps_12"].(map[string]any)["longitude"], should.AlmostEqual, 4.8885, 0.00001)
+	a.So(m["gps_12"].(map[string]any)["altitude"], should.AlmostEqual, 21.54, 0.00001)
 }

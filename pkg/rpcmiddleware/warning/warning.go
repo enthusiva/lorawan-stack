@@ -35,7 +35,11 @@ func logWarnings(ctx context.Context, md metadata.MD) {
 	if warnings := md.Get(warning); len(warnings) > 0 {
 		logger := log.FromContext(ctx)
 		if logger == log.Noop {
-			logger = log.Default
+			logHandler, err := log.NewZap("console")
+			if err != nil {
+				panic(err)
+			}
+			logger = log.NewLogger(logHandler)
 		}
 		for _, warning := range warnings {
 			logger.Warn(warning)
@@ -49,7 +53,7 @@ func Add(ctx context.Context, message string) {
 }
 
 // UnaryClientInterceptor is a unary client interceptor that logs warnings sent by the server.
-func UnaryClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func UnaryClientInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	var md metadata.MD
 	err := invoker(ctx, method, req, reply, cc, append(opts, grpc.Header(&md))...)
 	logWarnings(ctx, md)

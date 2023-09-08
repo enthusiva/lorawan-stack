@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useContext, useEffect } from 'react'
 import bind from 'autobind-decorator'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 
-const { Provider, Consumer } = React.createContext()
+const BreadcrumbsContext = React.createContext()
+const { Provider, Consumer } = BreadcrumbsContext
 
 class BreadcrumbsProvider extends React.Component {
   static propTypes = {
@@ -33,7 +34,11 @@ class BreadcrumbsProvider extends React.Component {
     this.setState(prev => {
       const index = prev.breadcrumbs.findIndex(({ id: breadcrumbId }) => breadcrumbId === id)
       if (index === -1) {
-        return { breadcrumbs: [...prev.breadcrumbs, { id, breadcrumb }] }
+        return {
+          breadcrumbs: [...prev.breadcrumbs, { id, breadcrumb }].sort((a, b) =>
+            a.id < b.id ? -1 : 1,
+          ),
+        }
       }
 
       // Replace breadcrumb with existing id.
@@ -116,4 +121,22 @@ const withBreadcrumb = (id, element) => Component => {
 
 withBreadcrumb.displayName = 'withBreadcrumb'
 
-export { Consumer as BreadcrumbsConsumer, BreadcrumbsProvider, withBreadcrumb }
+const useBreadcrumbs = (id, element) => {
+  const context = useContext(BreadcrumbsContext)
+
+  useEffect(() => {
+    context.add(id, element)
+    return () => {
+      context.remove(id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+}
+
+export {
+  Consumer as BreadcrumbsConsumer,
+  BreadcrumbsProvider,
+  withBreadcrumb,
+  BreadcrumbsContext,
+  useBreadcrumbs,
+}

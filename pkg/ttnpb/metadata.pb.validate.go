@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _metadata_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on RxMetadata with the rules defined
 // in the proto definition for this message. If any rules are violated, an
@@ -52,7 +49,14 @@ func (m *RxMetadata) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return RxMetadataValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return RxMetadataValidationError{
 						field:  "gateway_ids",
@@ -95,12 +99,12 @@ func (m *RxMetadata) ValidateFields(paths ...string) error {
 		case "encrypted_fine_timestamp":
 			// no validation rules for EncryptedFineTimestamp
 		case "encrypted_fine_timestamp_key_id":
-			// no validation rules for EncryptedFineTimestampKeyID
+			// no validation rules for EncryptedFineTimestampKeyId
 		case "rssi":
-			// no validation rules for RSSI
+			// no validation rules for Rssi
 		case "signal_rssi":
 
-			if v, ok := interface{}(m.GetSignalRSSI()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetSignalRssi()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return RxMetadataValidationError{
 						field:  "signal_rssi",
@@ -111,11 +115,11 @@ func (m *RxMetadata) ValidateFields(paths ...string) error {
 			}
 
 		case "channel_rssi":
-			// no validation rules for ChannelRSSI
+			// no validation rules for ChannelRssi
 		case "rssi_standard_deviation":
-			// no validation rules for RSSIStandardDeviation
+			// no validation rules for RssiStandardDeviation
 		case "snr":
-			// no validation rules for SNR
+			// no validation rules for Snr
 		case "frequency_offset":
 			// no validation rules for FrequencyOffset
 		case "location":
@@ -147,6 +151,34 @@ func (m *RxMetadata) ValidateFields(paths ...string) error {
 				return RxMetadataValidationError{
 					field:  "channel_index",
 					reason: "value must be less than or equal to 255",
+				}
+			}
+
+		case "hopping_width":
+			// no validation rules for HoppingWidth
+		case "frequency_drift":
+			// no validation rules for FrequencyDrift
+		case "gps_time":
+
+			if v, ok := interface{}(m.GetGpsTime()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return RxMetadataValidationError{
+						field:  "gps_time",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "received_at":
+
+			if v, ok := interface{}(m.GetReceivedAt()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return RxMetadataValidationError{
+						field:  "received_at",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
 				}
 			}
 
@@ -354,13 +386,35 @@ func (m *PacketBrokerMetadata) ValidateFields(paths ...string) error {
 		case "message_id":
 			// no validation rules for MessageId
 		case "forwarder_net_id":
-			// no validation rules for ForwarderNetId
+
+			if len(m.GetForwarderNetId()) > 0 {
+
+				if len(m.GetForwarderNetId()) != 3 {
+					return PacketBrokerMetadataValidationError{
+						field:  "forwarder_net_id",
+						reason: "value length must be 3 bytes",
+					}
+				}
+
+			}
+
 		case "forwarder_tenant_id":
 			// no validation rules for ForwarderTenantId
 		case "forwarder_cluster_id":
 			// no validation rules for ForwarderClusterId
 		case "forwarder_gateway_eui":
-			// no validation rules for ForwarderGatewayEui
+
+			if len(m.GetForwarderGatewayEui()) > 0 {
+
+				if len(m.GetForwarderGatewayEui()) != 8 {
+					return PacketBrokerMetadataValidationError{
+						field:  "forwarder_gateway_eui",
+						reason: "value length must be 8 bytes",
+					}
+				}
+
+			}
+
 		case "forwarder_gateway_id":
 
 			if v, ok := interface{}(m.GetForwarderGatewayId()).(interface{ ValidateFields(...string) error }); ok {
@@ -374,7 +428,18 @@ func (m *PacketBrokerMetadata) ValidateFields(paths ...string) error {
 			}
 
 		case "home_network_net_id":
-			// no validation rules for HomeNetworkNetId
+
+			if len(m.GetHomeNetworkNetId()) > 0 {
+
+				if len(m.GetHomeNetworkNetId()) != 3 {
+					return PacketBrokerMetadataValidationError{
+						field:  "home_network_net_id",
+						reason: "value length must be 3 bytes",
+					}
+				}
+
+			}
+
 		case "home_network_tenant_id":
 			// no validation rules for HomeNetworkTenantId
 		case "home_network_cluster_id":
@@ -479,7 +544,7 @@ func (m *PacketBrokerRouteHop) ValidateFields(paths ...string) error {
 		switch name {
 		case "received_at":
 
-			if v, ok := interface{}(&m.ReceivedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetReceivedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return PacketBrokerRouteHopValidationError{
 						field:  "received_at",

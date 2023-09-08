@@ -20,29 +20,34 @@ import (
 
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // UnaryClientInterceptor returns a new unary client interceptor that optionally logs the execution of external gRPC calls.
 func UnaryClientInterceptor(ctx context.Context, opts ...Option) grpc.UnaryClientInterceptor {
 	o := evaluateClientOpt(opts)
 	logger := log.FromContext(ctx).WithField("namespace", "grpc")
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		onceFields, propagatedFields := logFieldsForCall(ctx, method)
 		logger := logger.WithFields(propagatedFields)
 		newCtx := log.NewContext(ctx, logger)
 
+		var md metadata.MD
 		startTime := time.Now()
-		err := invoker(newCtx, method, req, reply, cc, opts...)
-
+		err := invoker(newCtx, method, req, reply, cc, append(opts, grpc.Header(&md))...)
+		if requestID := md.Get("x-request-id"); len(requestID) > 0 {
+			onceFields = onceFields.WithField(
+				"request_id", requestID[0],
+			)
+		}
 		onceFields = onceFields.WithField(
 			"duration", time.Since(startTime).Round(time.Microsecond*100),
 		)
-
 		if err != nil {
 			onceFields = onceFields.WithFields(logFieldsForError(err))
 		}
 
-		level := o.levelFunc(grpc.Code(err))
+		level := o.levelFunc(o.codeFunc(err))
 		entry := logger.WithFields(onceFields)
 		if err != nil {
 			entry = entry.WithError(err)
@@ -61,8 +66,14 @@ func StreamClientInterceptor(ctx context.Context, opts ...Option) grpc.StreamCli
 		logger := logger.WithFields(propagatedFields)
 		newCtx := log.NewContext(ctx, logger)
 
+		var md metadata.MD
 		startTime := time.Now()
-		clientStream, err := streamer(newCtx, desc, cc, method, opts...)
+		clientStream, err := streamer(newCtx, desc, cc, method, append(opts, grpc.Header(&md))...)
+		if requestID := md.Get("x-request-id"); len(requestID) > 0 {
+			onceFields = onceFields.WithField(
+				"request_id", requestID[0],
+			)
+		}
 		if err != nil {
 			onceFields = onceFields.WithField(
 				"duration", time.Since(startTime).Round(time.Microsecond*100),

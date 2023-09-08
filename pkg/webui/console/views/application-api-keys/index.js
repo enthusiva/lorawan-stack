@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,50 +13,59 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
-import { Switch, Route } from 'react-router'
+import { Routes, Route, useParams } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import ErrorView from '@ttn-lw/lib/components/error-view'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import ApplicationApiKeysList from '@console/views/application-api-keys-list'
 import ApplicationApiKeyAdd from '@console/views/application-api-key-add'
 import SubViewError from '@console/views/sub-view-error'
-import ApplicationApiKeyEdit from '@console/views/application-api-key-edit'
 
-import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 
+import { apiKeyPath as apiKeyPathRegexp } from '@console/lib/regexp'
 import { mayViewOrEditApplicationApiKeys } from '@console/lib/feature-checks'
 
-import { selectSelectedApplicationId } from '@console/store/selectors/applications'
+import ApplicationApiKeyEdit from '../application-api-key-edit'
 
-@connect(state => ({ appId: selectSelectedApplicationId(state) }))
-@withFeatureRequirement(mayViewOrEditApplicationApiKeys, {
-  redirect: ({ appId }) => `/applications/${appId}`,
-})
-@withBreadcrumb('apps.single.api-keys', ({ appId }) => (
-  <Breadcrumb path={`/applications/${appId}/api-keys`} content={sharedMessages.apiKeys} />
-))
-export default class ApplicationAccess extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+const ApplicationApiKeys = () => {
+  const { appId } = useParams()
 
-  render() {
-    const { match } = this.props
-    return (
-      <ErrorView ErrorComponent={SubViewError}>
-        <Switch>
-          <Route exact path={`${match.path}`} component={ApplicationApiKeysList} />
-          <Route exact path={`${match.path}/add`} component={ApplicationApiKeyAdd} />
-          <Route path={`${match.path}/:apiKeyId`} component={ApplicationApiKeyEdit} />
-        </Switch>
+  useBreadcrumbs(
+    'apps.single.api-keys',
+    <Breadcrumb path={`/applications/${appId}/api-keys`} content={sharedMessages.apiKeys} />,
+  )
+
+  return (
+    <Require
+      featureCheck={mayViewOrEditApplicationApiKeys}
+      otherwise={{ redirect: `/applications/${appId}` }}
+    >
+      <ErrorView errorRender={SubViewError}>
+        <Routes>
+          <Route index Component={ApplicationApiKeysList} />
+          <Route path="/add" Component={ApplicationApiKeyAdd} />
+          <Route
+            path="/:apiKeyId"
+            element={
+              <ValidateRouteParam
+                check={{ apiKeyId: apiKeyPathRegexp }}
+                Component={ApplicationApiKeyEdit}
+              />
+            }
+          />
+          <Route path="*" element={<GenericNotFound />} />
+        </Routes>
       </ErrorView>
-    )
-  }
+    </Require>
+  )
 }
+
+export default ApplicationApiKeys

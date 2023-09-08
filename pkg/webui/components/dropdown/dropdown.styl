@@ -25,15 +25,15 @@ ul.dropdown
 
   &.larger
     li.dropdown-item
-      & > a, & > button
+      & > a.button, & > button.button
         padding: $cs.l
 
   hr
     margin-top: 0
-    height: .4rem
+    height: .1rem
+    background-color: $c-divider
 
   li.dropdown-header-item
-    border-normal('bottom')
     display: block
     margin-bottom: 0
     font-weight: $fw.bold
@@ -47,10 +47,10 @@ ul.dropdown
     display: block
     margin-bottom: 0
 
-    button
+    button.button
       reset-button()
 
-    & > a, & > button
+    & > a.button, & > button.button
       box-sizing: border-box
       line-height: 1
       display: block
@@ -60,21 +60,18 @@ ul.dropdown
       &:not(.active)
         color: $tc-deep-gray
 
+      &.active
+        border-left: $c-active-blue 5px solid
+        color: $c-active-blue
+
+      &:hover
+        color: white
+
+        .icon
+          color: white
+
     .icon
       margin-right: $cs.xs
 
-    &:not(:last-child)
-      border-normal('bottom')
-
     &:hover
       background-color: $c-active-blue
-
-      a, button
-        color: white
-
-      .icon
-        color: white
-
-.active
-  border-left: $c-active-blue 5px solid
-  color: $c-active-blue

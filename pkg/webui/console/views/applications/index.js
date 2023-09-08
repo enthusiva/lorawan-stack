@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,10 +13,13 @@
 // limitations under the License.
 
 import React from 'react'
-import { Switch, Route } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
+
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
 
 import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
 
@@ -24,28 +27,24 @@ import Application from '@console/views/application'
 import ApplicationsList from '@console/views/applications-list'
 import ApplicationAdd from '@console/views/application-add'
 
-import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import { pathId as pathIdRegexp } from '@ttn-lw/lib/regexp'
 
 import { mayViewApplications } from '@console/lib/feature-checks'
 
-@withFeatureRequirement(mayViewApplications, { redirect: '/' })
-@withBreadcrumb('apps', () => {
-  return <Breadcrumb path="/applications" content={sharedMessages.applications} />
-})
-export default class Applications extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+const Applications = () => {
+  useBreadcrumbs('apps', <Breadcrumb path="/applications" content={sharedMessages.applications} />)
 
-  render() {
-    const { path } = this.props.match
-    return (
-      <Switch>
-        <Route exact path={`${path}`} component={ApplicationsList} />
-        <Route exact path={`${path}/add`} component={ApplicationAdd} />
-        <Route path={`${path}/:appId`} component={Application} />
-      </Switch>
-    )
-  }
+  return (
+    <Routes>
+      <Route index Component={ApplicationsList} />
+      <Route path="add" Component={ApplicationAdd} />
+      <Route
+        path=":appId/*"
+        element={<ValidateRouteParam check={{ appId: pathIdRegexp }} Component={Application} />}
+      />
+      <Route path="*" Component={GenericNotFound} />
+    </Routes>
+  )
 }
+export default withFeatureRequirement(mayViewApplications, { redirect: '/' })(Applications)

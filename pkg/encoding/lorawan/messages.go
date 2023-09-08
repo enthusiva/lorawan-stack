@@ -25,18 +25,18 @@ import (
 )
 
 // AppendMHDR appends encoded msg to dst.
-func AppendMHDR(dst []byte, msg ttnpb.MHDR) ([]byte, error) {
-	if msg.MType > 7 {
-		return nil, errExpectedLowerOrEqual("MType", 7)(msg.MType)
+func AppendMHDR(dst []byte, msg *ttnpb.MHDR) ([]byte, error) {
+	if msg.GetMType() > 7 {
+		return nil, errExpectedLowerOrEqual("MType", 7)(msg.GetMType())
 	}
-	if msg.Major > 4 {
-		return nil, errExpectedLowerOrEqual("Major", 4)(msg.Major)
+	if msg.GetMajor() > 4 {
+		return nil, errExpectedLowerOrEqual("Major", 4)(msg.GetMajor())
 	}
-	return append(dst, byte(msg.MType)<<5|byte(msg.Major)), nil
+	return append(dst, byte(msg.GetMType())<<5|byte(msg.GetMajor())), nil
 }
 
 // MarshalMHDR returns encoded msg.
-func MarshalMHDR(msg ttnpb.MHDR) ([]byte, error) {
+func MarshalMHDR(msg *ttnpb.MHDR) ([]byte, error) {
 	return AppendMHDR(make([]byte, 0, 1), msg)
 }
 
@@ -52,26 +52,26 @@ func UnmarshalMHDR(b []byte, msg *ttnpb.MHDR) error {
 }
 
 // AppendFCtrl appends encoded msg to dst.
-func AppendFCtrl(dst []byte, msg ttnpb.FCtrl, isUplink bool, fOptsLen uint8) ([]byte, error) {
+func AppendFCtrl(dst []byte, msg *ttnpb.FCtrl, isUplink bool, fOptsLen uint8) ([]byte, error) {
 	if fOptsLen > 15 {
 		return nil, errExpectedLowerOrEqual("FOptsLen", 15)(fOptsLen)
 	}
 	b := fOptsLen
-	if msg.ADR {
+	if msg.GetAdr() {
 		b |= 1 << 7
 	}
-	if msg.Ack {
+	if msg.GetAck() {
 		b |= 1 << 5
 	}
 	if isUplink {
-		if msg.ADRAckReq {
+		if msg.GetAdrAckReq() {
 			b |= 1 << 6
 		}
-		if msg.ClassB {
+		if msg.GetClassB() {
 			b |= 1 << 4
 		}
 	} else {
-		if msg.FPending {
+		if msg.GetFPending() {
 			b |= 1 << 4
 		}
 	}
@@ -84,10 +84,10 @@ func UnmarshalFCtrl(b []byte, msg *ttnpb.FCtrl, isUplink bool) error {
 		return errExpectedLengthEncodedEqual("FCtrl", 1)(len(b))
 	}
 	v := b[0]
-	msg.ADR = v&(1<<7) > 0
+	msg.Adr = v&(1<<7) > 0
 	msg.Ack = v&(1<<5) > 0
 	if isUplink {
-		msg.ADRAckReq = v&(1<<6) > 0
+		msg.AdrAckReq = v&(1<<6) > 0
 		msg.ClassB = v&(1<<4) > 0
 	} else {
 		msg.FPending = v&(1<<4) > 0
@@ -96,18 +96,21 @@ func UnmarshalFCtrl(b []byte, msg *ttnpb.FCtrl, isUplink bool) error {
 }
 
 // AppendFHDR appends encoded msg to dst.
-func AppendFHDR(dst []byte, msg ttnpb.FHDR, isUplink bool) ([]byte, error) {
-	dst = appendReverse(dst, msg.DevAddr[:]...)
-	fOptsLen := uint8(len(msg.FOpts))
+func AppendFHDR(dst []byte, msg *ttnpb.FHDR, isUplink bool) ([]byte, error) {
+	if n := len(msg.DevAddr); n != 4 {
+		return nil, errExpectedLengthEqual("DevAddr", 4)(n)
+	}
+	dst = appendReverse(dst, msg.DevAddr...)
+	fOptsLen := uint8(len(msg.GetFOpts()))
 	if fOptsLen > 15 {
 		return nil, errExpectedLowerOrEqual("FOptsLen", 15)(fOptsLen)
 	}
-	dst, err := AppendFCtrl(dst, msg.FCtrl, isUplink, fOptsLen)
+	dst, err := AppendFCtrl(dst, msg.GetFCtrl(), isUplink, fOptsLen)
 	if err != nil {
 		return nil, errFailedEncoding("FCtrl").WithCause(err)
 	}
-	dst = byteutil.AppendUint32(dst, msg.FCnt&0xffff, 2)
-	dst = append(dst, msg.FOpts...)
+	dst = byteutil.AppendUint32(dst, msg.GetFCnt()&0xffff, 2)
+	dst = append(dst, msg.GetFOpts()...)
 	return dst, nil
 }
 
@@ -117,8 +120,10 @@ func UnmarshalFHDR(b []byte, msg *ttnpb.FHDR, isUplink bool) error {
 	if n < 7 || n > 23 {
 		return errExpectedLengthEncodedBound("FHDR", 7, 23)(n)
 	}
-	copyReverse(msg.DevAddr[:], b[0:4])
-	if err := UnmarshalFCtrl(b[4:5], &msg.FCtrl, isUplink); err != nil {
+	msg.DevAddr = make([]byte, 4)
+	copyReverse(msg.DevAddr, b[0:4])
+	msg.FCtrl = &ttnpb.FCtrl{}
+	if err := UnmarshalFCtrl(b[4:5], msg.FCtrl, isUplink); err != nil {
 		return errFailedDecoding("FCtrl").WithCause(err)
 	}
 	msg.FCnt = byteutil.ParseUint32(b[5:7])
@@ -132,23 +137,23 @@ func UnmarshalFHDR(b []byte, msg *ttnpb.FHDR, isUplink bool) error {
 }
 
 // AppendMACPayload appends encoded msg to dst.
-func AppendMACPayload(dst []byte, msg ttnpb.MACPayload, isUplink bool) ([]byte, error) {
-	dst, err := AppendFHDR(dst, msg.FHDR, isUplink)
+func AppendMACPayload(dst []byte, msg *ttnpb.MACPayload, isUplink bool) ([]byte, error) {
+	dst, err := AppendFHDR(dst, msg.FHdr, isUplink)
 	if err != nil {
 		return nil, errFailedEncoding("FHDR").WithCause(err)
 	}
 	if msg.FPort > math.MaxUint8 {
 		return nil, errExpectedLowerOrEqual("FPort", math.MaxUint8)(msg.FPort)
 	}
-	if len(msg.FRMPayload) > 0 || msg.FPort != 0 {
+	if len(msg.FrmPayload) > 0 || msg.FPort != 0 {
 		dst = append(dst, byte(msg.FPort))
 	}
-	dst = append(dst, msg.FRMPayload...)
+	dst = append(dst, msg.FrmPayload...)
 	return dst, nil
 }
 
 // MarshalMACPayload returns encoded msg.
-func MarshalMACPayload(msg ttnpb.MACPayload, isUplink bool) ([]byte, error) {
+func MarshalMACPayload(msg *ttnpb.MACPayload, isUplink bool) ([]byte, error) {
 	return AppendMACPayload(make([]byte, 0, 1), msg, isUplink)
 }
 
@@ -163,7 +168,8 @@ func UnmarshalMACPayload(b []byte, msg *ttnpb.MACPayload, isUplink bool) error {
 	if n < fhdrLen {
 		return errExpectedLengthHigherOrEqual("MACPayload", fhdrLen)(n)
 	}
-	if err := UnmarshalFHDR(b[0:fhdrLen], &msg.FHDR, isUplink); err != nil {
+	msg.FHdr = &ttnpb.FHDR{}
+	if err := UnmarshalFHDR(b[0:fhdrLen], msg.FHdr, isUplink); err != nil {
 		return errFailedDecoding("FHDR").WithCause(err)
 	}
 
@@ -173,31 +179,31 @@ func UnmarshalMACPayload(b []byte, msg *ttnpb.MACPayload, isUplink bool) error {
 
 		frmPayloadIdx := fPortIdx + 1
 		if n > frmPayloadIdx {
-			msg.FRMPayload = make([]byte, 0, n-frmPayloadIdx)
-			msg.FRMPayload = append(msg.FRMPayload, b[frmPayloadIdx:]...)
+			msg.FrmPayload = make([]byte, 0, n-frmPayloadIdx)
+			msg.FrmPayload = append(msg.FrmPayload, b[frmPayloadIdx:]...)
 		}
 	}
 	return nil
 }
 
 // AppendDLSettings appends encoded msg to dst.
-func AppendDLSettings(dst []byte, msg ttnpb.DLSettings) ([]byte, error) {
-	if msg.Rx1DROffset > 7 {
-		return nil, errExpectedLowerOrEqual("Rx1DROffset", 7)(msg.Rx1DROffset)
+func AppendDLSettings(dst []byte, msg *ttnpb.DLSettings) ([]byte, error) {
+	if msg.GetRx1DrOffset() > 7 {
+		return nil, errExpectedLowerOrEqual("Rx1DROffset", 7)(msg.GetRx1DrOffset())
 	}
-	if msg.Rx2DR > 15 {
-		return nil, errExpectedLowerOrEqual("Rx2DR", 15)(msg.Rx2DR)
+	if msg.GetRx2Dr() > 15 {
+		return nil, errExpectedLowerOrEqual("Rx2DR", 15)(msg.GetRx2Dr())
 	}
-	b := byte(msg.Rx2DR)
-	b |= byte(msg.Rx1DROffset << 4)
-	if msg.OptNeg {
+	b := byte(msg.GetRx2Dr())
+	b |= byte(msg.GetRx1DrOffset() << 4)
+	if msg.GetOptNeg() {
 		b |= (1 << 7)
 	}
 	return append(dst, b), nil
 }
 
 // MarshalDLSettings returns encoded msg.
-func MarshalDLSettings(msg ttnpb.DLSettings) ([]byte, error) {
+func MarshalDLSettings(msg *ttnpb.DLSettings) ([]byte, error) {
 	return AppendDLSettings(make([]byte, 0, 1), msg)
 }
 
@@ -208,8 +214,8 @@ func UnmarshalDLSettings(b []byte, msg *ttnpb.DLSettings) error {
 	}
 	v := uint32(b[0])
 	msg.OptNeg = (v >> 7) != 0
-	msg.Rx1DROffset = ttnpb.DataRateOffset((v >> 4) & 0x7)
-	msg.Rx2DR = ttnpb.DataRateIndex(v & 0xf)
+	msg.Rx1DrOffset = ttnpb.DataRateOffset((v >> 4) & 0x7)
+	msg.Rx2Dr = ttnpb.DataRateIndex(v & 0xf)
 	return nil
 }
 
@@ -218,7 +224,7 @@ var errMaxCFListFrequency = unexpectedValue(
 )
 
 // AppendCFList appends encoded msg to dst.
-func AppendCFList(dst []byte, msg ttnpb.CFList) ([]byte, error) {
+func AppendCFList(dst []byte, msg *ttnpb.CFList) ([]byte, error) {
 	switch msg.Type {
 	case 0:
 		n := len(msg.Freq)
@@ -255,7 +261,7 @@ func AppendCFList(dst []byte, msg ttnpb.CFList) ([]byte, error) {
 }
 
 // MarshalCFList returns encoded msg.
-func MarshalCFList(msg ttnpb.CFList) ([]byte, error) {
+func MarshalCFList(msg *ttnpb.CFList) ([]byte, error) {
 	return AppendCFList(make([]byte, 0, 16), msg)
 }
 
@@ -296,11 +302,20 @@ func UnmarshalCFList(b []byte, msg *ttnpb.CFList) error {
 }
 
 // AppendJoinAcceptPayload appends encoded msg to dst.
-func AppendJoinAcceptPayload(dst []byte, msg ttnpb.JoinAcceptPayload) ([]byte, error) {
-	dst = appendReverse(dst, msg.JoinNonce[:]...)
-	dst = appendReverse(dst, msg.NetID[:]...)
-	dst = appendReverse(dst, msg.DevAddr[:]...)
-	dst, err := AppendDLSettings(dst, msg.DLSettings)
+func AppendJoinAcceptPayload(dst []byte, msg *ttnpb.JoinAcceptPayload) ([]byte, error) {
+	if n := len(msg.JoinNonce); n != 3 {
+		return nil, errExpectedLengthEqual("JoinNonce", 3)(n)
+	}
+	dst = appendReverse(dst, msg.JoinNonce...)
+	if n := len(msg.NetId); n != 3 {
+		return nil, errExpectedLengthEqual("NetID", 3)(n)
+	}
+	dst = appendReverse(dst, msg.NetId...)
+	if n := len(msg.DevAddr); n != 4 {
+		return nil, errExpectedLengthEqual("DevAddr", 4)(n)
+	}
+	dst = appendReverse(dst, msg.DevAddr...)
+	dst, err := AppendDLSettings(dst, msg.DlSettings)
 	if err != nil {
 		return nil, errFailedEncoding("DLSettings").WithCause(err)
 	}
@@ -308,8 +323,8 @@ func AppendJoinAcceptPayload(dst []byte, msg ttnpb.JoinAcceptPayload) ([]byte, e
 		return nil, errExpectedLowerOrEqual("RxDelay", math.MaxUint8)(msg.RxDelay)
 	}
 	dst = append(dst, byte(msg.RxDelay))
-	if msg.GetCFList() != nil {
-		dst, err = AppendCFList(dst, *msg.CFList)
+	if msg.GetCfList() != nil {
+		dst, err = AppendCFList(dst, msg.CfList)
 		if err != nil {
 			return nil, errFailedEncoding("CFList").WithCause(err)
 		}
@@ -318,8 +333,8 @@ func AppendJoinAcceptPayload(dst []byte, msg ttnpb.JoinAcceptPayload) ([]byte, e
 }
 
 // MarshalJoinAcceptPayload returns encoded msg.
-func MarshalJoinAcceptPayload(msg ttnpb.JoinAcceptPayload) ([]byte, error) {
-	if msg.GetCFList() != nil {
+func MarshalJoinAcceptPayload(msg *ttnpb.JoinAcceptPayload) ([]byte, error) {
+	if msg.GetCfList() != nil {
 		return AppendJoinAcceptPayload(make([]byte, 0, 28), msg)
 	}
 	return AppendJoinAcceptPayload(make([]byte, 0, 12), msg)
@@ -331,10 +346,12 @@ func UnmarshalJoinAcceptPayload(b []byte, msg *ttnpb.JoinAcceptPayload) error {
 	if n != 12 && n != 28 {
 		return errExpectedLengthEncodedTwoChoices("JoinAcceptPayload", 12, 28)(n)
 	}
-	copyReverse(msg.JoinNonce[:], b[0:3])
-	copyReverse(msg.NetID[:], b[3:6])
-	copyReverse(msg.DevAddr[:], b[6:10])
-	if err := UnmarshalDLSettings(b[10:11], &msg.DLSettings); err != nil {
+	msg.JoinNonce, msg.NetId, msg.DevAddr = make([]byte, 3), make([]byte, 3), make([]byte, 4)
+	copyReverse(msg.JoinNonce, b[0:3])
+	copyReverse(msg.NetId, b[3:6])
+	copyReverse(msg.DevAddr, b[6:10])
+	msg.DlSettings = &ttnpb.DLSettings{}
+	if err := UnmarshalDLSettings(b[10:11], msg.DlSettings); err != nil {
 		return errFailedDecoding("DLSettings").WithCause(err)
 	}
 	msg.RxDelay = ttnpb.RxDelay(b[11])
@@ -342,23 +359,32 @@ func UnmarshalJoinAcceptPayload(b []byte, msg *ttnpb.JoinAcceptPayload) error {
 	if n == 12 {
 		return nil
 	}
-	msg.CFList = &ttnpb.CFList{}
-	if err := UnmarshalCFList(b[12:], msg.CFList); err != nil {
+	msg.CfList = &ttnpb.CFList{}
+	if err := UnmarshalCFList(b[12:], msg.CfList); err != nil {
 		return errFailedDecoding("CFList").WithCause(err)
 	}
 	return nil
 }
 
 // AppendJoinRequestPayload appends encoded msg to dst.
-func AppendJoinRequestPayload(dst []byte, msg ttnpb.JoinRequestPayload) ([]byte, error) {
-	dst = appendReverse(dst, msg.JoinEUI[:]...)
-	dst = appendReverse(dst, msg.DevEUI[:]...)
-	dst = appendReverse(dst, msg.DevNonce[:]...)
+func AppendJoinRequestPayload(dst []byte, msg *ttnpb.JoinRequestPayload) ([]byte, error) {
+	if n := len(msg.JoinEui); n != 8 {
+		return nil, errExpectedLengthEqual("JoinEUI", 8)(n)
+	}
+	dst = appendReverse(dst, msg.JoinEui...)
+	if n := len(msg.DevEui); n != 8 {
+		return nil, errExpectedLengthEqual("DevEUI", 8)(n)
+	}
+	dst = appendReverse(dst, msg.DevEui...)
+	if n := len(msg.DevNonce); n != 2 {
+		return nil, errExpectedLengthEqual("DevNonce", 2)(n)
+	}
+	dst = appendReverse(dst, msg.DevNonce...)
 	return dst, nil
 }
 
 // MarshalJoinRequestPayload returns encoded msg.
-func MarshalJoinRequestPayload(msg ttnpb.JoinRequestPayload) ([]byte, error) {
+func MarshalJoinRequestPayload(msg *ttnpb.JoinRequestPayload) ([]byte, error) {
 	return AppendJoinRequestPayload(make([]byte, 0, 18), msg)
 }
 
@@ -367,22 +393,35 @@ func UnmarshalJoinRequestPayload(b []byte, msg *ttnpb.JoinRequestPayload) error 
 	if len(b) != 18 {
 		return errExpectedLengthEncodedEqual("JoinRequestPayload", 18)(len(b))
 	}
-	copyReverse(msg.JoinEUI[:], b[0:8])
-	copyReverse(msg.DevEUI[:], b[8:16])
-	copyReverse(msg.DevNonce[:], b[16:18])
+	msg.JoinEui, msg.DevEui, msg.DevNonce = make([]byte, 8), make([]byte, 8), make([]byte, 2)
+	copyReverse(msg.JoinEui, b[0:8])
+	copyReverse(msg.DevEui, b[8:16])
+	copyReverse(msg.DevNonce, b[16:18])
 	return nil
 }
 
 // AppendRejoinRequestPayload appends encoded msg to dst.
-func AppendRejoinRequestPayload(dst []byte, msg ttnpb.RejoinRequestPayload) ([]byte, error) {
+func AppendRejoinRequestPayload(dst []byte, msg *ttnpb.RejoinRequestPayload) ([]byte, error) {
 	dst = append(dst, byte(msg.RejoinType))
 	switch msg.RejoinType {
 	case 0, 2:
-		dst = appendReverse(dst, msg.NetID[:]...)
-		dst = appendReverse(dst, msg.DevEUI[:]...)
+		if n := len(msg.NetId); n != 3 {
+			return nil, errExpectedLengthEqual("NetID", 3)(n)
+		}
+		dst = appendReverse(dst, msg.NetId...)
+		if n := len(msg.DevEui); n != 8 {
+			return nil, errExpectedLengthEqual("DevEUI", 8)(n)
+		}
+		dst = appendReverse(dst, msg.DevEui...)
 	case 1:
-		dst = appendReverse(dst, msg.JoinEUI[:]...)
-		dst = appendReverse(dst, msg.DevEUI[:]...)
+		if n := len(msg.JoinEui); n != 8 {
+			return nil, errExpectedLengthEqual("JoinEUI", 8)(n)
+		}
+		dst = appendReverse(dst, msg.JoinEui...)
+		if n := len(msg.DevEui); n != 8 {
+			return nil, errExpectedLengthEqual("DevEUI", 8)(n)
+		}
+		dst = appendReverse(dst, msg.DevEui...)
 	default:
 		return nil, errUnknown("RejoinType")(msg.RejoinType)
 	}
@@ -394,7 +433,7 @@ func AppendRejoinRequestPayload(dst []byte, msg ttnpb.RejoinRequestPayload) ([]b
 }
 
 // MarshalRejoinRequestPayload returns encoded msg.
-func MarshalRejoinRequestPayload(msg ttnpb.RejoinRequestPayload) ([]byte, error) {
+func MarshalRejoinRequestPayload(msg *ttnpb.RejoinRequestPayload) ([]byte, error) {
 	if msg.RejoinType == 1 {
 		return AppendRejoinRequestPayload(make([]byte, 0, 19), msg)
 	}
@@ -407,21 +446,23 @@ var errEncryptedJoinAcceptPayloadLength = unexpectedValue(
 
 // UnmarshalRejoinRequestPayload unmarshals b into msg.
 func UnmarshalRejoinRequestPayload(b []byte, msg *ttnpb.RejoinRequestPayload) error {
-	msg.RejoinType = ttnpb.RejoinType(b[0])
+	msg.RejoinType = ttnpb.RejoinRequestType(b[0])
 	switch msg.RejoinType {
 	case 0, 2:
 		if len(b) != 14 {
 			return errExpectedLengthEqual("RejoinRequestPayload", 14)(len(b))
 		}
-		copyReverse(msg.NetID[:], b[1:4])
-		copyReverse(msg.DevEUI[:], b[4:12])
+		msg.NetId, msg.DevEui = make([]byte, 3), make([]byte, 8)
+		copyReverse(msg.NetId, b[1:4])
+		copyReverse(msg.DevEui, b[4:12])
 		msg.RejoinCnt = byteutil.ParseUint32(b[12:14])
 	case 1:
 		if len(b) != 19 {
 			return errExpectedLengthEqual("RejoinRequestPayload", 19)(len(b))
 		}
-		copyReverse(msg.JoinEUI[:], b[1:9])
-		copyReverse(msg.DevEUI[:], b[9:17])
+		msg.JoinEui, msg.DevEui = make([]byte, 8), make([]byte, 8)
+		copyReverse(msg.JoinEui, b[1:9])
+		copyReverse(msg.DevEui, b[9:17])
 		msg.RejoinCnt = byteutil.ParseUint32(b[17:19])
 	default:
 		return errUnknown("RejoinType")(msg.RejoinType.String())
@@ -430,27 +471,30 @@ func UnmarshalRejoinRequestPayload(b []byte, msg *ttnpb.RejoinRequestPayload) er
 }
 
 // AppendMessage appends encoded msg to dst.
-func AppendMessage(dst []byte, msg ttnpb.Message) ([]byte, error) {
-	dst, err := AppendMHDR(dst, msg.MHDR)
+func AppendMessage(dst []byte, msg *ttnpb.Message) ([]byte, error) {
+	if msg.MHdr == nil {
+		return nil, errMissing("MHDR")
+	}
+	dst, err := AppendMHDR(dst, msg.MHdr)
 	if err != nil {
 		return nil, errFailedEncoding("MHDR").WithCause(err)
 	}
-	switch msg.MType {
+	switch msg.MHdr.MType {
 	case ttnpb.MType_CONFIRMED_DOWN, ttnpb.MType_UNCONFIRMED_DOWN:
-		pld := msg.GetMACPayload()
+		pld := msg.GetMacPayload()
 		if pld == nil {
 			return nil, errMissing("MACPayload")
 		}
-		dst, err = AppendMACPayload(dst, *pld, false)
+		dst, err = AppendMACPayload(dst, pld, false)
 		if err != nil {
 			return nil, errFailedEncoding("downlink MACPayload").WithCause(err)
 		}
 	case ttnpb.MType_CONFIRMED_UP, ttnpb.MType_UNCONFIRMED_UP:
-		pld := msg.GetMACPayload()
+		pld := msg.GetMacPayload()
 		if pld == nil {
 			return nil, errMissing("MACPayload")
 		}
-		dst, err = AppendMACPayload(dst, *pld, true)
+		dst, err = AppendMACPayload(dst, pld, true)
 		if err != nil {
 			return nil, errFailedEncoding("uplink MACPayload").WithCause(err)
 		}
@@ -459,7 +503,7 @@ func AppendMessage(dst []byte, msg ttnpb.Message) ([]byte, error) {
 		if pld == nil {
 			return nil, errMissing("JoinRequestPayload")
 		}
-		dst, err = AppendJoinRequestPayload(dst, *pld)
+		dst, err = AppendJoinRequestPayload(dst, pld)
 		if err != nil {
 			return nil, errFailedEncoding("JoinRequestPayload").WithCause(err)
 		}
@@ -468,7 +512,7 @@ func AppendMessage(dst []byte, msg ttnpb.Message) ([]byte, error) {
 		if pld == nil {
 			return nil, errMissing("RejoinRequestPayload")
 		}
-		dst, err = AppendRejoinRequestPayload(dst, *pld)
+		dst, err = AppendRejoinRequestPayload(dst, pld)
 		if err != nil {
 			return nil, errFailedEncoding("RejoinRequestPayload").WithCause(err)
 		}
@@ -482,16 +526,21 @@ func AppendMessage(dst []byte, msg ttnpb.Message) ([]byte, error) {
 			return nil, errEncryptedJoinAcceptPayloadLength(n)
 		}
 		dst = append(dst, pld.Encrypted...)
+	case ttnpb.MType_PROPRIETARY:
+		return nil, errProprietary.New()
 	default:
-		return nil, errUnknown("MType")(msg.MType.String())
+		return nil, errUnknown("MType")(msg.MHdr.MType.String())
 	}
-	dst = append(dst, msg.MIC...)
+	dst = append(dst, msg.Mic...)
 	return dst, nil
 }
 
 // MarshalMessage returns encoded msg.
-func MarshalMessage(msg ttnpb.Message) ([]byte, error) {
-	switch msg.MType {
+func MarshalMessage(msg *ttnpb.Message) ([]byte, error) {
+	if msg.MHdr == nil {
+		return nil, errMissing("MHDR")
+	}
+	switch msg.MHdr.MType {
 	case ttnpb.MType_CONFIRMED_DOWN, ttnpb.MType_UNCONFIRMED_DOWN, ttnpb.MType_CONFIRMED_UP, ttnpb.MType_UNCONFIRMED_UP:
 		// MHDR(1) + Payload(up to 250) + MIC(4)
 		return AppendMessage(make([]byte, 0, 255), msg)
@@ -504,8 +553,10 @@ func MarshalMessage(msg ttnpb.Message) ([]byte, error) {
 	case ttnpb.MType_JOIN_ACCEPT:
 		// MHDR(1) + Encrypted payload(16|32)
 		return AppendMessage(make([]byte, 0, 33), msg)
+	case ttnpb.MType_PROPRIETARY:
+		return nil, errProprietary.New()
 	default:
-		return nil, errUnknown("MType")(msg.MType.String())
+		return nil, errUnknown("MType")(msg.MHdr.MType.String())
 	}
 }
 
@@ -515,10 +566,11 @@ func UnmarshalMessage(b []byte, msg *ttnpb.Message) error {
 	if n == 0 {
 		return errMissing("PHYPayload")
 	}
-	if err := UnmarshalMHDR(b[0:1], &msg.MHDR); err != nil {
+	msg.MHdr = &ttnpb.MHDR{}
+	if err := UnmarshalMHDR(b[0:1], msg.MHdr); err != nil {
 		return errFailedDecoding("MHDR").WithCause(err)
 	}
-	switch msg.MHDR.MType {
+	switch msg.MHdr.MType {
 	case ttnpb.MType_CONFIRMED_DOWN, ttnpb.MType_UNCONFIRMED_DOWN:
 		if n < 12 {
 			return errExpectedLengthHigherOrEqual("FHDR", 7)(n - 5)
@@ -527,8 +579,8 @@ func UnmarshalMessage(b []byte, msg *ttnpb.Message) error {
 		if err := UnmarshalMACPayload(b[1:n-4], pld, false); err != nil {
 			return errFailedDecoding("MACPayload").WithCause(err)
 		}
-		msg.Payload = &ttnpb.Message_MACPayload{MACPayload: pld}
-		msg.MIC = b[n-4:]
+		msg.Payload = &ttnpb.Message_MacPayload{MacPayload: pld}
+		msg.Mic = b[n-4:]
 	case ttnpb.MType_CONFIRMED_UP, ttnpb.MType_UNCONFIRMED_UP:
 		if n < 12 {
 			return errExpectedLengthHigherOrEqual("FHDR", 7)(n - 5)
@@ -537,8 +589,8 @@ func UnmarshalMessage(b []byte, msg *ttnpb.Message) error {
 		if err := UnmarshalMACPayload(b[1:n-4], pld, true); err != nil {
 			return errFailedDecoding("MACPayload").WithCause(err)
 		}
-		msg.Payload = &ttnpb.Message_MACPayload{MACPayload: pld}
-		msg.MIC = b[n-4:]
+		msg.Payload = &ttnpb.Message_MacPayload{MacPayload: pld}
+		msg.Mic = b[n-4:]
 	case ttnpb.MType_JOIN_REQUEST:
 		if n != 23 {
 			return errExpectedLengthEqual("JoinRequestPHYPayload", 23)(n)
@@ -548,7 +600,7 @@ func UnmarshalMessage(b []byte, msg *ttnpb.Message) error {
 			return errFailedDecoding("JoinRequestPayload").WithCause(err)
 		}
 		msg.Payload = &ttnpb.Message_JoinRequestPayload{JoinRequestPayload: pld}
-		msg.MIC = b[19:]
+		msg.Mic = b[19:]
 	case ttnpb.MType_REJOIN_REQUEST:
 		if n < 2 {
 			return errExpectedLengthTwoChoices("RejoinRequestPHYPayload", 19, 24)(n)
@@ -569,74 +621,72 @@ func UnmarshalMessage(b []byte, msg *ttnpb.Message) error {
 			return errFailedDecoding("RejoinRequestPayload").WithCause(err)
 		}
 		msg.Payload = &ttnpb.Message_RejoinRequestPayload{RejoinRequestPayload: pld}
-		msg.MIC = b[micIdx:]
+		msg.Mic = b[micIdx:]
 	case ttnpb.MType_JOIN_ACCEPT:
 		if n != 17 && n != 33 {
 			return errExpectedLengthTwoChoices("JoinAcceptPHYPayload", 17, 33)(n)
 		}
 		msg.Payload = &ttnpb.Message_JoinAcceptPayload{JoinAcceptPayload: &ttnpb.JoinAcceptPayload{Encrypted: b[1:]}}
+	case ttnpb.MType_PROPRIETARY:
+		return errProprietary.New()
 	default:
-		return errUnknown("MType")(msg.MType.String())
+		return errUnknown("MType")(msg.MHdr.MType.String())
 	}
 	return nil
 }
 
-// GetUplinkMessageIdentifiers parses the PHYPayload and retrieves the EndDeviceIdentifers (except DeviceID).
-func GetUplinkMessageIdentifiers(phyPayload []byte) (ttnpb.EndDeviceIdentifiers, error) {
+// GetUplinkMessageIdentifiers parses the PHYPayload and retrieves the EndDeviceIdentifiers (except DeviceID).
+func GetUplinkMessageIdentifiers(phyPayload []byte) (*ttnpb.EndDeviceIdentifiers, error) {
 	n := len(phyPayload)
 	if n == 0 {
-		return ttnpb.EndDeviceIdentifiers{}, errMissing("PHYPayload")
+		return nil, errMissing("PHYPayload")
 	}
 	var mhdr ttnpb.MHDR
 	if err := UnmarshalMHDR(phyPayload[0:1], &mhdr); err != nil {
-		return ttnpb.EndDeviceIdentifiers{}, errFailedDecoding("MHDR").WithCause(err)
+		return nil, errFailedDecoding("MHDR").WithCause(err)
 	}
-	var ids ttnpb.EndDeviceIdentifiers
 	switch mhdr.MType {
 	case ttnpb.MType_CONFIRMED_UP, ttnpb.MType_UNCONFIRMED_UP:
 		if n < 12 {
-			return ttnpb.EndDeviceIdentifiers{}, errExpectedLengthHigherOrEqual("FHDR", 7)(n - 5)
+			return nil, errExpectedLengthHigherOrEqual("FHDR", 7)(n - 5)
 		}
 		var devAddr types.DevAddr
 		copyReverse(devAddr[:], phyPayload[1:5])
-		ids.DevAddr = &devAddr
-		return ids, nil
+		return &ttnpb.EndDeviceIdentifiers{DevAddr: devAddr.Bytes()}, nil
 	case ttnpb.MType_JOIN_REQUEST:
 		if n != 23 {
-			return ttnpb.EndDeviceIdentifiers{}, errExpectedLengthEqual("JoinRequestPHYPayload", 23)(n)
+			return nil, errExpectedLengthEqual("JoinRequestPHYPayload", 23)(n)
 		}
 		var joinEUI, devEUI types.EUI64
 		copyReverse(joinEUI[:], phyPayload[1:9])
 		copyReverse(devEUI[:], phyPayload[9:17])
-		ids.JoinEUI = &joinEUI
-		ids.DevEUI = &devEUI
-		return ids, nil
+		return &ttnpb.EndDeviceIdentifiers{DevEui: devEUI.Bytes(), JoinEui: joinEUI.Bytes()}, nil
 	case ttnpb.MType_REJOIN_REQUEST:
 		if n != 19 && n != 24 {
-			return ttnpb.EndDeviceIdentifiers{}, errExpectedLengthTwoChoices("RejoinRequestPHYPayload", 19, 24)(n)
+			return nil, errExpectedLengthTwoChoices("RejoinRequestPHYPayload", 19, 24)(n)
 		}
 		switch phyPayload[1] {
 		case 0, 2:
 			if n != 19 {
-				return ttnpb.EndDeviceIdentifiers{}, errExpectedLengthEqual("RejoinRequestPHYPayload", 19)(n)
+				return nil, errExpectedLengthEqual("RejoinRequestPHYPayload", 19)(n)
 			}
 			var devEUI types.EUI64
 			copyReverse(devEUI[:], phyPayload[5:13])
-			ids.DevEUI = &devEUI
+			return &ttnpb.EndDeviceIdentifiers{DevEui: devEUI.Bytes()}, nil
 		case 1:
 			if n != 24 {
-				return ttnpb.EndDeviceIdentifiers{}, errExpectedLengthEqual("RejoinRequestPHYPayload", 24)(n)
+				return nil, errExpectedLengthEqual("RejoinRequestPHYPayload", 24)(n)
 			}
 			var joinEUI, devEUI types.EUI64
 			copyReverse(joinEUI[:], phyPayload[2:10])
 			copyReverse(devEUI[:], phyPayload[10:18])
-			ids.JoinEUI = &joinEUI
-			ids.DevEUI = &devEUI
+			return &ttnpb.EndDeviceIdentifiers{DevEui: devEUI.Bytes(), JoinEui: joinEUI.Bytes()}, nil
 		default:
-			return ttnpb.EndDeviceIdentifiers{}, errUnknown("RejoinType")(phyPayload[1])
+			return nil, errUnknown("RejoinType")(phyPayload[1])
 		}
-		return ids, nil
+	case ttnpb.MType_PROPRIETARY:
+		return nil, errProprietary.New()
 	default:
-		return ttnpb.EndDeviceIdentifiers{}, errUnknown("MType")(mhdr.MType.String())
+		return nil, errUnknown("MType")(mhdr.MType.String())
 	}
 }

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import autoBind from 'auto-bind'
+
 import Marshaler from '../util/marshaler'
 
 import ApiKeys from './api-keys'
@@ -26,8 +28,11 @@ class Users {
         list: 'user_ids.user_id',
         create: 'user_ids.user_id',
         update: 'user_ids.user_id',
+        delete: 'user_ids.user_id',
       },
     })
+
+    autoBind(this)
   }
 
   _addState(fieldMask, user) {
@@ -83,6 +88,24 @@ class Users {
   async deleteById(id) {
     const response = await this._api.UserRegistry.Delete({
       routeParams: { user_id: id },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
+  async purgeById(id) {
+    const response = await this._api.UserRegistry.Purge({
+      routeParams: { user_id: id },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
+  async restoreById(id) {
+    const response = await this._api.UserRegistry.Restore({
+      routeParams: {
+        user_id: id,
+      },
     })
 
     return Marshaler.payloadSingleResponse(response)
@@ -153,6 +176,31 @@ class Users {
         'user_ids.user_id': id,
       },
     })
+  }
+
+  // Invitations.
+  async sendInvite(email) {
+    const response = await this._api.UserInvitationRegistry.Send(undefined, email)
+
+    return Marshaler.unwrapInvitation(response)
+  }
+
+  async getAllInvitations(params, selector) {
+    const fieldMask = Marshaler.selectorToFieldMask(selector)
+    const result = await this._api.UserInvitationRegistry.List(undefined, {
+      ...params,
+      ...fieldMask,
+    })
+    const invitations = Marshaler.payloadListResponse('invitations', result)
+    invitations.invitations.map(i => this._addState(fieldMask, i))
+
+    return invitations
+  }
+
+  async deleteInvite(email) {
+    const response = await this._api.UserInvitationRegistry.Delete(undefined, email)
+
+    return Marshaler.unwrapInvitation(response)
   }
 }
 

@@ -23,14 +23,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
-	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mock"
 	. "go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/udp"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/scheduling"
+	mockis "go.thethings.network/lorawan-stack/v3/pkg/identityserver/mock"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	encoding "go.thethings.network/lorawan-stack/v3/pkg/ttnpb/udp"
@@ -40,7 +42,7 @@ import (
 )
 
 var (
-	registeredGatewayID = ttnpb.GatewayIdentifiers{GatewayID: "test-gateway"}
+	registeredGatewayID = ttnpb.GatewayIdentifiers{GatewayId: "test-gateway"}
 
 	timeout = (1 << 4) * test.Delay
 
@@ -60,12 +62,21 @@ func TestConnection(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	c := componenttest.NewComponent(t, &component.Config{})
-	c.FrequencyPlans = frequencyplans.NewStore(test.FrequencyPlansFetcher)
+	is, _, closeIS := mockis.New(ctx)
+	defer closeIS()
+
+	c := componenttest.NewComponent(t, &component.Config{
+		ServiceBase: config.ServiceBase{
+			FrequencyPlans: config.FrequencyPlansConfig{
+				ConfigSource: "static",
+				Static:       test.StaticFrequencyPlans,
+			},
+		},
+	})
 	componenttest.StartComponent(t, c)
 	defer c.Close()
 
-	gs := mock.NewServer(c)
+	gs := mock.NewServer(c, is)
 	addr, _ := net.ResolveUDPAddr("udp", ":0")
 	lis, err := net.ListenUDP("udp", addr)
 	if !a.So(err, should.BeNil) {
@@ -178,7 +189,7 @@ func TestConnection(t *testing.T) {
 
 			// Assert claim, give some time.
 			<-time.After(timeout)
-			hasClaim := gs.HasDownlinkClaim(ctx, conn.Gateway().GatewayIdentifiers)
+			hasClaim := gs.HasDownlinkClaim(ctx, conn.Gateway().GetIds())
 			if tc.LosesDownlinkPath {
 				a.So(hasClaim, should.BeFalse)
 			} else {
@@ -200,12 +211,21 @@ func TestTraffic(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	c := componenttest.NewComponent(t, &component.Config{})
-	c.FrequencyPlans = frequencyplans.NewStore(test.FrequencyPlansFetcher)
+	is, _, closeIS := mockis.New(ctx)
+	defer closeIS()
+
+	c := componenttest.NewComponent(t, &component.Config{
+		ServiceBase: config.ServiceBase{
+			FrequencyPlans: config.FrequencyPlansConfig{
+				ConfigSource: "static",
+				Static:       test.StaticFrequencyPlans,
+			},
+		},
+	})
 	componenttest.StartComponent(t, c)
 	defer c.Close()
 
-	gs := mock.NewServer(c)
+	gs := mock.NewServer(c, is)
 	addr, _ := net.ResolveUDPAddr("udp", ":0")
 	lis, err := net.ListenUDP("udp", addr)
 	if !a.So(err, should.BeNil) {
@@ -306,7 +326,7 @@ func TestTraffic(t *testing.T) {
 					case up := <-conn.Up():
 						data, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(p.Data, "="))
 						a.So(err, should.BeNil)
-						a.So(up.RawPayload, should.Resemble, data)
+						a.So(up.Message.RawPayload, should.Resemble, data)
 					case <-time.After(timeout):
 						t.Fatal("Receive expected uplink timeout")
 					}
@@ -368,10 +388,11 @@ func TestTraffic(t *testing.T) {
 				Path: &ttnpb.DownlinkPath{
 					Path: &ttnpb.DownlinkPath_UplinkToken{
 						UplinkToken: io.MustUplinkToken(
-							ttnpb.GatewayAntennaIdentifiers{GatewayIdentifiers: registeredGatewayID},
+							&ttnpb.GatewayAntennaIdentifiers{GatewayIds: &registeredGatewayID},
 							uint32(300*test.Delay/time.Microsecond),
 							scheduling.ConcentratorTime(300*test.Delay),
 							time.Unix(0, int64(300*test.Delay)),
+							nil,
 						),
 					},
 				},
@@ -379,12 +400,20 @@ func TestTraffic(t *testing.T) {
 					RawPayload: []byte{0x01},
 					Settings: &ttnpb.DownlinkMessage_Request{
 						Request: &ttnpb.TxRequest{
-							Class:            ttnpb.CLASS_A,
-							Priority:         ttnpb.TxSchedulePriority_NORMAL,
-							Rx1Delay:         ttnpb.RX_DELAY_1,
-							Rx1DataRateIndex: 5,
-							Rx1Frequency:     868100000,
-							FrequencyPlanID:  test.EUFrequencyPlanID,
+							Class:    ttnpb.Class_CLASS_A,
+							Priority: ttnpb.TxSchedulePriority_NORMAL,
+							Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
+							Rx1DataRate: &ttnpb.DataRate{
+								Modulation: &ttnpb.DataRate_Lora{
+									Lora: &ttnpb.LoRaDataRate{
+										SpreadingFactor: 7,
+										Bandwidth:       125000,
+										CodingRate:      band.Cr4_5,
+									},
+								},
+							},
+							Rx1Frequency:    868100000,
+							FrequencyPlanId: test.EUFrequencyPlanID,
 						},
 					},
 				},
@@ -402,10 +431,11 @@ func TestTraffic(t *testing.T) {
 				Path: &ttnpb.DownlinkPath{
 					Path: &ttnpb.DownlinkPath_UplinkToken{
 						UplinkToken: io.MustUplinkToken(
-							ttnpb.GatewayAntennaIdentifiers{GatewayIdentifiers: registeredGatewayID},
+							&ttnpb.GatewayAntennaIdentifiers{GatewayIds: &registeredGatewayID},
 							uint32(600*test.Delay/time.Microsecond),
 							scheduling.ConcentratorTime(600*test.Delay),
 							time.Unix(0, int64(600*test.Delay)),
+							nil,
 						),
 					},
 				},
@@ -413,12 +443,20 @@ func TestTraffic(t *testing.T) {
 					RawPayload: []byte{0x03},
 					Settings: &ttnpb.DownlinkMessage_Request{
 						Request: &ttnpb.TxRequest{
-							Class:            ttnpb.CLASS_A,
-							Priority:         ttnpb.TxSchedulePriority_NORMAL,
-							Rx1Delay:         ttnpb.RX_DELAY_1,
-							Rx1DataRateIndex: 5,
-							Rx1Frequency:     868100000,
-							FrequencyPlanID:  test.EUFrequencyPlanID,
+							Class:    ttnpb.Class_CLASS_A,
+							Priority: ttnpb.TxSchedulePriority_NORMAL,
+							Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
+							Rx1DataRate: &ttnpb.DataRate{
+								Modulation: &ttnpb.DataRate_Lora{
+									Lora: &ttnpb.LoRaDataRate{
+										SpreadingFactor: 7,
+										Bandwidth:       125000,
+										CodingRate:      band.Cr4_5,
+									},
+								},
+							},
+							Rx1Frequency:    868100000,
+							FrequencyPlanId: test.EUFrequencyPlanID,
 						},
 					},
 				},
@@ -436,10 +474,11 @@ func TestTraffic(t *testing.T) {
 				Path: &ttnpb.DownlinkPath{
 					Path: &ttnpb.DownlinkPath_UplinkToken{
 						UplinkToken: io.MustUplinkToken(
-							ttnpb.GatewayAntennaIdentifiers{GatewayIdentifiers: registeredGatewayID},
+							&ttnpb.GatewayAntennaIdentifiers{GatewayIds: &registeredGatewayID},
 							uint32((15*time.Second+300*test.Delay)/time.Microsecond),
 							scheduling.ConcentratorTime(15*time.Second+300*test.Delay),
 							time.Unix(0, int64((15*time.Second+300*test.Delay))),
+							nil,
 						),
 					},
 				},
@@ -447,12 +486,20 @@ func TestTraffic(t *testing.T) {
 					RawPayload: []byte{0x04},
 					Settings: &ttnpb.DownlinkMessage_Request{
 						Request: &ttnpb.TxRequest{
-							Class:            ttnpb.CLASS_A,
-							Priority:         ttnpb.TxSchedulePriority_NORMAL,
-							Rx1Delay:         ttnpb.RX_DELAY_1,
-							Rx1DataRateIndex: 5,
-							Rx1Frequency:     868100000,
-							FrequencyPlanID:  test.EUFrequencyPlanID,
+							Class:    ttnpb.Class_CLASS_A,
+							Priority: ttnpb.TxSchedulePriority_NORMAL,
+							Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
+							Rx1DataRate: &ttnpb.DataRate{
+								Modulation: &ttnpb.DataRate_Lora{
+									Lora: &ttnpb.LoRaDataRate{
+										SpreadingFactor: 7,
+										Bandwidth:       125000,
+										CodingRate:      band.Cr4_5,
+									},
+								},
+							},
+							Rx1Frequency:    868100000,
+							FrequencyPlanId: test.EUFrequencyPlanID,
 						},
 					},
 				},
@@ -506,7 +553,7 @@ func TestTraffic(t *testing.T) {
 
 				// Send the downlink message, optionally buffer first.
 				conn.Gateway().ScheduleDownlinkLate = tc.ScheduleDownlinkLate
-				_, err = conn.ScheduleDown(tc.Path, tc.Message)
+				_, _, _, err = conn.ScheduleDown(tc.Path, tc.Message)
 				if !a.So(err, should.BeNil) {
 					t.FailNow()
 				}

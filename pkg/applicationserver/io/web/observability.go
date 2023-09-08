@@ -15,9 +15,20 @@
 package web
 
 import (
+	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/metrics"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+)
+
+var evtWebhookFail = events.Define(
+	"as.webhook.fail", "fail to send webhook",
+	events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+	events.WithErrorDataType(),
+	events.WithPropagateToParent(),
 )
 
 const (
@@ -26,21 +37,15 @@ const (
 )
 
 var webhookMetrics = &messageMetrics{
-	webhookQueue: metrics.NewGauge(
-		prometheus.GaugeOpts{
-			Subsystem: subsystem,
-			Name:      "queue_size",
-			Help:      "Webhook queue size",
-		},
-	),
-	webhooksSent: metrics.NewCounter(
+	webhooksSent: metrics.NewContextualCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: subsystem,
 			Name:      "sent_total",
 			Help:      "Total number of sent webhooks",
 		},
+		[]string{},
 	),
-	webhooksFailed: metrics.NewCounterVec(
+	webhooksFailed: metrics.NewContextualCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: subsystem,
 			Name:      "failed_total",
@@ -51,45 +56,34 @@ var webhookMetrics = &messageMetrics{
 }
 
 func init() {
-	webhookMetrics.webhookQueue.Set(0)
-	webhookMetrics.webhooksSent.Add(0)
 	metrics.MustRegister(webhookMetrics)
 }
 
 type messageMetrics struct {
-	webhookQueue   prometheus.Gauge
-	webhooksSent   prometheus.Counter
-	webhooksFailed *prometheus.CounterVec
+	webhooksSent   *metrics.ContextualCounterVec
+	webhooksFailed *metrics.ContextualCounterVec
 }
 
 func (m messageMetrics) Describe(ch chan<- *prometheus.Desc) {
-	m.webhookQueue.Describe(ch)
 	m.webhooksSent.Describe(ch)
 	m.webhooksFailed.Describe(ch)
 }
 
 func (m messageMetrics) Collect(ch chan<- prometheus.Metric) {
-	m.webhookQueue.Collect(ch)
 	m.webhooksSent.Collect(ch)
 	m.webhooksFailed.Collect(ch)
 }
 
-func registerWebhookQueued() {
-	webhookMetrics.webhookQueue.Inc()
+func registerWebhookSent(ctx context.Context) {
+	webhookMetrics.webhooksSent.WithLabelValues(ctx).Inc()
 }
 
-func registerWebhookDequeued() {
-	webhookMetrics.webhookQueue.Dec()
-}
-
-func registerWebhookSent() {
-	webhookMetrics.webhooksSent.Inc()
-}
-
-func registerWebhookFailed(err error) {
+func registerWebhookFailed(ctx context.Context, err error) {
 	errorLabel := unknown
 	if ttnErr, ok := errors.From(err); ok {
 		errorLabel = ttnErr.FullName()
 	}
-	webhookMetrics.webhooksFailed.WithLabelValues(errorLabel).Inc()
+	webhookMetrics.webhooksFailed.WithLabelValues(ctx, errorLabel).Inc()
+	ids := deviceIDFromContext(ctx)
+	events.Publish(evtWebhookFail.NewWithIdentifiersAndData(ctx, ids, err))
 }

@@ -19,18 +19,28 @@ import (
 	"math"
 	"time"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
 // Compute computes the time-on-air for the given payload size and the TxSettings.
 // This function takes into account PHYPayload.
-func Compute(payloadSize int, settings ttnpb.TxSettings) (d time.Duration, err error) {
+func Compute(payloadSize int, settings *ttnpb.TxSettings) (d time.Duration, err error) {
 	switch dr := settings.DataRate.Modulation.(type) {
-	case *ttnpb.DataRate_LoRa:
-		return computeLoRa(payloadSize, settings.Frequency, uint8(dr.LoRa.SpreadingFactor), dr.LoRa.Bandwidth, settings.CodingRate, settings.EnableCRC)
-	case *ttnpb.DataRate_FSK:
-		return computeFSK(payloadSize, settings.Frequency, dr.FSK.BitRate, settings.EnableCRC)
+	case *ttnpb.DataRate_Lora:
+		return computeLoRa(
+			payloadSize,
+			settings.Frequency,
+			uint8(dr.Lora.SpreadingFactor),
+			dr.Lora.Bandwidth,
+			dr.Lora.CodingRate,
+			settings.EnableCrc,
+		)
+	case *ttnpb.DataRate_Fsk:
+		return computeFSK(payloadSize, settings.Frequency, dr.Fsk.BitRate, settings.EnableCrc)
+	case *ttnpb.DataRate_Lrfhss:
+		return computeLRFHSS(payloadSize, dr.Lrfhss.CodingRate, settings.EnableCrc)
 	default:
 		panic("invalid modulation")
 	}
@@ -56,13 +66,13 @@ func computeLoRa(payloadSize int, frequency uint64, spreadingFactor uint8, bandw
 		// See http://www.semtech.com/images/datasheet/LoraDesignGuide_STD.pdf, page 7.
 		var cr float64
 		switch codingRate {
-		case "4/5":
+		case band.Cr4_5:
 			cr = 1
-		case "4/6":
+		case band.Cr4_6:
 			cr = 2
-		case "4/7":
+		case band.Cr4_7:
 			cr = 3
-		case "4/8":
+		case band.Cr4_8:
 			cr = 4
 		default:
 			return 0, errCodingRate.WithAttributes("coding_rate", codingRate)
@@ -94,7 +104,7 @@ func computeLoRa(payloadSize int, frequency uint64, spreadingFactor uint8, bandw
 			cr = 5
 		case "4/6LI":
 			cr = 6
-		case "4/7LI", "4/8LI": // 4/7LI is wrongly defined; it is in fact 4/8LI.
+		case "4/7LI", band.Cr4_8LI: // 4/7LI is wrongly defined; it is in fact 4/8LI.
 			cr = 8
 		default:
 			return 0, errCodingRate.New()
@@ -139,4 +149,25 @@ func computeFSK(payloadSize int, frequency uint64, bitRate uint32, crc bool) (ti
 	default:
 		return 0, errFrequency.WithAttributes("frequency", frequency)
 	}
+}
+
+func computeLRFHSS(phyPayloadLength int, codingRate string, crc bool) (time.Duration, error) {
+	var n int
+	switch codingRate {
+	case "1/3":
+		n = 3
+	case "2/3":
+		n = 2
+	default:
+		return 0, errCodingRate.WithAttributes("coding_rate", codingRate)
+	}
+
+	timeOnAir := time.Duration(n) * 233472 * time.Microsecond
+	switch codingRate {
+	case "1/3":
+		timeOnAir += time.Duration(math.Ceil((float64(phyPayloadLength+3) / 2))) * 102400 * time.Microsecond
+	case "2/3":
+		timeOnAir += time.Duration(math.Ceil((float64(phyPayloadLength+3) / 4))) * 102400 * time.Microsecond
+	}
+	return timeOnAir, nil
 }

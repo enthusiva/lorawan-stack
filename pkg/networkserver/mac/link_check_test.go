@@ -18,7 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
@@ -40,18 +41,19 @@ func TestHandleLinkCheckReq(t *testing.T) {
 		{
 			Name: "SF13BW250",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{},
 			},
 			Message: &ttnpb.UplinkMessage{
-				Settings: ttnpb.TxSettings{
-					DataRate: ttnpb.DataRate{
-						Modulation: &ttnpb.DataRate_LoRa{
-							LoRa: &ttnpb.LoRaDataRate{
+				Settings: &ttnpb.TxSettings{
+					DataRate: &ttnpb.DataRate{
+						Modulation: &ttnpb.DataRate_Lora{
+							Lora: &ttnpb.LoRaDataRate{
 								SpreadingFactor: 13,
 								Bandwidth:       250000,
+								CodingRate:      band.Cr4_5,
 							},
 						},
 					},
@@ -65,18 +67,19 @@ func TestHandleLinkCheckReq(t *testing.T) {
 		{
 			Name: "SF12BW250/no gateways",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{},
 			},
 			Message: &ttnpb.UplinkMessage{
-				Settings: ttnpb.TxSettings{
-					DataRate: ttnpb.DataRate{
-						Modulation: &ttnpb.DataRate_LoRa{
-							LoRa: &ttnpb.LoRaDataRate{
+				Settings: &ttnpb.TxSettings{
+					DataRate: &ttnpb.DataRate{
+						Modulation: &ttnpb.DataRate_Lora{
+							Lora: &ttnpb.LoRaDataRate{
 								SpreadingFactor: 12,
 								Bandwidth:       250000,
+								CodingRate:      band.Cr4_5,
 							},
 						},
 					},
@@ -89,10 +92,10 @@ func TestHandleLinkCheckReq(t *testing.T) {
 		{
 			Name: "SF12BW250/1 gateway/empty queue",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_LinkCheckAns{
 							Margin:       42, // 25-(-17)
@@ -102,22 +105,23 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Message: &ttnpb.UplinkMessage{
-				Settings: ttnpb.TxSettings{
-					DataRate: ttnpb.DataRate{
-						Modulation: &ttnpb.DataRate_LoRa{
-							LoRa: &ttnpb.LoRaDataRate{
+				Settings: &ttnpb.TxSettings{
+					DataRate: &ttnpb.DataRate{
+						Modulation: &ttnpb.DataRate_Lora{
+							Lora: &ttnpb.LoRaDataRate{
 								SpreadingFactor: 12,
 								Bandwidth:       250000,
+								CodingRate:      band.Cr4_5,
 							},
 						},
 					},
 				},
 				RxMetadata: []*ttnpb.RxMetadata{
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test",
 						},
-						SNR: 25,
+						Snr: 25,
 					},
 				},
 			},
@@ -132,7 +136,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 		{
 			Name: "SF12BW250/1 gateway/non-empty queue",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -141,7 +145,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -154,22 +158,23 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Message: &ttnpb.UplinkMessage{
-				Settings: ttnpb.TxSettings{
-					DataRate: ttnpb.DataRate{
-						Modulation: &ttnpb.DataRate_LoRa{
-							LoRa: &ttnpb.LoRaDataRate{
+				Settings: &ttnpb.TxSettings{
+					DataRate: &ttnpb.DataRate{
+						Modulation: &ttnpb.DataRate_Lora{
+							Lora: &ttnpb.LoRaDataRate{
 								SpreadingFactor: 12,
 								Bandwidth:       250000,
+								CodingRate:      band.Cr4_5,
 							},
 						},
 					},
 				},
 				RxMetadata: []*ttnpb.RxMetadata{
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test",
 						},
-						SNR: 25,
+						Snr: 25,
 					},
 				},
 			},
@@ -184,7 +189,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 		{
 			Name: "SF12BW250/3 gateways/non-empty queue",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -193,7 +198,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -206,34 +211,35 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Message: &ttnpb.UplinkMessage{
-				Settings: ttnpb.TxSettings{
-					DataRate: ttnpb.DataRate{
-						Modulation: &ttnpb.DataRate_LoRa{
-							LoRa: &ttnpb.LoRaDataRate{
+				Settings: &ttnpb.TxSettings{
+					DataRate: &ttnpb.DataRate{
+						Modulation: &ttnpb.DataRate_Lora{
+							Lora: &ttnpb.LoRaDataRate{
 								SpreadingFactor: 12,
 								Bandwidth:       250000,
+								CodingRate:      band.Cr4_5,
 							},
 						},
 					},
 				},
 				RxMetadata: []*ttnpb.RxMetadata{
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test",
 						},
-						SNR: 24,
+						Snr: 24,
 					},
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test2",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test2",
 						},
-						SNR: 25,
+						Snr: 25,
 					},
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test3",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test3",
 						},
-						SNR: 2,
+						Snr: 2,
 					},
 				},
 			},
@@ -248,7 +254,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 		{
 			Name: "SF12BW250/3 gateways + Packet Broker/non-empty queue",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -257,7 +263,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -270,43 +276,44 @@ func TestHandleLinkCheckReq(t *testing.T) {
 				},
 			},
 			Message: &ttnpb.UplinkMessage{
-				Settings: ttnpb.TxSettings{
-					DataRate: ttnpb.DataRate{
-						Modulation: &ttnpb.DataRate_LoRa{
-							LoRa: &ttnpb.LoRaDataRate{
+				Settings: &ttnpb.TxSettings{
+					DataRate: &ttnpb.DataRate{
+						Modulation: &ttnpb.DataRate_Lora{
+							Lora: &ttnpb.LoRaDataRate{
 								SpreadingFactor: 12,
 								Bandwidth:       250000,
+								CodingRate:      band.Cr4_5,
 							},
 						},
 					},
 				},
 				RxMetadata: []*ttnpb.RxMetadata{
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test",
 						},
-						SNR: 24,
+						Snr: 24,
 					},
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test2",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test2",
 						},
-						SNR: 25,
+						Snr: 25,
 					},
 					{
-						GatewayIdentifiers: cluster.PacketBrokerGatewayID,
+						GatewayIds: cluster.PacketBrokerGatewayID,
 						PacketBroker: &ttnpb.PacketBrokerMetadata{
-							ForwarderNetId:     types.NetID{0x0, 0x0, 0x42},
+							ForwarderNetId:     types.NetID{0x0, 0x0, 0x42}.Bytes(),
 							ForwarderTenantId:  "test",
 							ForwarderClusterId: "test",
 						},
-						SNR: 26,
+						Snr: 26,
 					},
 					{
-						GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-							GatewayID: "test3",
+						GatewayIds: &ttnpb.GatewayIdentifiers{
+							GatewayId: "test3",
 						},
-						SNR: 2,
+						Snr: 2,
 					},
 				},
 			},
@@ -324,7 +331,7 @@ func TestHandleLinkCheckReq(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				evs, err := HandleLinkCheckReq(ctx, dev, tc.Message)
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||

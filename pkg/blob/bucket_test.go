@@ -16,13 +16,12 @@ package blob_test
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	. "go.thethings.network/lorawan-stack/v3/pkg/blob"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -40,7 +39,7 @@ func testBucket(t *testing.T, conf config.BlobConfig) {
 	a := assertions.New(t)
 	ctx := test.Context()
 
-	bucket, err := conf.Bucket(ctx, bucketName())
+	bucket, err := conf.Bucket(ctx, bucketName(), test.HTTPClientProvider)
 	if !a.So(err, should.BeNil) {
 		t.Errorf("Failed to create bucket: %v", err)
 		return
@@ -67,7 +66,7 @@ func TestLocal(t *testing.T) {
 	a := assertions.New(t)
 
 	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("BlobTestLocal_%d", time.Now().UnixNano()/1000000))
-	if err := os.Mkdir(tmpDir, 0755); !a.So(err, should.BeNil) {
+	if err := os.Mkdir(tmpDir, 0o755); !a.So(err, should.BeNil) {
 		t.Fatalf("Failed to create temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
@@ -84,7 +83,7 @@ func TestAWS(t *testing.T) {
 	conf.AWS.Region = os.Getenv("AWS_REGION")
 	conf.AWS.AccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
 	conf.AWS.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
-	conf.HTTPClient = http.DefaultClient
+	conf.AWS.SessionToken = os.Getenv("AWS_SESSION_TOKEN")
 
 	if conf.AWS.Region == "" || conf.AWS.AccessKeyID == "" || conf.AWS.SecretAccessKey == "" {
 		t.Skip("Missing AWS credentials")

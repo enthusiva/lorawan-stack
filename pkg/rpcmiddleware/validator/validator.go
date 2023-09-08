@@ -25,10 +25,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 var (
@@ -71,22 +73,23 @@ func RegisterAllowedFieldMaskPaths(rpcFullMethod string, set bool, allPaths []st
 
 var errForbiddenFieldMaskPaths = errors.DefineInvalidArgument("field_mask_paths", "forbidden path(s) in field mask", "forbidden_paths")
 
-func forbiddenPaths(requestedPaths []string, allowedPaths map[string]struct{}) (invalidPaths []string) {
+func forbiddenPaths(requestedPaths []string, allowedPaths map[string]struct{}) []string {
+	var forbiddenPaths []string
 nextRequestedPath:
 	for _, requestedPath := range requestedPaths {
 		if _, ok := allowedPaths[requestedPath]; ok {
 			continue nextRequestedPath
 		}
-		invalidPaths = append(invalidPaths, requestedPath)
+		forbiddenPaths = append(forbiddenPaths, requestedPath)
 	}
-	return
+	return forbiddenPaths
 }
 
 func convertError(err error) error {
 	if ttnErr, ok := errors.From(err); ok {
 		return ttnErr
 	}
-	return grpc.Errorf(codes.InvalidArgument, err.Error())
+	return status.Errorf(codes.InvalidArgument, err.Error())
 }
 
 var (
@@ -94,13 +97,17 @@ var (
 	errNonZeroPath = errors.DefineInvalidArgument("non_zero_path", "path `{path}` is not zero")
 )
 
-func validateMessage(ctx context.Context, fullMethod string, msg interface{}) error {
-	if v, ok := msg.(interface {
-		GetFieldMask() types.FieldMask
-	}); ok {
+func validateMessage(ctx context.Context, fullMethod string, msg any) error {
+	var paths []string
+	switch v := msg.(type) {
+	case interface {
+		GetFieldMask() *fieldmaskpb.FieldMask
+	}:
+		paths = v.GetFieldMask().GetPaths()
+	}
+	if len(paths) > 0 {
 		region := trace.StartRegion(ctx, "validate field mask")
 
-		paths := v.GetFieldMask().Paths
 		if forbiddenPaths := forbiddenPaths(paths, allowedFieldMaskPaths[fullMethod]); len(forbiddenPaths) > 0 {
 			region.End()
 			return errForbiddenFieldMaskPaths.WithAttributes("forbidden_paths", forbiddenPaths)
@@ -151,9 +158,7 @@ func validateMessage(ctx context.Context, fullMethod string, msg interface{}) er
 		}
 		return nil
 
-	case interface {
-		Validate() error
-	}:
+	case interface{ Validate() error }:
 		defer trace.StartRegion(ctx, "validate without context").End()
 		if err := v.Validate(); err != nil {
 			return convertError(err)
@@ -169,7 +174,7 @@ func validateMessage(ctx context.Context, fullMethod string, msg interface{}) er
 		}
 		return nil
 
-	case *types.Empty:
+	case *emptypb.Empty:
 		return nil
 
 	default:
@@ -179,19 +184,21 @@ func validateMessage(ctx context.Context, fullMethod string, msg interface{}) er
 
 // UnaryServerInterceptor returns a new unary server interceptor that validates
 // incoming messages if those incoming messages implement:
-//   (A) ValidateContext(ctx context.Context) error
-//   (B) Validate() error
-//   (C) ValidateFields(...string) error
+//
+//	(A) ValidateContext(ctx context.Context) error
+//	(B) Validate() error
+//	(C) ValidateFields(...string) error
+//
 // If a message implements both, then (A) should call (B).
 //
 // Invalid messages will be rejected with the error returned from the validator,
 // if that error is a TTN error, or with an `InvalidArgument` if it isn't.
 //
 // If the RPC's FullPath has a registered list of allowed field mask paths (see
-// RegisterAllowedFieldMaskPaths) and the message implements GetFieldMask() types.FieldMask
+// RegisterAllowedFieldMaskPaths) and the message implements GetFieldMask() fieldmaskpb.FieldMask
 // then the field mask paths are validated according to the registered list.
 func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if err := validateMessage(ctx, info.FullMethod, req); err != nil {
 			return nil, err
 		}
@@ -204,7 +211,7 @@ type recvWrapper struct {
 	fullMethod string
 }
 
-func (s *recvWrapper) RecvMsg(msg interface{}) error {
+func (s *recvWrapper) RecvMsg(msg any) error {
 	if err := s.ServerStream.RecvMsg(msg); err != nil {
 		return err
 	}
@@ -216,9 +223,11 @@ func (s *recvWrapper) RecvMsg(msg interface{}) error {
 
 // StreamServerInterceptor returns a new streaming server interceptor that validates
 // incoming messages if those incoming messages implement:
-//   (A) ValidateContext(ctx context.Context) error
-//   (B) Validate() error
-//   (C) ValidateFields(...string) error
+//
+//	(A) ValidateContext(ctx context.Context) error
+//	(B) Validate() error
+//	(C) ValidateFields(...string) error
+//
 // If a message implements both, then (A) should call (B).
 //
 // Invalid messages will be rejected with the error returned from the validator,
@@ -230,10 +239,10 @@ func (s *recvWrapper) RecvMsg(msg interface{}) error {
 // RPCs, the messages will be rejected on calls to `stream.Recv()`.
 //
 // If the RPC's FullPath has a registered list of allowed field mask paths (see
-// RegisterAllowedFieldMaskPaths) and the message implements GetFieldMask() types.FieldMask
+// RegisterAllowedFieldMaskPaths) and the message implements GetFieldMask() fieldmaskpb.FieldMask
 // then the field mask paths are validated according to the registered list.
 func StreamServerInterceptor() grpc.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		return handler(srv, &recvWrapper{
 			ServerStream: stream,
 			fullMethod:   info.FullMethod,

@@ -18,11 +18,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
-	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
@@ -32,19 +30,19 @@ func listContactInfo(entityID *ttnpb.EntityIdentifiers) ([]*ttnpb.ContactInfo, e
 	if err != nil {
 		return nil, err
 	}
-	fieldMask := types.FieldMask{Paths: []string{"contact_info"}}
-	var res interface{}
-	switch id := entityID.Identifiers().(type) {
-	case *ttnpb.ApplicationIdentifiers:
-		res, err = ttnpb.NewApplicationRegistryClient(is).Get(ctx, &ttnpb.GetApplicationRequest{ApplicationIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.ClientIdentifiers:
-		res, err = ttnpb.NewClientRegistryClient(is).Get(ctx, &ttnpb.GetClientRequest{ClientIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.GatewayIdentifiers:
-		res, err = ttnpb.NewGatewayRegistryClient(is).Get(ctx, &ttnpb.GetGatewayRequest{GatewayIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.OrganizationIdentifiers:
-		res, err = ttnpb.NewOrganizationRegistryClient(is).Get(ctx, &ttnpb.GetOrganizationRequest{OrganizationIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.UserIdentifiers:
-		res, err = ttnpb.NewUserRegistryClient(is).Get(ctx, &ttnpb.GetUserRequest{UserIdentifiers: *id, FieldMask: fieldMask})
+	fieldMask := ttnpb.FieldMask("contact_info")
+	var res any
+	switch id := entityID.GetIds().(type) {
+	case *ttnpb.EntityIdentifiers_ApplicationIds:
+		res, err = ttnpb.NewApplicationRegistryClient(is).Get(ctx, &ttnpb.GetApplicationRequest{ApplicationIds: id.ApplicationIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_ClientIds:
+		res, err = ttnpb.NewClientRegistryClient(is).Get(ctx, &ttnpb.GetClientRequest{ClientIds: id.ClientIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_GatewayIds:
+		res, err = ttnpb.NewGatewayRegistryClient(is).Get(ctx, &ttnpb.GetGatewayRequest{GatewayIds: id.GatewayIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_OrganizationIds:
+		res, err = ttnpb.NewOrganizationRegistryClient(is).Get(ctx, &ttnpb.GetOrganizationRequest{OrganizationIds: id.OrganizationIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_UserIds:
+		res, err = ttnpb.NewUserRegistryClient(is).Get(ctx, &ttnpb.GetUserRequest{UserIds: id.UserIds, FieldMask: fieldMask})
 	default:
 		panic(fmt.Errorf("no contact info in %T", id))
 	}
@@ -59,24 +57,28 @@ func updateContactInfo(entityID *ttnpb.EntityIdentifiers, updater func([]*ttnpb.
 	if err != nil {
 		return nil, err
 	}
-	fieldMask := types.FieldMask{Paths: []string{"contact_info"}}
-	var res interface{}
-	switch id := entityID.Identifiers().(type) {
-	case *ttnpb.ApplicationIdentifiers:
-		res, err = ttnpb.NewApplicationRegistryClient(is).Get(ctx, &ttnpb.GetApplicationRequest{ApplicationIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.ClientIdentifiers:
-		res, err = ttnpb.NewClientRegistryClient(is).Get(ctx, &ttnpb.GetClientRequest{ClientIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.GatewayIdentifiers:
-		res, err = ttnpb.NewGatewayRegistryClient(is).Get(ctx, &ttnpb.GetGatewayRequest{GatewayIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.OrganizationIdentifiers:
-		res, err = ttnpb.NewOrganizationRegistryClient(is).Get(ctx, &ttnpb.GetOrganizationRequest{OrganizationIdentifiers: *id, FieldMask: fieldMask})
-	case *ttnpb.UserIdentifiers:
-		res, err = ttnpb.NewUserRegistryClient(is).Get(ctx, &ttnpb.GetUserRequest{UserIdentifiers: *id, FieldMask: fieldMask})
+	fieldMask := ttnpb.FieldMask("contact_info")
+	var res any
+	switch id := entityID.GetIds().(type) {
+	case *ttnpb.EntityIdentifiers_ApplicationIds:
+		res, err = ttnpb.NewApplicationRegistryClient(is).Get(ctx, &ttnpb.GetApplicationRequest{ApplicationIds: id.ApplicationIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_ClientIds:
+		res, err = ttnpb.NewClientRegistryClient(is).Get(ctx, &ttnpb.GetClientRequest{ClientIds: id.ClientIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_GatewayIds:
+		res, err = ttnpb.NewGatewayRegistryClient(is).Get(ctx, &ttnpb.GetGatewayRequest{GatewayIds: id.GatewayIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_OrganizationIds:
+		res, err = ttnpb.NewOrganizationRegistryClient(is).Get(ctx, &ttnpb.GetOrganizationRequest{OrganizationIds: id.OrganizationIds, FieldMask: fieldMask})
+	case *ttnpb.EntityIdentifiers_UserIds:
+		res, err = ttnpb.NewUserRegistryClient(is).Get(ctx, &ttnpb.GetUserRequest{UserIds: id.UserIds, FieldMask: fieldMask})
 	default:
 		panic(fmt.Errorf("no contact info in %T", id))
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	var contactInfoer interface {
+		GetContactInfo() []*ttnpb.ContactInfo
 	}
 	switch res := res.(type) {
 	case *ttnpb.Application:
@@ -84,8 +86,8 @@ func updateContactInfo(entityID *ttnpb.EntityIdentifiers, updater func([]*ttnpb.
 		if err != nil {
 			return nil, err
 		}
-		res, err = ttnpb.NewApplicationRegistryClient(is).Update(ctx, &ttnpb.UpdateApplicationRequest{
-			Application: *res,
+		contactInfoer, err = ttnpb.NewApplicationRegistryClient(is).Update(ctx, &ttnpb.UpdateApplicationRequest{
+			Application: res,
 			FieldMask:   fieldMask,
 		})
 	case *ttnpb.Client:
@@ -93,8 +95,8 @@ func updateContactInfo(entityID *ttnpb.EntityIdentifiers, updater func([]*ttnpb.
 		if err != nil {
 			return nil, err
 		}
-		res, err = ttnpb.NewClientRegistryClient(is).Update(ctx, &ttnpb.UpdateClientRequest{
-			Client:    *res,
+		contactInfoer, err = ttnpb.NewClientRegistryClient(is).Update(ctx, &ttnpb.UpdateClientRequest{
+			Client:    res,
 			FieldMask: fieldMask,
 		})
 	case *ttnpb.Gateway:
@@ -102,8 +104,8 @@ func updateContactInfo(entityID *ttnpb.EntityIdentifiers, updater func([]*ttnpb.
 		if err != nil {
 			return nil, err
 		}
-		res, err = ttnpb.NewGatewayRegistryClient(is).Update(ctx, &ttnpb.UpdateGatewayRequest{
-			Gateway:   *res,
+		contactInfoer, err = ttnpb.NewGatewayRegistryClient(is).Update(ctx, &ttnpb.UpdateGatewayRequest{
+			Gateway:   res,
 			FieldMask: fieldMask,
 		})
 	case *ttnpb.Organization:
@@ -111,8 +113,8 @@ func updateContactInfo(entityID *ttnpb.EntityIdentifiers, updater func([]*ttnpb.
 		if err != nil {
 			return nil, err
 		}
-		res, err = ttnpb.NewOrganizationRegistryClient(is).Update(ctx, &ttnpb.UpdateOrganizationRequest{
-			Organization: *res,
+		contactInfoer, err = ttnpb.NewOrganizationRegistryClient(is).Update(ctx, &ttnpb.UpdateOrganizationRequest{
+			Organization: res,
 			FieldMask:    fieldMask,
 		})
 	case *ttnpb.User:
@@ -120,18 +122,16 @@ func updateContactInfo(entityID *ttnpb.EntityIdentifiers, updater func([]*ttnpb.
 		if err != nil {
 			return nil, err
 		}
-		res, err = ttnpb.NewUserRegistryClient(is).Update(ctx, &ttnpb.UpdateUserRequest{
-			User:      *res,
+		contactInfoer, err = ttnpb.NewUserRegistryClient(is).Update(ctx, &ttnpb.UpdateUserRequest{
+			User:      res,
 			FieldMask: fieldMask,
 		})
 	}
 	if err != nil {
 		return nil, err
 	}
-	return res.(interface{ GetContactInfo() []*ttnpb.ContactInfo }).GetContactInfo(), nil
+	return contactInfoer.GetContactInfo(), nil
 }
-
-var contactInfoFlags = util.FieldFlags(&ttnpb.ContactInfo{})
 
 var (
 	errContactInfoExists           = errors.DefineAlreadyExists("contact_info_exists", "contact info already exists")
@@ -143,11 +143,13 @@ var (
 func contactInfoCommands(entity string, getID func(cmd *cobra.Command, args []string) (*ttnpb.EntityIdentifiers, error)) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "contact-info",
-		Short: fmt.Sprintf("Manage %s contact info", entity),
+		Short: fmt.Sprintf("Manage %[1]s contact info (DEPRECATED. Instead, use administrative_contact and technical_contact fields of %[1]s)", entity),
 	}
 	list := &cobra.Command{
 		Use:     fmt.Sprintf("list [%s-id]", entity),
 		Aliases: []string{"ls", "get"},
+		Short:   fmt.Sprintf("List %[1]s contact info (DEPRECATED. Instead, select administrative_contact and technical_contact fields of %[1]s)", entity),
+		Hidden:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := getID(cmd, args)
 			if err != nil {
@@ -163,19 +165,22 @@ func contactInfoCommands(entity string, getID func(cmd *cobra.Command, args []st
 	add := &cobra.Command{
 		Use:     fmt.Sprintf("create [%s-id]", entity),
 		Aliases: []string{"add", "register"},
+		Short:   fmt.Sprintf("Add %[1]s contact info (DEPRECATED. Instead, set administrative_contact and technical_contact fields of %[1]s)", entity),
+		Hidden:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := getID(cmd, args)
 			if err != nil {
 				return err
 			}
 			var contactInfo ttnpb.ContactInfo
-			if err = util.SetFields(&contactInfo, contactInfoFlags); err != nil {
+			_, err = contactInfo.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			updatedInfo, err := updateContactInfo(id, func(existing []*ttnpb.ContactInfo) ([]*ttnpb.ContactInfo, error) {
 				for _, existing := range existing {
 					if existing.ContactMethod == contactInfo.ContactMethod && existing.ContactType == contactInfo.ContactType && existing.Value == contactInfo.Value {
-						return nil, errContactInfoExists
+						return nil, errContactInfoExists.New()
 					}
 				}
 				return append(existing, &contactInfo), nil
@@ -189,13 +194,16 @@ func contactInfoCommands(entity string, getID func(cmd *cobra.Command, args []st
 	remove := &cobra.Command{
 		Use:     fmt.Sprintf("delete [%s-id]", entity),
 		Aliases: []string{"del", "remove", "rm"},
+		Short:   fmt.Sprintf("Remove %[1]s contact info (DEPRECATED. Instead, unset administrative_contact and technical_contact fields of %[1]s)", entity),
+		Hidden:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := getID(cmd, args)
 			if err != nil {
 				return err
 			}
 			var contactInfo ttnpb.ContactInfo
-			if err = util.SetFields(&contactInfo, contactInfoFlags); err != nil {
+			_, err = contactInfo.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			updatedInfo, err := updateContactInfo(id, func(existing []*ttnpb.ContactInfo) ([]*ttnpb.ContactInfo, error) {
@@ -209,7 +217,7 @@ func contactInfoCommands(entity string, getID func(cmd *cobra.Command, args []st
 					}
 				}
 				if !found {
-					return nil, errMatchingContactInfoNotFound
+					return nil, errMatchingContactInfoNotFound.New()
 				}
 				return updatedInfo, nil
 			})
@@ -254,17 +262,17 @@ func contactInfoCommands(entity string, getID func(cmd *cobra.Command, args []st
 			default:
 			}
 			if reference == "" {
-				return errNoValidationReference
+				return errNoValidationReference.New()
 			}
 			if token == "" {
-				return errNoValidationToken
+				return errNoValidationToken.New()
 			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
 			res, err := ttnpb.NewContactInfoRegistryClient(is).Validate(ctx, &ttnpb.ContactInfoValidation{
-				ID:    reference,
+				Id:    reference,
 				Token: token,
 			})
 			if err != nil {
@@ -273,13 +281,13 @@ func contactInfoCommands(entity string, getID func(cmd *cobra.Command, args []st
 			return io.Write(os.Stdout, config.OutputFormat, res)
 		},
 	}
-	add.Flags().AddFlagSet(contactInfoFlags)
+	ttnpb.AddSetFlagsForContactInfo(add.Flags(), "", false)
 	cmd.AddCommand(add)
-	list.Flags().AddFlagSet(contactInfoFlags)
+	ttnpb.AddSetFlagsForContactInfo(list.Flags(), "", false)
 	cmd.AddCommand(list)
-	remove.Flags().AddFlagSet(contactInfoFlags)
+	ttnpb.AddSetFlagsForContactInfo(remove.Flags(), "", false)
 	cmd.AddCommand(remove)
-	requestValidation.Flags().AddFlagSet(contactInfoFlags)
+	ttnpb.AddSetFlagsForContactInfo(requestValidation.Flags(), "", false)
 	cmd.AddCommand(requestValidation)
 	validate.Flags().String("reference", "", "Reference of the requested validation")
 	validate.Flags().String("token", "", "Token that you received")

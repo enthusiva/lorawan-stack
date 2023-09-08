@@ -17,16 +17,32 @@ package errors_test
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestDefinitions(t *testing.T) {
+	t.Parallel()
 	a := assertions.New(t)
 
-	errors.Define("test_definitions_unknown", "")
-	a.So(func() {
-		errors.Define("test_definitions_unknown", "")
-	}, should.Panic)
+	def := errors.Define("test_definitions_unknown", "")
+	a.So(errors.Define("test_definitions_unknown", ""), should.Equal, def)
+}
+
+func TestMessageFormat(t *testing.T) {
+	t.Parallel()
+	a := assertions.New(t)
+
+	args := errors.MessageFormatArguments(
+		"Application with ID {app_id} could not be found in namespace { ns } or namespace {   ns } does not exist",
+	)
+	a.So(args, should.HaveLength, 2) // no duplicates
+	a.So(args, should.Contain, "app_id")
+	a.So(args, should.Contain, "ns")
+
+	err := errors.Define("test_message_format", "MessageFormat {foo}, {bar}")
+	instance := err.WithAttributes("foo", "my-foo", "bar", "my-bar")
+	a.So(instance.PublicAttributes(), should.ContainKey, "foo")
+	a.So(instance.PublicAttributes(), should.ContainKey, "bar")
 }

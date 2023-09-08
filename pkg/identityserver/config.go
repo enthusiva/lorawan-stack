@@ -16,21 +16,24 @@ package identityserver
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/email"
 	"go.thethings.network/lorawan-stack/v3/pkg/email/sendgrid"
 	"go.thethings.network/lorawan-stack/v3/pkg/email/smtp"
 	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
+	"go.thethings.network/lorawan-stack/v3/pkg/httpclient"
 	"go.thethings.network/lorawan-stack/v3/pkg/oauth"
+	telemetry "go.thethings.network/lorawan-stack/v3/pkg/telemetry/exporter"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	ttntypes "go.thethings.network/lorawan-stack/v3/pkg/types"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// Config for the Identity Server
+// Config for the Identity Server.
 type Config struct {
 	DatabaseURI      string `name:"database-uri" description:"Database connection URI"`
 	UserRegistration struct {
@@ -80,22 +83,41 @@ type Config struct {
 	AdminRights struct {
 		All bool `name:"all" description:"Grant all rights to admins, including _KEYS and _ALL"`
 	} `name:"admin-rights"`
+	CollaboratorRights struct {
+		SetOthersAsContacts bool `name:"set-others-as-contacts" description:"Allow users to set other users as entity contacts"` // nolint:lll
+	} `name:"collaborator-rights"`
 	LoginTokens struct {
 		Enabled  bool          `name:"enabled" description:"enable users requesting login tokens"`
 		TokenTTL time.Duration `name:"token-ttl" description:"TTL of login tokens"`
 	} `name:"login-tokens"`
 	Email struct {
 		email.Config `name:",squash"`
+		Dir          string               `name:"dir" description:"Directory to write emails to if the dir provider is used (development only)"` // nolint:lll
 		SendGrid     sendgrid.Config      `name:"sendgrid"`
 		SMTP         smtp.Config          `name:"smtp"`
 		Templates    emailTemplatesConfig `name:"templates"`
 	} `name:"email"`
+	EndDevices struct {
+		EncryptionKeyID string `name:"encryption-key-id" description:"ID of the key used to encrypt end device secrets at rest"` //nolint:lll
+	} `name:"end-devices"`
 	Gateways struct {
-		EncryptionKeyID string `name:"encryption-key-id" description:"ID of the key used to encrypt gateway secrets at rest"`
+		EncryptionKeyID string        `name:"encryption-key-id" description:"ID of the key used to encrypt gateway secrets at rest"`
+		TokenValidity   time.Duration `name:"token-validity" description:"Time in seconds after creation when a gateway token is valid"` //nolint:lll
 	} `name:"gateways"`
 	Delete struct {
 		Restore time.Duration `name:"restore" description:"How long after soft-deletion an entity can be restored"`
 	} `name:"delete"`
+	DevEUIBlock struct {
+		Enabled          bool                 `name:"enabled" description:"Enable DevEUI address issuing from IEEE MAC block"`
+		ApplicationLimit int                  `name:"application-limit" description:"Maximum DevEUI addresses to be issued per application"`
+		Prefix           ttntypes.EUI64Prefix `name:"prefix" description:"DevEUI block prefix"`
+		InitCounter      int64                `name:"init-counter" description:"Initial counter value for the addresses to be issued (default 0)"`
+	} `name:"dev-eui-block" description:"IEEE MAC block used to issue DevEUIs to devices that are not yet programmed"`
+	Network struct {
+		NetID    ttntypes.NetID `name:"net-id" description:"NetID of this network"`
+		TenantID string         `name:"tenant-id" description:"Tenant ID in the host NetID"`
+	} `name:"network"`
+	TelemetryQueue telemetry.TaskQueue `name:"-"`
 }
 
 type emailTemplatesConfig struct {
@@ -106,13 +128,11 @@ type emailTemplatesConfig struct {
 	Blob      config.BlobPathConfig `name:"blob"`
 
 	Includes []string `name:"includes" description:"The email templates that will be preloaded on startup"`
-
-	HTTPClient *http.Client `name:"-"`
 }
 
 // Fetcher returns a fetch.Interface based on the configuration.
 // If no configuration source is set, this method returns nil, nil.
-func (c emailTemplatesConfig) Fetcher(ctx context.Context, blobConf config.BlobConfig) (fetch.Interface, error) {
+func (c emailTemplatesConfig) Fetcher(ctx context.Context, blobConf config.BlobConfig, httpClientProvider httpclient.Provider) (fetch.Interface, error) {
 	// TODO: Remove detection mechanism (https://github.com/TheThingsNetwork/lorawan-stack/issues/1450)
 	if c.Source == "" {
 		switch {
@@ -136,9 +156,13 @@ func (c emailTemplatesConfig) Fetcher(ctx context.Context, blobConf config.BlobC
 	case "directory":
 		return fetch.FromFilesystem(c.Directory), nil
 	case "url":
-		return fetch.FromHTTP(c.HTTPClient, c.URL, true)
+		httpClient, err := httpClientProvider.HTTPClient(ctx, httpclient.WithCache(true))
+		if err != nil {
+			return nil, err
+		}
+		return fetch.FromHTTP(httpClient, c.URL)
 	case "blob":
-		b, err := blobConf.Bucket(ctx, c.Blob.Bucket)
+		b, err := blobConf.Bucket(ctx, c.Blob.Bucket, httpClientProvider)
 		if err != nil {
 			return nil, err
 		}
@@ -153,35 +177,41 @@ func (c Config) toProto() *ttnpb.IsConfiguration {
 		UserRegistration: &ttnpb.IsConfiguration_UserRegistration{
 			Enabled: c.UserRegistration.Enabled,
 			Invitation: &ttnpb.IsConfiguration_UserRegistration_Invitation{
-				Required: &types.BoolValue{Value: c.UserRegistration.Invitation.Required},
-				TokenTTL: &c.UserRegistration.Invitation.TokenTTL,
+				Required: &wrapperspb.BoolValue{Value: c.UserRegistration.Invitation.Required},
+				TokenTtl: durationpb.New(c.UserRegistration.Invitation.TokenTTL),
 			},
 			ContactInfoValidation: &ttnpb.IsConfiguration_UserRegistration_ContactInfoValidation{
-				Required: &types.BoolValue{Value: c.UserRegistration.ContactInfoValidation.Required},
+				Required: &wrapperspb.BoolValue{Value: c.UserRegistration.ContactInfoValidation.Required},
 			},
 			AdminApproval: &ttnpb.IsConfiguration_UserRegistration_AdminApproval{
-				Required: &types.BoolValue{Value: c.UserRegistration.AdminApproval.Required},
+				Required: &wrapperspb.BoolValue{Value: c.UserRegistration.AdminApproval.Required},
 			},
 			PasswordRequirements: &ttnpb.IsConfiguration_UserRegistration_PasswordRequirements{
-				MinLength:    &types.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinLength)},
-				MaxLength:    &types.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MaxLength)},
-				MinUppercase: &types.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinUppercase)},
-				MinDigits:    &types.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinDigits)},
-				MinSpecial:   &types.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinSpecial)},
+				MinLength:    &wrapperspb.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinLength)},
+				MaxLength:    &wrapperspb.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MaxLength)},
+				MinUppercase: &wrapperspb.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinUppercase)},
+				MinDigits:    &wrapperspb.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinDigits)},
+				MinSpecial:   &wrapperspb.UInt32Value{Value: uint32(c.UserRegistration.PasswordRequirements.MinSpecial)},
 			},
 		},
 		ProfilePicture: &ttnpb.IsConfiguration_ProfilePicture{
-			DisableUpload: &types.BoolValue{Value: c.ProfilePicture.DisableUpload},
-			UseGravatar:   &types.BoolValue{Value: c.ProfilePicture.UseGravatar},
+			DisableUpload: &wrapperspb.BoolValue{Value: c.ProfilePicture.DisableUpload},
+			UseGravatar:   &wrapperspb.BoolValue{Value: c.ProfilePicture.UseGravatar},
 		},
 		EndDevicePicture: &ttnpb.IsConfiguration_EndDevicePicture{
-			DisableUpload: &types.BoolValue{Value: c.ProfilePicture.DisableUpload},
+			DisableUpload: &wrapperspb.BoolValue{Value: c.ProfilePicture.DisableUpload},
 		},
 		UserRights: &ttnpb.IsConfiguration_UserRights{
-			CreateApplications:  &types.BoolValue{Value: c.UserRights.CreateApplications},
-			CreateClients:       &types.BoolValue{Value: c.UserRights.CreateClients},
-			CreateGateways:      &types.BoolValue{Value: c.UserRights.CreateGateways},
-			CreateOrganizations: &types.BoolValue{Value: c.UserRights.CreateOrganizations},
+			CreateApplications:  &wrapperspb.BoolValue{Value: c.UserRights.CreateApplications},
+			CreateClients:       &wrapperspb.BoolValue{Value: c.UserRights.CreateClients},
+			CreateGateways:      &wrapperspb.BoolValue{Value: c.UserRights.CreateGateways},
+			CreateOrganizations: &wrapperspb.BoolValue{Value: c.UserRights.CreateOrganizations},
+		},
+		AdminRights: &ttnpb.IsConfiguration_AdminRights{
+			All: &wrapperspb.BoolValue{Value: c.AdminRights.All},
+		},
+		CollaboratorRights: &ttnpb.IsConfiguration_CollaboratorRights{
+			SetOthersAsContacts: &wrapperspb.BoolValue{Value: c.CollaboratorRights.SetOthersAsContacts},
 		},
 	}
 }

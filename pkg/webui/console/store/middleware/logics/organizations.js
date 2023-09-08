@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import api from '@console/api'
+import tts from '@console/api/tts'
 
 import createRequestLogic from '@ttn-lw/lib/store/logics/create-request-logic'
+import { getOrganizationId } from '@ttn-lw/lib/selectors/id'
 
 import * as organizations from '@console/store/actions/organizations'
 
-import { selectUserId } from '@console/store/selectors/user'
+import { selectUserId } from '@console/store/selectors/logout'
 
 import createEventsConnectLogics from './events'
 
@@ -29,7 +30,7 @@ const getOrganizationLogic = createRequestLogic({
       payload: { id },
       meta: { selector },
     } = action
-    const org = await api.organization.get(id, selector)
+    const org = await tts.Organizations.getById(id, selector)
     dispatch(organizations.startOrganizationEventsStream(id))
     return org
   },
@@ -38,22 +39,29 @@ const getOrganizationLogic = createRequestLogic({
 const getOrganizationsLogic = createRequestLogic({
   type: organizations.GET_ORGS_LIST,
   latest: true,
-  process: async ({ action }) => {
+  process: async ({ action }, dispatch) => {
     const {
-      params: { page, limit, order, query },
+      params: { page, limit, order, query, deleted },
     } = action.payload
     const { selectors, options } = action.meta
 
     const data = options.isSearch
-      ? await api.organizations.search(
+      ? await tts.Organizations.search(
           {
             page,
             limit,
-            id_contains: query,
+            query,
+            deleted,
           },
           selectors,
         )
-      : await api.organizations.list({ page, limit, order }, selectors)
+      : await tts.Organizations.getAll({ page, limit, order }, selectors)
+
+    if (options.withCollaboratorCount) {
+      for (const org of data.organizations) {
+        dispatch(organizations.getOrganizationCollaboratorCount(getOrganizationId(org)))
+      }
+    }
 
     return {
       entities: data.organizations,
@@ -62,12 +70,22 @@ const getOrganizationsLogic = createRequestLogic({
   },
 })
 
+const getOrganizationsCollaboratorCountLogic = createRequestLogic({
+  type: organizations.GET_ORG_COLLABORATOR_COUNT,
+  process: async ({ action }) => {
+    const { id: orgId } = action.payload
+    const result = await tts.Organizations.Collaborators.getAll(orgId, { limit: 1 })
+
+    return { id: orgId, collaboratorCount: result.totalCount }
+  },
+})
+
 const createOrganizationLogic = createRequestLogic({
   type: organizations.CREATE_ORG,
   process: async ({ action, getState }) => {
     const userId = selectUserId(getState())
 
-    return api.organizations.create(userId, action.payload)
+    return await tts.Organizations.create(userId, action.payload)
   },
 })
 
@@ -76,7 +94,7 @@ const updateOrganizationLogic = createRequestLogic({
   process: async ({ action }) => {
     const { id, patch } = action.payload
 
-    const result = await api.organization.update(id, patch)
+    const result = await tts.Organizations.updateById(id, patch)
 
     return { ...patch, ...result }
   },
@@ -86,8 +104,24 @@ const deleteOrganizationLogic = createRequestLogic({
   type: organizations.DELETE_ORG,
   process: async ({ action }) => {
     const { id } = action.payload
+    const { options } = action.meta
 
-    await api.organization.delete(id)
+    if (options.purge) {
+      await tts.Organizations.purgeById(id)
+    } else {
+      await tts.Organizations.deleteById(id)
+    }
+
+    return { id }
+  },
+})
+
+const restoreOrganizationLogic = createRequestLogic({
+  type: organizations.RESTORE_ORG,
+  process: async ({ action }) => {
+    const { id } = action.payload
+
+    await tts.Organizations.restoreById(id)
 
     return { id }
   },
@@ -97,7 +131,7 @@ const getOrganizationsRightsLogic = createRequestLogic({
   type: organizations.GET_ORGS_RIGHTS_LIST,
   process: async ({ action }) => {
     const { id } = action.payload
-    const result = await api.rights.organizations(id)
+    const result = await tts.Organizations.getRightsById(id)
     return result.rights.sort()
   },
 })
@@ -105,13 +139,15 @@ const getOrganizationsRightsLogic = createRequestLogic({
 export default [
   getOrganizationLogic,
   getOrganizationsLogic,
+  getOrganizationsCollaboratorCountLogic,
   createOrganizationLogic,
   updateOrganizationLogic,
   deleteOrganizationLogic,
+  restoreOrganizationLogic,
   getOrganizationsRightsLogic,
   ...createEventsConnectLogics(
     organizations.SHARED_NAME,
     'organizations',
-    api.organization.eventsSubscribe,
+    tts.Organizations.openStream,
   ),
 ]

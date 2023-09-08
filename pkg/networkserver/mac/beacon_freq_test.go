@@ -18,9 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal/test"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -45,24 +44,24 @@ func TestNeedsBeaconFreqReq(t *testing.T) {
 	ForEachClass(t, func(makeClassName func(parts ...string) string, class ttnpb.Class) {
 		for _, conf := range []struct {
 			Suffix                               string
-			CurrentParameters, DesiredParameters ttnpb.MACParameters
+			CurrentParameters, DesiredParameters *ttnpb.MACParameters
 			Needs                                bool
 		}{
 			{
 				Suffix: "current(frequency:42),desired(frequency:42)",
-				CurrentParameters: ttnpb.MACParameters{
+				CurrentParameters: &ttnpb.MACParameters{
 					BeaconFrequency: 42,
 				},
-				DesiredParameters: ttnpb.MACParameters{
+				DesiredParameters: &ttnpb.MACParameters{
 					BeaconFrequency: 42,
 				},
 			},
 			{
 				Suffix: "current(frequency:24),desired(frequency:42)",
-				CurrentParameters: ttnpb.MACParameters{
+				CurrentParameters: &ttnpb.MACParameters{
 					BeaconFrequency: 24,
 				},
-				DesiredParameters: ttnpb.MACParameters{
+				DesiredParameters: &ttnpb.MACParameters{
 					BeaconFrequency: 42,
 				},
 				Needs: true,
@@ -72,13 +71,13 @@ func TestNeedsBeaconFreqReq(t *testing.T) {
 				TestCase{
 					Name: makeClassName(conf.Suffix),
 					InputDevice: &ttnpb.EndDevice{
-						MACState: &ttnpb.MACState{
+						MacState: &ttnpb.MACState{
 							DeviceClass:       class,
 							CurrentParameters: conf.CurrentParameters,
 							DesiredParameters: conf.DesiredParameters,
 						},
 					},
-					Needs: conf.Needs && class == ttnpb.CLASS_B,
+					Needs: conf.Needs,
 				},
 			)
 		}
@@ -90,7 +89,7 @@ func TestNeedsBeaconFreqReq(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.InputDevice)
+				dev := ttnpb.Clone(tc.InputDevice)
 				res := DeviceNeedsBeaconFreqReq(dev)
 				if tc.Needs {
 					a.So(res, should.BeTrue)
@@ -114,20 +113,32 @@ func TestHandleBeaconFreqAns(t *testing.T) {
 		{
 			Name: "nil payload",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Error: ErrNoPayload,
 		},
 		{
 			Name: "ack/no request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Payload: &ttnpb.MACCommand_BeaconFreqAns{
 				FrequencyAck: true,
@@ -137,39 +148,48 @@ func TestHandleBeaconFreqAns(t *testing.T) {
 					FrequencyAck: true,
 				})),
 			},
-			Error: ErrRequestNotFound,
+			Error: ErrRequestNotFound.WithAttributes("cid", ttnpb.MACCommandIdentifier_CID_BEACON_FREQ),
 		},
 		{
 			Name: "nack/no request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{},
+				MacState: &ttnpb.MACState{
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
+				},
 			},
 			Payload: &ttnpb.MACCommand_BeaconFreqAns{},
 			Events: events.Builders{
 				EvtReceiveBeaconFreqReject.With(events.WithData(&ttnpb.MACCommand_BeaconFreqAns{})),
 			},
-			Error: ErrRequestNotFound,
+			Error: ErrRequestNotFound.WithAttributes("cid", ttnpb.MACCommandIdentifier_CID_BEACON_FREQ),
 		},
 		{
 			Name: "ack/valid request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_BeaconFreqReq{
 							Frequency: 42,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{},
-					CurrentParameters: ttnpb.MACParameters{
+					CurrentParameters: &ttnpb.MACParameters{
 						BeaconFrequency: 42,
 					},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_BeaconFreqAns{
@@ -184,17 +204,21 @@ func TestHandleBeaconFreqAns(t *testing.T) {
 		{
 			Name: "nack/valid request",
 			Device: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
+				MacState: &ttnpb.MACState{
 					PendingRequests: []*ttnpb.MACCommand{
 						(&ttnpb.MACCommand_BeaconFreqReq{
 							Frequency: 42,
 						}).MACCommand(),
 					},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Expected: &ttnpb.EndDevice{
-				MACState: &ttnpb.MACState{
-					PendingRequests: []*ttnpb.MACCommand{},
+				MacState: &ttnpb.MACState{
+					PendingRequests:   []*ttnpb.MACCommand{},
+					CurrentParameters: &ttnpb.MACParameters{},
+					DesiredParameters: &ttnpb.MACParameters{},
 				},
 			},
 			Payload: &ttnpb.MACCommand_BeaconFreqAns{},
@@ -208,7 +232,7 @@ func TestHandleBeaconFreqAns(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
 				var err error
 				evs, err := HandleBeaconFreqAns(ctx, dev, tc.Payload)

@@ -19,6 +19,7 @@ import (
 
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	lorautil "go.thethings.network/lorawan-stack/v3/pkg/util/lora"
 )
 
 var (
@@ -33,9 +34,9 @@ var (
 
 func HandleDeviceTimeReq(ctx context.Context, dev *ttnpb.EndDevice, msg *ttnpb.UplinkMessage) (events.Builders, error) {
 	ans := &ttnpb.MACCommand_DeviceTimeAns{
-		Time: msg.ReceivedAt,
+		Time: lorautil.GetAdjustedReceivedAt(msg),
 	}
-	dev.MACState.QueuedResponses = append(dev.MACState.QueuedResponses, ans.MACCommand())
+	dev.MacState.QueuedResponses = append(dev.MacState.QueuedResponses, ans.MACCommand())
 	return events.Builders{
 		EvtReceiveDeviceTimeRequest,
 		EvtEnqueueDeviceTimeAnswer.With(events.WithData(ans)),

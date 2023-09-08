@@ -24,12 +24,18 @@ var asApplicationLinkFieldPaths = append(
 	ApplicationLinkFieldPathsNested[:],
 	"api_key",
 	"network_server_address",
+	"tls",
 )
 
 var isEndDeviceReadFieldPaths = []string{
+	"activated_at",
 	"application_server_address",
 	"attributes",
 	"created_at",
+	"claim_authentication_code",
+	"claim_authentication_code.value",
+	"claim_authentication_code.valid_to",
+	"claim_authentication_code.valid_from",
 	"description",
 	"ids",
 	"ids.application_ids",
@@ -41,7 +47,11 @@ var isEndDeviceReadFieldPaths = []string{
 	"locations",
 	"name",
 	"network_server_address",
+	"serial_number",
 	"service_profile_id",
+	"lora_alliance_profile_ids",
+	"lora_alliance_profile_ids.vendor_id",
+	"lora_alliance_profile_ids.vendor_profile_id",
 	"updated_at",
 	"version_ids",
 	"version_ids.band_id",
@@ -50,20 +60,27 @@ var isEndDeviceReadFieldPaths = []string{
 	"version_ids.hardware_version",
 	"version_ids.model_id",
 	"picture",
+	"last_seen_at",
 }
 
 var isEndDeviceWriteFieldPaths = []string{
+	"activated_at",
 	"application_server_address",
 	"attributes",
+	"claim_authentication_code",
+	"claim_authentication_code.value",
+	"claim_authentication_code.valid_to",
+	"claim_authentication_code.valid_from",
 	"description",
-	"ids",
-	"ids.dev_eui",
-	"ids.join_eui",
 	"join_server_address",
 	"locations",
 	"name",
 	"network_server_address",
+	"serial_number",
 	"service_profile_id",
+	"lora_alliance_profile_ids",
+	"lora_alliance_profile_ids.vendor_id",
+	"lora_alliance_profile_ids.vendor_profile_id",
 	"version_ids",
 	"version_ids.band_id",
 	"version_ids.brand_id",
@@ -71,6 +88,7 @@ var isEndDeviceWriteFieldPaths = []string{
 	"version_ids.hardware_version",
 	"version_ids.model_id",
 	"picture",
+	"last_seen_at",
 }
 
 var nsEndDeviceReadFieldPaths = [...]string{
@@ -89,10 +107,32 @@ var nsEndDeviceReadFieldPaths = [...]string{
 	"lorawan_phy_version",
 	"lorawan_version",
 	"mac_settings",
+	"mac_settings.adr",
+	"mac_settings.adr.mode",
+	"mac_settings.adr.mode.disabled",
+	"mac_settings.adr.mode.dynamic",
+	"mac_settings.adr.mode.dynamic.channel_steering",
+	"mac_settings.adr.mode.dynamic.channel_steering.mode",
+	"mac_settings.adr.mode.dynamic.channel_steering.mode.disabled",
+	"mac_settings.adr.mode.dynamic.channel_steering.mode.lora_narrow",
+	"mac_settings.adr.mode.dynamic.margin",
+	"mac_settings.adr.mode.dynamic.max_data_rate_index",
+	"mac_settings.adr.mode.dynamic.max_data_rate_index.value",
+	"mac_settings.adr.mode.dynamic.max_nb_trans",
+	"mac_settings.adr.mode.dynamic.max_tx_power_index",
+	"mac_settings.adr.mode.dynamic.min_data_rate_index",
+	"mac_settings.adr.mode.dynamic.min_data_rate_index.value",
+	"mac_settings.adr.mode.dynamic.min_nb_trans",
+	"mac_settings.adr.mode.dynamic.min_tx_power_index",
+	"mac_settings.adr.mode.static",
+	"mac_settings.adr.mode.static.data_rate_index",
+	"mac_settings.adr.mode.static.nb_trans",
+	"mac_settings.adr.mode.static.tx_power_index",
 	"mac_settings.adr_margin",
 	"mac_settings.beacon_frequency",
 	"mac_settings.beacon_frequency.value",
 	"mac_settings.class_b_timeout",
+	"mac_settings.class_b_c_downlink_interval",
 	"mac_settings.class_c_timeout",
 	"mac_settings.desired_adr_ack_delay_exponent",
 	"mac_settings.desired_adr_ack_delay_exponent.value",
@@ -102,6 +142,8 @@ var nsEndDeviceReadFieldPaths = [...]string{
 	"mac_settings.desired_beacon_frequency.value",
 	"mac_settings.desired_max_duty_cycle",
 	"mac_settings.desired_max_duty_cycle.value",
+	"mac_settings.desired_max_eirp",
+	"mac_settings.desired_max_eirp.value",
 	"mac_settings.desired_ping_slot_data_rate_index",
 	"mac_settings.desired_ping_slot_data_rate_index.value",
 	"mac_settings.desired_ping_slot_frequency",
@@ -133,12 +175,18 @@ var nsEndDeviceReadFieldPaths = [...]string{
 	"mac_settings.rx2_data_rate_index.value",
 	"mac_settings.rx2_frequency",
 	"mac_settings.rx2_frequency.value",
+	"mac_settings.schedule_downlinks",
+	"mac_settings.schedule_downlinks.value",
 	"mac_settings.status_count_periodicity",
 	"mac_settings.status_time_periodicity",
 	"mac_settings.supports_32_bit_f_cnt",
 	"mac_settings.supports_32_bit_f_cnt.value",
 	"mac_settings.use_adr",
 	"mac_settings.use_adr.value",
+	"mac_settings.uplink_dwell_time",
+	"mac_settings.uplink_dwell_time.value",
+	"mac_settings.downlink_dwell_time",
+	"mac_settings.downlink_dwell_time.value",
 	"mac_state",
 	"mac_state.current_parameters",
 	"mac_state.current_parameters.adr_ack_delay_exponent",
@@ -213,6 +261,7 @@ var nsEndDeviceReadFieldPaths = [...]string{
 	"mac_state.ping_slot_periodicity.value",
 	"mac_state.queued_responses",
 	"mac_state.recent_downlinks",
+	"mac_state.recent_mac_command_identifiers",
 	"mac_state.recent_uplinks",
 	"mac_state.rejected_adr_data_rate_indexes",
 	"mac_state.rejected_adr_tx_power_indexes",
@@ -320,6 +369,7 @@ var nsEndDeviceReadFieldPaths = [...]string{
 	"pending_mac_state.queued_join_accept.request.downlink_settings.rx2_dr",
 	"pending_mac_state.queued_join_accept.request.rx_delay",
 	"pending_mac_state.recent_downlinks",
+	"pending_mac_state.recent_mac_command_identifiers",
 	"pending_mac_state.recent_uplinks",
 	"pending_mac_state.rejected_adr_data_rate_indexes",
 	"pending_mac_state.rejected_adr_tx_power_indexes",
@@ -372,47 +422,143 @@ type RPCFieldMaskPathValue struct {
 // RPCFieldMaskPaths lists the field mask paths for each RPC in this API.
 var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 	// Applications:
-	"/ttn.lorawan.v3.ApplicationRegistry/Get":                 {All: ApplicationFieldPathsNested, Allowed: ApplicationFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationRegistry/List":                {All: ApplicationFieldPathsNested, Allowed: ApplicationFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationRegistry/Update":              {All: ApplicationFieldPathsNested, Allowed: ApplicationFieldPathsNested, Set: true},
-	"/ttn.lorawan.v3.EntityRegistrySearch/SearchApplications": {All: ApplicationFieldPathsNested, Allowed: ApplicationFieldPathsNested},
+	"/ttn.lorawan.v3.ApplicationRegistry/Get": {
+		All:     ApplicationFieldPathsNested,
+		Allowed: ApplicationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationRegistry/List": {
+		All:     ApplicationFieldPathsNested,
+		Allowed: ApplicationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationRegistry/Update": {
+		All:     ApplicationFieldPathsNested,
+		Allowed: omitFields(ApplicationFieldPathsNested, "dev_eui_counter"),
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.EntityRegistrySearch/SearchApplications": {
+		All:     ApplicationFieldPathsNested,
+		Allowed: ApplicationFieldPathsNested,
+	},
 
 	// Application Activation Settings:
-	"/ttn.lorawan.v3.ApplicationActivationSettingRegistry/Get":    {All: ApplicationActivationSettingsFieldPathsNested, Allowed: ApplicationActivationSettingsFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationActivationSettingRegistry/Set":    {All: ApplicationActivationSettingsFieldPathsNested, Allowed: ApplicationActivationSettingsFieldPathsNested, Set: true},
-	"/ttn.lorawan.v3.ApplicationActivationSettingRegistry/Delete": {All: ApplicationActivationSettingsFieldPathsNested, Allowed: ApplicationActivationSettingsFieldPathsNested},
+	"/ttn.lorawan.v3.ApplicationActivationSettingRegistry/Get": {
+		All:     ApplicationActivationSettingsFieldPathsNested,
+		Allowed: ApplicationActivationSettingsFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationActivationSettingRegistry/Set": {
+		All:     ApplicationActivationSettingsFieldPathsNested,
+		Allowed: ApplicationActivationSettingsFieldPathsNested,
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.ApplicationActivationSettingRegistry/Delete": {
+		All:     ApplicationActivationSettingsFieldPathsNested,
+		Allowed: ApplicationActivationSettingsFieldPathsNested,
+	},
 
 	// Application Webhook Templates:
-	"/ttn.lorawan.v3.ApplicationWebhookRegistry/GetTemplate":   {All: ApplicationWebhookTemplateFieldPathsNested, Allowed: ApplicationWebhookTemplateFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationWebhookRegistry/ListTemplates": {All: ApplicationWebhookTemplateFieldPathsNested, Allowed: ApplicationWebhookTemplateFieldPathsNested},
+	"/ttn.lorawan.v3.ApplicationWebhookRegistry/GetTemplate": {
+		All:     ApplicationWebhookTemplateFieldPathsNested,
+		Allowed: ApplicationWebhookTemplateFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationWebhookRegistry/ListTemplates": {
+		All:     ApplicationWebhookTemplateFieldPathsNested,
+		Allowed: ApplicationWebhookTemplateFieldPathsNested,
+	},
 
 	// Application Webhooks:
-	"/ttn.lorawan.v3.ApplicationWebhookRegistry/Get":  {All: ApplicationWebhookFieldPathsNested, Allowed: ApplicationWebhookFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationWebhookRegistry/List": {All: ApplicationWebhookFieldPathsNested, Allowed: ApplicationWebhookFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationWebhookRegistry/Set":  {All: ApplicationWebhookFieldPathsNested, Allowed: ApplicationWebhookFieldPathsNested, Set: true},
+	"/ttn.lorawan.v3.ApplicationWebhookRegistry/Get": {
+		All:     ApplicationWebhookFieldPathsNested,
+		Allowed: ApplicationWebhookFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationWebhookRegistry/List": {
+		All:     ApplicationWebhookFieldPathsNested,
+		Allowed: ApplicationWebhookFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationWebhookRegistry/Set": {
+		All:     ApplicationWebhookFieldPathsNested,
+		Allowed: ApplicationWebhookFieldPathsNested,
+		Set:     true,
+	},
 
 	// Application PubSubs:
-	"/ttn.lorawan.v3.ApplicationPubSubRegistry/Get":  {All: ApplicationPubSubFieldPathsNested, Allowed: ApplicationPubSubFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationPubSubRegistry/List": {All: ApplicationPubSubFieldPathsNested, Allowed: ApplicationPubSubFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationPubSubRegistry/Set":  {All: ApplicationPubSubFieldPathsNested, Allowed: ApplicationPubSubFieldPathsNested, Set: true},
+	"/ttn.lorawan.v3.ApplicationPubSubRegistry/Get": {
+		All:     ApplicationPubSubFieldPathsNested,
+		Allowed: ApplicationPubSubFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationPubSubRegistry/List": {
+		All:     ApplicationPubSubFieldPathsNested,
+		Allowed: ApplicationPubSubFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationPubSubRegistry/Set": {
+		All:     ApplicationPubSubFieldPathsNested,
+		Allowed: ApplicationPubSubFieldPathsNested,
+		Set:     true,
+	},
 
 	// Application Packages:
-	"/ttn.lorawan.v3.ApplicationPackageRegistry/GetAssociation":          {All: ApplicationPackageAssociationFieldPathsNested, Allowed: ApplicationPackageAssociationFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationPackageRegistry/ListAssociations":        {All: ApplicationPackageAssociationFieldPathsNested, Allowed: ApplicationPackageAssociationFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationPackageRegistry/SetAssociation":          {All: ApplicationPackageAssociationFieldPathsNested, Allowed: ApplicationPackageAssociationFieldPathsNested, Set: true},
-	"/ttn.lorawan.v3.ApplicationPackageRegistry/GetDefaultAssociation":   {All: ApplicationPackageDefaultAssociationFieldPathsNested, Allowed: ApplicationPackageDefaultAssociationFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationPackageRegistry/ListDefaultAssociations": {All: ApplicationPackageDefaultAssociationFieldPathsNested, Allowed: ApplicationPackageDefaultAssociationFieldPathsNested},
-	"/ttn.lorawan.v3.ApplicationPackageRegistry/SetDefaultAssociation":   {All: ApplicationPackageDefaultAssociationFieldPathsNested, Allowed: ApplicationPackageDefaultAssociationFieldPathsNested, Set: true},
+	"/ttn.lorawan.v3.ApplicationPackageRegistry/GetAssociation": {
+		All:     ApplicationPackageAssociationFieldPathsNested,
+		Allowed: ApplicationPackageAssociationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationPackageRegistry/ListAssociations": {
+		All:     ApplicationPackageAssociationFieldPathsNested,
+		Allowed: ApplicationPackageAssociationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationPackageRegistry/SetAssociation": {
+		All:     ApplicationPackageAssociationFieldPathsNested,
+		Allowed: ApplicationPackageAssociationFieldPathsNested,
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.ApplicationPackageRegistry/GetDefaultAssociation": {
+		All:     ApplicationPackageDefaultAssociationFieldPathsNested,
+		Allowed: ApplicationPackageDefaultAssociationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationPackageRegistry/ListDefaultAssociations": {
+		All:     ApplicationPackageDefaultAssociationFieldPathsNested,
+		Allowed: ApplicationPackageDefaultAssociationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.ApplicationPackageRegistry/SetDefaultAssociation": {
+		All:     ApplicationPackageDefaultAssociationFieldPathsNested,
+		Allowed: ApplicationPackageDefaultAssociationFieldPathsNested,
+		Set:     true,
+	},
 
 	// Application Links:
-	"/ttn.lorawan.v3.As/GetLink": {All: asApplicationLinkFieldPaths, Allowed: asApplicationLinkFieldPaths},
-	"/ttn.lorawan.v3.As/SetLink": {All: asApplicationLinkFieldPaths, Allowed: asApplicationLinkFieldPaths, Set: true},
+	"/ttn.lorawan.v3.As/GetLink": {
+		All:     asApplicationLinkFieldPaths,
+		Allowed: asApplicationLinkFieldPaths,
+	},
+	"/ttn.lorawan.v3.As/SetLink": {
+		All:     asApplicationLinkFieldPaths,
+		Allowed: asApplicationLinkFieldPaths,
+		Set:     true,
+	},
+
+	// Application API Keys:
+	"/ttn.lorawan.v3.ApplicationAccess/UpdateAPIKey": {
+		All:     APIKeyFieldPathsNested,
+		Allowed: APIKeyFieldPathsNested,
+		Set:     true,
+	},
 
 	// Clients:
-	"/ttn.lorawan.v3.ClientRegistry/Get":                 {All: ClientFieldPathsNested, Allowed: omitFields(ClientFieldPathsNested, "secret")},
-	"/ttn.lorawan.v3.ClientRegistry/List":                {All: ClientFieldPathsNested, Allowed: omitFields(ClientFieldPathsNested, "secret")},
-	"/ttn.lorawan.v3.ClientRegistry/Update":              {All: ClientFieldPathsNested, Allowed: ClientFieldPathsNested, Set: true},
-	"/ttn.lorawan.v3.EntityRegistrySearch/SearchClients": {All: ClientFieldPathsNested, Allowed: omitFields(ClientFieldPathsNested, "secret")},
+	"/ttn.lorawan.v3.ClientRegistry/Get": {
+		All:     ClientFieldPathsNested,
+		Allowed: omitFields(ClientFieldPathsNested, "secret"),
+	},
+	"/ttn.lorawan.v3.ClientRegistry/List": {
+		All:     ClientFieldPathsNested,
+		Allowed: omitFields(ClientFieldPathsNested, "secret"),
+	},
+	"/ttn.lorawan.v3.ClientRegistry/Update": {
+		All:     ClientFieldPathsNested,
+		Allowed: ClientFieldPathsNested,
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.EntityRegistrySearch/SearchClients": {
+		All:     ClientFieldPathsNested,
+		Allowed: omitFields(ClientFieldPathsNested, "secret"),
+	},
 
 	// End Devices:
 	"/ttn.lorawan.v3.AsEndDeviceRegistry/Get": {
@@ -437,6 +583,7 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"pending_session.keys.app_s_key.key",
 			"pending_session.keys.session_key_id",
 			"pending_session.last_a_f_cnt_down",
+			"serial_number",
 			"session",
 			"session.dev_addr",
 			"session.keys",
@@ -446,6 +593,9 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"session.last_a_f_cnt_down",
 			"skip_payload_crypto",
 			"skip_payload_crypto_override",
+			"lora_alliance_profile_ids",
+			"lora_alliance_profile_ids.vendor_id",
+			"lora_alliance_profile_ids.vendor_profile_id",
 			"version_ids",
 			"version_ids.band_id",
 			"version_ids.brand_id",
@@ -468,6 +618,7 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"ids.dev_eui",
 			"ids.device_id",
 			"ids.join_eui",
+			"serial_number",
 			"session.dev_addr",
 			"session.keys.app_s_key",
 			"session.keys.app_s_key.key",
@@ -475,6 +626,9 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"session.last_a_f_cnt_down",
 			"skip_payload_crypto",
 			"skip_payload_crypto_override",
+			"lora_alliance_profile_ids",
+			"lora_alliance_profile_ids.vendor_id",
+			"lora_alliance_profile_ids.vendor_profile_id",
 			"version_ids",
 			"version_ids.band_id",
 			"version_ids.brand_id",
@@ -484,10 +638,27 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 		},
 		Set: true,
 	},
-	"/ttn.lorawan.v3.EndDeviceRegistry/Get":                    {All: EndDeviceFieldPathsNested, Allowed: isEndDeviceReadFieldPaths},
-	"/ttn.lorawan.v3.EndDeviceRegistry/List":                   {All: EndDeviceFieldPathsNested, Allowed: isEndDeviceReadFieldPaths},
-	"/ttn.lorawan.v3.EndDeviceRegistry/Update":                 {All: EndDeviceFieldPathsNested, Allowed: isEndDeviceWriteFieldPaths, Set: true},
-	"/ttn.lorawan.v3.EndDeviceRegistrySearch/SearchEndDevices": {All: EndDeviceFieldPathsNested, Allowed: isEndDeviceReadFieldPaths},
+	"/ttn.lorawan.v3.EndDeviceRegistry/Get": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: isEndDeviceReadFieldPaths,
+	},
+	"/ttn.lorawan.v3.EndDeviceBatchRegistry/Get": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: isEndDeviceReadFieldPaths,
+	},
+	"/ttn.lorawan.v3.EndDeviceRegistry/List": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: isEndDeviceReadFieldPaths,
+	},
+	"/ttn.lorawan.v3.EndDeviceRegistry/Update": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: isEndDeviceWriteFieldPaths,
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.EndDeviceRegistrySearch/SearchEndDevices": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: isEndDeviceReadFieldPaths,
+	},
 	"/ttn.lorawan.v3.JsEndDeviceRegistry/Get": {
 		All: EndDeviceFieldPathsNested,
 		Allowed: []string{
@@ -560,7 +731,10 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 		},
 		Set: true,
 	},
-	"/ttn.lorawan.v3.NsEndDeviceRegistry/Get": {All: EndDeviceFieldPathsNested, Allowed: nsEndDeviceReadFieldPaths[:]},
+	"/ttn.lorawan.v3.NsEndDeviceRegistry/Get": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: nsEndDeviceReadFieldPaths[:],
+	},
 	"/ttn.lorawan.v3.NsEndDeviceRegistry/Set": {
 		All: EndDeviceFieldPathsNested,
 		Allowed: []string{
@@ -577,10 +751,32 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"lorawan_phy_version",
 			"lorawan_version",
 			"mac_settings",
+			"mac_settings.adr",
+			"mac_settings.adr.mode",
+			"mac_settings.adr.mode.disabled",
+			"mac_settings.adr.mode.dynamic",
+			"mac_settings.adr.mode.dynamic.channel_steering",
+			"mac_settings.adr.mode.dynamic.channel_steering.mode",
+			"mac_settings.adr.mode.dynamic.channel_steering.mode.disabled",
+			"mac_settings.adr.mode.dynamic.channel_steering.mode.lora_narrow",
+			"mac_settings.adr.mode.dynamic.margin",
+			"mac_settings.adr.mode.dynamic.max_data_rate_index",
+			"mac_settings.adr.mode.dynamic.max_data_rate_index.value",
+			"mac_settings.adr.mode.dynamic.max_nb_trans",
+			"mac_settings.adr.mode.dynamic.max_tx_power_index",
+			"mac_settings.adr.mode.dynamic.min_data_rate_index",
+			"mac_settings.adr.mode.dynamic.min_data_rate_index.value",
+			"mac_settings.adr.mode.dynamic.min_nb_trans",
+			"mac_settings.adr.mode.dynamic.min_tx_power_index",
+			"mac_settings.adr.mode.static",
+			"mac_settings.adr.mode.static.data_rate_index",
+			"mac_settings.adr.mode.static.nb_trans",
+			"mac_settings.adr.mode.static.tx_power_index",
 			"mac_settings.adr_margin",
 			"mac_settings.beacon_frequency",
 			"mac_settings.beacon_frequency.value",
 			"mac_settings.class_b_timeout",
+			"mac_settings.class_b_c_downlink_interval",
 			"mac_settings.class_c_timeout",
 			"mac_settings.desired_adr_ack_delay_exponent",
 			"mac_settings.desired_adr_ack_delay_exponent.value",
@@ -590,6 +786,8 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"mac_settings.desired_beacon_frequency.value",
 			"mac_settings.desired_max_duty_cycle",
 			"mac_settings.desired_max_duty_cycle.value",
+			"mac_settings.desired_max_eirp",
+			"mac_settings.desired_max_eirp.value",
 			"mac_settings.desired_ping_slot_data_rate_index",
 			"mac_settings.desired_ping_slot_data_rate_index.value",
 			"mac_settings.desired_ping_slot_frequency",
@@ -621,12 +819,18 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"mac_settings.rx2_data_rate_index.value",
 			"mac_settings.rx2_frequency",
 			"mac_settings.rx2_frequency.value",
+			"mac_settings.schedule_downlinks",
+			"mac_settings.schedule_downlinks.value",
 			"mac_settings.status_count_periodicity",
 			"mac_settings.status_time_periodicity",
 			"mac_settings.supports_32_bit_f_cnt",
 			"mac_settings.supports_32_bit_f_cnt.value",
 			"mac_settings.use_adr",
 			"mac_settings.use_adr.value",
+			"mac_settings.uplink_dwell_time",
+			"mac_settings.uplink_dwell_time.value",
+			"mac_settings.downlink_dwell_time",
+			"mac_settings.downlink_dwell_time.value",
 			"mac_state",
 			"mac_state.current_parameters",
 			"mac_state.current_parameters.adr_ack_delay_exponent",
@@ -701,6 +905,7 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"mac_state.ping_slot_periodicity.value",
 			"mac_state.queued_responses",
 			"mac_state.recent_downlinks",
+			"mac_state.recent_mac_command_identifiers",
 			"mac_state.recent_uplinks",
 			"mac_state.rejected_adr_data_rate_indexes",
 			"mac_state.rejected_adr_tx_power_indexes",
@@ -808,6 +1013,7 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"pending_mac_state.queued_join_accept.request.downlink_settings.rx2_dr",
 			"pending_mac_state.queued_join_accept.request.rx_delay",
 			"pending_mac_state.recent_downlinks",
+			"pending_mac_state.recent_mac_command_identifiers",
 			"pending_mac_state.recent_uplinks",
 			"pending_mac_state.rejected_adr_data_rate_indexes",
 			"pending_mac_state.rejected_adr_tx_power_indexes",
@@ -824,6 +1030,7 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"pending_session.keys.s_nwk_s_int_key",
 			"pending_session.keys.s_nwk_s_int_key.key",
 			"pending_session.keys.session_key_id",
+			"serial_number",
 			"session",
 			"session.dev_addr",
 			"session.keys",
@@ -841,6 +1048,9 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"supports_class_b",
 			"supports_class_c",
 			"supports_join",
+			"lora_alliance_profile_ids",
+			"lora_alliance_profile_ids.vendor_id",
+			"lora_alliance_profile_ids.vendor_profile_id",
 			"version_ids",
 			"version_ids.band_id",
 			"version_ids.brand_id",
@@ -850,11 +1060,15 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 		},
 		Set: true,
 	},
-	"/ttn.lorawan.v3.NsEndDeviceRegistry/ResetFactoryDefaults": {All: EndDeviceFieldPathsNested, Allowed: nsEndDeviceReadFieldPaths[:]},
+	"/ttn.lorawan.v3.NsEndDeviceRegistry/ResetFactoryDefaults": {
+		All:     EndDeviceFieldPathsNested,
+		Allowed: nsEndDeviceReadFieldPaths[:],
+	},
 
 	// Gateways:
 	"/ttn.lorawan.v3.EntityRegistrySearch/SearchGateways": {
-		All: GatewayFieldPathsNested, Allowed: omitFields(GatewayFieldPathsNested,
+		All: GatewayFieldPathsNested,
+		Allowed: omitFields(GatewayFieldPathsNested,
 			"gateway.claim_authentication_code.secret",
 			"gateway.claim_authentication_code.secret.key_id",
 			"gateway.claim_authentication_code.secret.value",
@@ -889,27 +1103,125 @@ var RPCFieldMaskPaths = map[string]RPCFieldMaskPathValue{
 			"gateway.claim_authentication_code.valid_to"),
 		Set: true,
 	},
+	"/ttn.lorawan.v3.GsPba/UpdateGateway": {
+		All: PacketBrokerGatewayFieldPathsNested,
+		Allowed: []string{
+			"administrative_contact",
+			"antennas",
+			"frequency_plan_ids",
+			"ids",
+			"ids.eui",
+			"ids.gateway_id",
+			"location_public",
+			"online",
+			"rx_rate",
+			"status_public",
+			"technical_contact",
+			"tx_rate",
+		},
+		Set: true,
+	},
+
+	// Gateway Connection Statistics:
+	"/ttn.lorawan.v3.Gs/BatchGetGatewayConnectionStats": {
+		All:     GatewayConnectionStatsFieldPathsNested,
+		Allowed: GatewayConnectionStatsFieldPathsNested,
+	},
+
+	// Gateway API Keys:
+	"/ttn.lorawan.v3.GatewayAccess/UpdateAPIKey": {
+		All:     APIKeyFieldPathsNested,
+		Allowed: APIKeyFieldPathsNested,
+		Set:     true,
+	},
 
 	// Organizations:
-	"/ttn.lorawan.v3.OrganizationRegistry/Get":                 {All: OrganizationFieldPathsNested, Allowed: OrganizationFieldPathsNested},
-	"/ttn.lorawan.v3.OrganizationRegistry/List":                {All: OrganizationFieldPathsNested, Allowed: OrganizationFieldPathsNested},
-	"/ttn.lorawan.v3.OrganizationRegistry/Update":              {All: OrganizationFieldPathsNested, Allowed: OrganizationFieldPathsNested, Set: true},
-	"/ttn.lorawan.v3.EntityRegistrySearch/SearchOrganizations": {All: OrganizationFieldPathsNested, Allowed: OrganizationFieldPathsNested},
+	"/ttn.lorawan.v3.OrganizationRegistry/Get": {
+		All:     OrganizationFieldPathsNested,
+		Allowed: OrganizationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.OrganizationRegistry/List": {
+		All:     OrganizationFieldPathsNested,
+		Allowed: OrganizationFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.OrganizationRegistry/Update": {
+		All:     OrganizationFieldPathsNested,
+		Allowed: OrganizationFieldPathsNested,
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.EntityRegistrySearch/SearchOrganizations": {
+		All:     OrganizationFieldPathsNested,
+		Allowed: OrganizationFieldPathsNested,
+	},
+
+	// Organization API Keys:
+	"/ttn.lorawan.v3.OrganizationAccess/UpdateAPIKey": {
+		All:     APIKeyFieldPathsNested,
+		Allowed: APIKeyFieldPathsNested,
+		Set:     true,
+	},
 
 	// Users:
-	"/ttn.lorawan.v3.UserRegistry/Get":                 {All: UserFieldPathsNested, Allowed: omitFields(UserFieldPathsNested, "password", "temporary_password")},
-	"/ttn.lorawan.v3.UserRegistry/List":                {All: UserFieldPathsNested, Allowed: omitFields(UserFieldPathsNested, "password", "temporary_password")},
-	"/ttn.lorawan.v3.UserRegistry/Update":              {All: UserFieldPathsNested, Allowed: omitFields(UserFieldPathsNested, "password", "password_updated_at"), Set: true},
-	"/ttn.lorawan.v3.EntityRegistrySearch/SearchUsers": {All: UserFieldPathsNested, Allowed: omitFields(UserFieldPathsNested, "password", "temporary_password")},
+	"/ttn.lorawan.v3.UserRegistry/Get": {
+		All:     UserFieldPathsNested,
+		Allowed: omitFields(UserFieldPathsNested, "password", "temporary_password"),
+	},
+	"/ttn.lorawan.v3.UserRegistry/List": {
+		All:     UserFieldPathsNested,
+		Allowed: omitFields(UserFieldPathsNested, "password", "temporary_password"),
+	},
+	"/ttn.lorawan.v3.UserRegistry/Update": {
+		All:     UserFieldPathsNested,
+		Allowed: omitFields(UserFieldPathsNested, "password", "password_updated_at"),
+		Set:     true,
+	},
+	"/ttn.lorawan.v3.EntityRegistrySearch/SearchUsers": {
+		All:     UserFieldPathsNested,
+		Allowed: omitFields(UserFieldPathsNested, "password", "temporary_password"),
+	},
+
+	// User API Keys:
+	"/ttn.lorawan.v3.UserAccess/UpdateAPIKey": {
+		All:     APIKeyFieldPathsNested,
+		Allowed: APIKeyFieldPathsNested,
+		Set:     true,
+	},
 
 	// Storage Integration:
-	"/ttn.lorawan.v3.ApplicationUpStorage/GetStoredApplicationUp": {All: ApplicationUpFieldPathsNested, Allowed: applicationUpFieldMaskPaths()},
+	"/ttn.lorawan.v3.ApplicationUpStorage/GetStoredApplicationUp": {
+		All:     ApplicationUpFieldPathsNested,
+		Allowed: applicationUpFieldMaskPaths(),
+	},
 
 	// Device Repository:
-	"/ttn.lorawan.v3.DeviceRepository/GetBrand":   {All: EndDeviceBrandFieldPathsNested, Allowed: EndDeviceBrandFieldPathsNested},
-	"/ttn.lorawan.v3.DeviceRepository/ListBrands": {All: EndDeviceBrandFieldPathsNested, Allowed: EndDeviceBrandFieldPathsNested},
-	"/ttn.lorawan.v3.DeviceRepository/GetModel":   {All: EndDeviceModelFieldPathsNested, Allowed: EndDeviceModelFieldPathsNested},
-	"/ttn.lorawan.v3.DeviceRepository/ListModels": {All: EndDeviceModelFieldPathsNested, Allowed: EndDeviceModelFieldPathsNested},
+	"/ttn.lorawan.v3.DeviceRepository/GetBrand": {
+		All:     EndDeviceBrandFieldPathsNested,
+		Allowed: EndDeviceBrandFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.DeviceRepository/ListBrands": {
+		All:     EndDeviceBrandFieldPathsNested,
+		Allowed: EndDeviceBrandFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.DeviceRepository/GetModel": {
+		All:     EndDeviceModelFieldPathsNested,
+		Allowed: EndDeviceModelFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.DeviceRepository/ListModels": {
+		All:     EndDeviceModelFieldPathsNested,
+		Allowed: EndDeviceModelFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.DeviceRepository/GetUplinkDecoder": {
+		All:     MessagePayloadDecoderFieldPathsNested,
+		Allowed: MessagePayloadDecoderFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.DeviceRepository/GetDownlinkDecoder": {
+		All:     MessagePayloadDecoderFieldPathsNested,
+		Allowed: MessagePayloadDecoderFieldPathsNested,
+	},
+	"/ttn.lorawan.v3.DeviceRepository/GetDownlinkEncoder": {
+		All:     MessagePayloadEncoderFieldPathsNested,
+		Allowed: MessagePayloadEncoderFieldPathsNested,
+	},
 }
 
 func omitFields(fields []string, fieldsToOmit ...string) []string {
@@ -935,7 +1247,10 @@ func applicationUpFieldMaskPaths() []string {
 	paths = append(paths, FieldsWithPrefix("up.downlink_sent", ApplicationDownlinkFieldPathsNested...)...)
 	paths = append(paths, FieldsWithPrefix("up.downlink_failed", ApplicationDownlinkFailedFieldPathsNested...)...)
 	paths = append(paths, FieldsWithPrefix("up.downlink_queued", ApplicationDownlinkFieldPathsNested...)...)
-	paths = append(paths, FieldsWithPrefix("up.downlink_queue_invalidated", ApplicationInvalidatedDownlinksFieldPathsNested...)...)
+	paths = append(
+		paths,
+		FieldsWithPrefix("up.downlink_queue_invalidated", ApplicationInvalidatedDownlinksFieldPathsNested...)...,
+	)
 	paths = append(paths, FieldsWithPrefix("up.location_solved", ApplicationLocationFieldPathsNested...)...)
 	paths = append(paths, FieldsWithPrefix("up.service_data", ApplicationServiceDataFieldPathsNested...)...)
 	return paths

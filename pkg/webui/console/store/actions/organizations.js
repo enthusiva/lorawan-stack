@@ -18,6 +18,8 @@ import {
   createPaginationBaseActionType,
   createPaginationDeleteBaseActionType,
   createPaginationDeleteActions,
+  createPaginationRestoreBaseActionType,
+  createPaginationRestoreActions,
 } from '@ttn-lw/lib/store/actions/pagination'
 
 import {
@@ -35,6 +37,8 @@ import {
   createStopEventsStreamActionType,
   clearEvents,
   createClearEventsActionType,
+  createSetEventsFilterActionType,
+  setEventsFilter,
 } from './events'
 import createGetRightsListRequestActions, { createGetRightsListActionType } from './rights'
 
@@ -54,7 +58,27 @@ export const GET_ORG_BASE = 'GET_ORGANIZATION'
 export const [
   { request: GET_ORG, success: GET_ORG_SUCCESS, failure: GET_ORG_FAILURE },
   { request: getOrganization, success: getOrganizationSuccess, failure: getOrganizationFailure },
-] = createRequestActions(GET_ORG_BASE, id => ({ id }), (id, selector) => ({ selector }))
+] = createRequestActions(
+  GET_ORG_BASE,
+  id => ({ id }),
+  (id, selector) => ({ selector }),
+)
+
+export const GET_ORG_COLLABORATOR_COUNT_BASE = 'GET_ORGANIZATION_COLLABORATOR_COUNT'
+export const [
+  {
+    request: GET_ORG_COLLABORATOR_COUNT,
+    success: GET_ORG_COLLABORATOR_COUNT_SUCCESS,
+    failure: GET_ORG_COLLABORATOR_COUNT_FAILURE,
+  },
+  {
+    request: getOrganizationCollaboratorCount,
+    success: getOrganizationCollaboratorCountSuccess,
+    failure: getOrganizationCollaboratorCountFailure,
+  },
+] = createRequestActions(GET_ORG_COLLABORATOR_COUNT_BASE, id => ({
+  id,
+}))
 
 export const CREATE_ORG_BASE = 'CREATE_ORGANIZATION'
 export const [
@@ -100,6 +124,16 @@ export const [
   },
 ] = createPaginationDeleteActions(SHARED_NAME, id => ({ id }))
 
+export const RESTORE_ORG_BASE = createPaginationRestoreBaseActionType(SHARED_NAME)
+export const [
+  { request: RESTORE_ORG, success: RESTORE_ORG_SUCCESS, failure: RESTORE_ORG_FAILURE },
+  {
+    request: restoreOrganization,
+    success: restoreOrganizationSuccess,
+    failure: restoreOrganizationFailure,
+  },
+] = createPaginationRestoreActions(SHARED_NAME, id => ({ id }))
+
 export const START_ORG_EVENT_STREAM = createStartEventsStreamActionType(SHARED_NAME)
 export const START_ORG_EVENT_STREAM_SUCCESS = createStartEventsStreamSuccessActionType(SHARED_NAME)
 export const START_ORG_EVENT_STREAM_FAILURE = createStartEventsStreamFailureActionType(SHARED_NAME)
@@ -107,6 +141,7 @@ export const PAUSE_ORG_EVENT_STREAM = createPauseEventsStreamActionType(SHARED_N
 export const RESUME_ORG_EVENT_STREAM = createResumeEventsStreamActionType(SHARED_NAME)
 export const STOP_ORG_EVENT_STREAM = createStopEventsStreamActionType(SHARED_NAME)
 export const CLEAR_ORG_EVENTS = createClearEventsActionType(SHARED_NAME)
+export const SET_ORG_EVENTS_FILTER = createSetEventsFilterActionType(SHARED_NAME)
 
 export const startOrganizationEventsStream = startEventsStream(SHARED_NAME)
 export const startOrganizationEventsStreamSuccess = startEventsStreamSuccess(SHARED_NAME)
@@ -115,3 +150,4 @@ export const pauseOrganizationEventsStream = pauseEventsStream(SHARED_NAME)
 export const resumeOrganizationEventsStream = resumeEventsStream(SHARED_NAME)
 export const stopOrganizationEventsStream = stopEventsStream(SHARED_NAME)
 export const clearOrganizationEventsStream = clearEvents(SHARED_NAME)
+export const setOrganizationEventsFilter = setEventsFilter(SHARED_NAME)

@@ -20,6 +20,7 @@ import {
   LIST_MODELS_SUCCESS,
   GET_MODEL_SUCCESS,
   GET_TEMPLATE_SUCCESS,
+  GET_REPO_PF_SUCCESS,
 } from '@console/store/actions/device-repository'
 
 export const defaultState = {
@@ -29,6 +30,7 @@ export const defaultState = {
   },
   models: {},
   template: undefined,
+  repo_payload_formatters: undefined,
 }
 
 const handleListBrands = (state, payload) => {
@@ -83,9 +85,12 @@ const handleGetModel = (state, payload) => {
     },
   }
 }
-const handleGetTemplate = (state, payload) => {
-  return { ...state, template: payload }
-}
+const handleGetTemplate = (state, payload) => ({ ...state, template: payload })
+
+const handleGetRepositoryPayloadFromatters = (state, payload) => ({
+  ...state,
+  repo_payload_formatters: payload,
+})
 
 export default handleActions(
   {
@@ -93,6 +98,8 @@ export default handleActions(
     [LIST_MODELS_SUCCESS]: (state, { payload }) => handleListModels(state, payload),
     [GET_MODEL_SUCCESS]: (state, { payload }) => handleGetModel(state, payload),
     [GET_TEMPLATE_SUCCESS]: (state, { payload }) => handleGetTemplate(state, payload),
+    [GET_REPO_PF_SUCCESS]: (state, { payload }) =>
+      handleGetRepositoryPayloadFromatters(state, payload),
   },
   defaultState,
 )

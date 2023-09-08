@@ -19,7 +19,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
@@ -68,7 +68,7 @@ func TestHTTP(t *testing.T) {
 			name   string
 			req1   *http.Request
 			req2   *http.Request
-			assert func(interface{}, ...interface{}) string
+			assert func(any, ...any) string
 		}{
 			{
 				name:   "ByIP",

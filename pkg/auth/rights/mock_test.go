@@ -21,16 +21,16 @@ import (
 )
 
 type mockHandler struct {
-	call func(ctx context.Context, req interface{})
+	call func(ctx context.Context, req any)
 
 	ctx context.Context
-	req interface{}
+	req any
 
-	res interface{}
+	res any
 	err error
 }
 
-func (h *mockHandler) Handler(ctx context.Context, req interface{}) (interface{}, error) {
+func (h *mockHandler) Handler(ctx context.Context, req any) (any, error) {
 	h.ctx, h.req = ctx, req
 	if h.call != nil {
 		h.call(ctx, req)
@@ -42,15 +42,15 @@ type mockFetcher struct {
 	// Request vars
 	authInfoCtx     context.Context
 	applicationCtx  context.Context
-	applicationIDs  ttnpb.ApplicationIdentifiers
+	applicationIDs  *ttnpb.ApplicationIdentifiers
 	clientCtx       context.Context
-	clientIDs       ttnpb.ClientIdentifiers
+	clientIDs       *ttnpb.ClientIdentifiers
 	gatewayCtx      context.Context
-	gatewayIDs      ttnpb.GatewayIdentifiers
+	gatewayIDs      *ttnpb.GatewayIdentifiers
 	organizationCtx context.Context
-	organizationIDs ttnpb.OrganizationIdentifiers
+	organizationIDs *ttnpb.OrganizationIdentifiers
 	userCtx         context.Context
-	userIDs         ttnpb.UserIdentifiers
+	userIDs         *ttnpb.UserIdentifiers
 
 	// Response vars
 	authInfoResponse   *ttnpb.AuthInfoResponse
@@ -72,27 +72,27 @@ func (f *mockFetcher) AuthInfo(ctx context.Context) (*ttnpb.AuthInfoResponse, er
 	return f.authInfoResponse, f.authInfoError
 }
 
-func (f *mockFetcher) ApplicationRights(ctx context.Context, ids ttnpb.ApplicationIdentifiers) (*ttnpb.Rights, error) {
+func (f *mockFetcher) ApplicationRights(ctx context.Context, ids *ttnpb.ApplicationIdentifiers) (*ttnpb.Rights, error) {
 	f.applicationCtx, f.applicationIDs = ctx, ids
 	return f.applicationRights, f.applicationError
 }
 
-func (f *mockFetcher) ClientRights(ctx context.Context, ids ttnpb.ClientIdentifiers) (*ttnpb.Rights, error) {
+func (f *mockFetcher) ClientRights(ctx context.Context, ids *ttnpb.ClientIdentifiers) (*ttnpb.Rights, error) {
 	f.clientCtx, f.clientIDs = ctx, ids
 	return f.clientRights, f.clientError
 }
 
-func (f *mockFetcher) GatewayRights(ctx context.Context, ids ttnpb.GatewayIdentifiers) (*ttnpb.Rights, error) {
+func (f *mockFetcher) GatewayRights(ctx context.Context, ids *ttnpb.GatewayIdentifiers) (*ttnpb.Rights, error) {
 	f.gatewayCtx, f.gatewayIDs = ctx, ids
 	return f.gatewayRights, f.gatewayError
 }
 
-func (f *mockFetcher) OrganizationRights(ctx context.Context, ids ttnpb.OrganizationIdentifiers) (*ttnpb.Rights, error) {
+func (f *mockFetcher) OrganizationRights(ctx context.Context, ids *ttnpb.OrganizationIdentifiers) (*ttnpb.Rights, error) {
 	f.organizationCtx, f.organizationIDs = ctx, ids
 	return f.organizationRights, f.organizationError
 }
 
-func (f *mockFetcher) UserRights(ctx context.Context, ids ttnpb.UserIdentifiers) (*ttnpb.Rights, error) {
+func (f *mockFetcher) UserRights(ctx context.Context, ids *ttnpb.UserIdentifiers) (*ttnpb.Rights, error) {
 	f.userCtx, f.userIDs = ctx, ids
 	return f.userRights, f.userError
 }

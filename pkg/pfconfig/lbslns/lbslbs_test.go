@@ -18,21 +18,30 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/pfconfig/shared"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
+type TestFeatures struct {
+	Production bool
+}
+
+func (f TestFeatures) IsProduction() bool { return f.Production }
+
 func TestGetRouterConfig(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		Name            string
 		FrequencyPlan   frequencyplans.FrequencyPlan
 		FrequencyPlanID string
 		Cfg             RouterConfig
-		IsProd          bool
+		Features        TestFeatures
 		ErrorAssertion  func(err error) bool
 	}{
 		{
@@ -100,21 +109,16 @@ func TestGetRouterConfig(t *testing.T) {
 				NoCCA:       true,
 				NoDutyCycle: true,
 				NoDwellTime: true,
-				SX1301Config: []shared.SX1301Config{
+				SX1301Config: []LBSSX1301Config{
 					{
-						LoRaWANPublic: true,
-						ClockSource:   0,
-						AntennaGain:   0,
-						Radios: []shared.RFConfig{
+						Radios: []LBSRFConfig{
 							{
 								Enable:    true,
 								Frequency: 922300000,
-								TxEnable:  true,
 							},
 							{
 								Enable:    false,
 								Frequency: 923000000,
-								TxEnable:  false,
 							},
 						},
 						Channels: []shared.IFConfig{
@@ -127,8 +131,35 @@ func TestGetRouterConfig(t *testing.T) {
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 						},
-						LoRaStandardChannel: &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
-						FSKChannel:          &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
+						LoRaStandardChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0, Datarate: 0,
+						},
+						FSKChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
+					},
+				},
+				Beacon: &BeaconingConfig{
+					DR:     ttnpb.DataRateIndex_DATA_RATE_8,
+					Layout: [3]int{5, 11, 23},
+					Freqs: []uint64{
+						923300000,
+						923900000,
+						924500000,
+						925100000,
+						925700000,
+						926300000,
+						926900000,
+						927500000,
 					},
 				},
 			},
@@ -175,21 +206,16 @@ func TestGetRouterConfig(t *testing.T) {
 					[3]int{8, 500, 0},
 					[3]int{7, 500, 0},
 				},
-				SX1301Config: []shared.SX1301Config{
+				SX1301Config: []LBSSX1301Config{
 					{
-						LoRaWANPublic: true,
-						ClockSource:   0,
-						AntennaGain:   0,
-						Radios: []shared.RFConfig{
+						Radios: []LBSRFConfig{
 							{
 								Enable:    true,
 								Frequency: 922300000,
-								TxEnable:  true,
 							},
 							{
 								Enable:    false,
 								Frequency: 923000000,
-								TxEnable:  false,
 							},
 						},
 						Channels: []shared.IFConfig{
@@ -202,18 +228,51 @@ func TestGetRouterConfig(t *testing.T) {
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 						},
-						LoRaStandardChannel: &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
-						FSKChannel:          &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
+						LoRaStandardChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
+						FSKChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
+					},
+				},
+				Beacon: &BeaconingConfig{
+					DR:     ttnpb.DataRateIndex_DATA_RATE_8,
+					Layout: [3]int{5, 11, 23},
+					Freqs: []uint64{
+						923300000,
+						923900000,
+						924500000,
+						925100000,
+						925700000,
+						926300000,
+						926900000,
+						927500000,
 					},
 				},
 			},
-			IsProd: true,
+			Features: TestFeatures{
+				Production: true,
+			},
 		},
 	} {
+		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			a := assertions.New(t)
+			t.Parallel()
+
+			a, ctx := test.New(t)
 			fps := map[string]*frequencyplans.FrequencyPlan{tc.FrequencyPlanID: &tc.FrequencyPlan}
-			cfg, err := GetRouterConfig(tc.FrequencyPlan.BandID, fps, tc.IsProd, time.Now())
+			cfg, err := GetRouterConfig(ctx, tc.FrequencyPlan.BandID, fps, tc.Features, time.Now(), 0)
 			if err != nil {
 				if tc.ErrorAssertion == nil || !a.So(tc.ErrorAssertion(err), should.BeTrue) {
 					t.Fatalf("Unexpected error: %v", err)
@@ -231,54 +290,57 @@ func TestGetRouterConfig(t *testing.T) {
 }
 
 func TestGetRouterConfigWithMultipleFP(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		Name           string
 		BandID         string
 		FrequencyPlans map[string]*frequencyplans.FrequencyPlan
 		Cfg            RouterConfig
-		IsProd         bool
+		Features       TestFeatures
 		ErrorAssertion func(err error) bool
 	}{
 		{
 			Name:   "ValidFrequencyPlan",
 			BandID: "US_902_928",
-			FrequencyPlans: map[string]*frequencyplans.FrequencyPlan{test.USFrequencyPlanID: {
-				BandID: "US_902_928",
-				Radios: []frequencyplans.Radio{
-					{
-						Enable:    true,
-						ChipType:  "SX1257",
-						Frequency: 924300000,
-						TxConfiguration: &frequencyplans.RadioTxConfiguration{
-							MinFrequency: 909000000,
-							MaxFrequency: 927000000,
+			FrequencyPlans: map[string]*frequencyplans.FrequencyPlan{
+				test.USFrequencyPlanID: {
+					BandID: "US_902_928",
+					Radios: []frequencyplans.Radio{
+						{
+							Enable:    true,
+							ChipType:  "SX1257",
+							Frequency: 924300000,
+							TxConfiguration: &frequencyplans.RadioTxConfiguration{
+								MinFrequency: 909000000,
+								MaxFrequency: 927000000,
+							},
+						},
+						{
+							Enable:    false,
+							ChipType:  "SX1257",
+							Frequency: 925000000,
 						},
 					},
-					{
-						Enable:    false,
-						ChipType:  "SX1257",
-						Frequency: 925000000,
-					},
-				},
-			}, "US_902_928_Custom": {
-				BandID: "US_902_928",
-				Radios: []frequencyplans.Radio{
-					{
-						Enable:    true,
-						ChipType:  "SX1257",
-						Frequency: 924300000,
-						TxConfiguration: &frequencyplans.RadioTxConfiguration{
-							MinFrequency: 900000000,
-							MaxFrequency: 925000000,
+				}, "US_902_928_Custom": {
+					BandID: "US_902_928",
+					Radios: []frequencyplans.Radio{
+						{
+							Enable:    true,
+							ChipType:  "SX1257",
+							Frequency: 924300000,
+							TxConfiguration: &frequencyplans.RadioTxConfiguration{
+								MinFrequency: 900000000,
+								MaxFrequency: 925000000,
+							},
+						},
+						{
+							Enable:    false,
+							ChipType:  "SX1257",
+							Frequency: 925000000,
 						},
 					},
-					{
-						Enable:    false,
-						ChipType:  "SX1257",
-						Frequency: 925000000,
-					},
 				},
-			},
 			},
 			Cfg: RouterConfig{
 				Region:         "US902",
@@ -303,21 +365,18 @@ func TestGetRouterConfigWithMultipleFP(t *testing.T) {
 				NoCCA:       true,
 				NoDutyCycle: true,
 				NoDwellTime: true,
-				SX1301Config: []shared.SX1301Config{
+				SX1301Config: []LBSSX1301Config{
 					{
-						LoRaWANPublic: true,
-						ClockSource:   0,
-						AntennaGain:   0,
-						Radios: []shared.RFConfig{
+						Radios: []LBSRFConfig{
 							{
-								Enable:    true,
-								Frequency: 924300000,
-								TxEnable:  true,
+								Enable:      true,
+								Frequency:   924300000,
+								AntennaGain: 3,
 							},
 							{
-								Enable:    false,
-								Frequency: 925000000,
-								TxEnable:  false,
+								Enable:      false,
+								Frequency:   925000000,
+								AntennaGain: 3,
 							},
 						},
 						Channels: []shared.IFConfig{
@@ -330,23 +389,34 @@ func TestGetRouterConfigWithMultipleFP(t *testing.T) {
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 						},
-						LoRaStandardChannel: &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
-						FSKChannel:          &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
+						LoRaStandardChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
+						FSKChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
 					},
 					{
-						LoRaWANPublic: true,
-						ClockSource:   0,
-						AntennaGain:   0,
-						Radios: []shared.RFConfig{
+						Radios: []LBSRFConfig{
 							{
-								Enable:    true,
-								Frequency: 924300000,
-								TxEnable:  true,
+								Enable:      true,
+								Frequency:   924300000,
+								AntennaGain: 3,
 							},
 							{
-								Enable:    false,
-								Frequency: 925000000,
-								TxEnable:  false,
+								Enable:      false,
+								Frequency:   925000000,
+								AntennaGain: 3,
 							},
 						},
 						Channels: []shared.IFConfig{
@@ -359,16 +429,47 @@ func TestGetRouterConfigWithMultipleFP(t *testing.T) {
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 							{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
 						},
-						LoRaStandardChannel: &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
-						FSKChannel:          &shared.IFConfig{Enable: false, Radio: 0, IFValue: 0, Bandwidth: 0, SpreadFactor: 0, Datarate: 0},
+						LoRaStandardChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
+						FSKChannel: &shared.IFConfig{
+							Enable:       false,
+							Radio:        0,
+							IFValue:      0,
+							Bandwidth:    0,
+							SpreadFactor: 0,
+							Datarate:     0,
+						},
+					},
+				},
+				Beacon: &BeaconingConfig{
+					DR:     ttnpb.DataRateIndex_DATA_RATE_8,
+					Layout: [3]int{5, 11, 23},
+					Freqs: []uint64{
+						923300000,
+						923900000,
+						924500000,
+						925100000,
+						925700000,
+						926300000,
+						926900000,
+						927500000,
 					},
 				},
 			},
 		},
 	} {
+		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			a := assertions.New(t)
-			cfg, err := GetRouterConfig(tc.BandID, tc.FrequencyPlans, tc.IsProd, time.Now())
+			t.Parallel()
+
+			a, ctx := test.New(t)
+			cfg, err := GetRouterConfig(ctx, tc.BandID, tc.FrequencyPlans, tc.Features, time.Now(), 3)
 			if err != nil {
 				if tc.ErrorAssertion == nil || !a.So(tc.ErrorAssertion(err), should.BeTrue) {
 					t.Fatalf("Unexpected error: %v", err)
@@ -386,6 +487,8 @@ func TestGetRouterConfigWithMultipleFP(t *testing.T) {
 }
 
 func TestGetDataRatesFromFrequencyPlan(t *testing.T) {
+	t.Parallel()
+
 	a := assertions.New(t)
 	for _, tc := range []struct {
 		Name           string
@@ -433,7 +536,10 @@ func TestGetDataRatesFromFrequencyPlan(t *testing.T) {
 			},
 		},
 	} {
+		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
+
 			drs, err := getDataRatesFromBandID(tc.BandID)
 			if err != nil && (tc.ErrorAssertion == nil || !a.So(tc.ErrorAssertion(err), should.BeTrue)) {
 				t.Fatalf("Unexpected error: %v", err)

@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _keys_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on KeyEnvelope with the rules defined
 // in the proto definition for this message. If any rules are violated, an
@@ -51,10 +48,21 @@ func (m *KeyEnvelope) ValidateFields(paths ...string) error {
 		_ = subs
 		switch name {
 		case "key":
-			// no validation rules for Key
+
+			if len(m.GetKey()) > 0 {
+
+				if len(m.GetKey()) != 16 {
+					return KeyEnvelopeValidationError{
+						field:  "key",
+						reason: "value length must be 16 bytes",
+					}
+				}
+
+			}
+
 		case "kek_label":
 
-			if utf8.RuneCountInString(m.GetKEKLabel()) > 2048 {
+			if utf8.RuneCountInString(m.GetKekLabel()) > 2048 {
 				return KeyEnvelopeValidationError{
 					field:  "kek_label",
 					reason: "value length must be at most 2048 runes",
@@ -151,7 +159,7 @@ func (m *RootKeys) ValidateFields(paths ...string) error {
 		switch name {
 		case "root_key_id":
 
-			if utf8.RuneCountInString(m.GetRootKeyID()) > 2048 {
+			if utf8.RuneCountInString(m.GetRootKeyId()) > 2048 {
 				return RootKeysValidationError{
 					field:  "root_key_id",
 					reason: "value length must be at most 2048 runes",
@@ -263,7 +271,7 @@ func (m *SessionKeys) ValidateFields(paths ...string) error {
 		switch name {
 		case "session_key_id":
 
-			if len(m.GetSessionKeyID()) > 2048 {
+			if len(m.GetSessionKeyId()) > 2048 {
 				return SessionKeysValidationError{
 					field:  "session_key_id",
 					reason: "value length must be at most 2048 bytes",

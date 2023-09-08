@@ -14,39 +14,58 @@
 
 import React, { PureComponent } from 'react'
 import classnames from 'classnames'
+import { defineMessages } from 'react-intl'
 
+import Message from '@ttn-lw/lib/components/message'
 import RelativeDateTime from '@ttn-lw/lib/components/date-time/relative'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 
 import style from './progress-bar.styl'
 
+const m = defineMessages({
+  estimatedCompletion: 'Estimated completion {eta}',
+  progress: '{current, number} of {target, number}',
+  percentage: '{percentage, number, percent} finished',
+})
+
 export default class ProgressBar extends PureComponent {
   static propTypes = {
+    /* The class to be attached to the bar. */
+    barClassName: PropTypes.string,
+    children: PropTypes.node,
     /* The class to be attached to the outer container. */
     className: PropTypes.string,
     /* The current progress value, used in conjunction with the `target` value. */
     current: PropTypes.number,
+    headerTargetMessage: PropTypes.message,
+    itemName: PropTypes.message,
     /* Current percentage. */
     percentage: PropTypes.number,
-    /* Decimals to be shown for the percentage value. */
-    percentageDecimals: PropTypes.number,
     /* Flag indicating whether an ETA estimation is shown. */
     showEstimation: PropTypes.bool,
+    /* Flag indicating whether a header with current and target is shown is shown. */
+    showHeader: PropTypes.bool,
     /* Flag indicating whether a status text is shown (percentage value). */
     showStatus: PropTypes.bool,
     /* The target value, used in conjunction with the `current` value. */
     target: PropTypes.number,
+    warn: PropTypes.number,
   }
 
   static defaultProps = {
+    barClassName: undefined,
+    children: undefined,
     className: undefined,
     current: 0,
     percentage: undefined,
-    percentageDecimals: 2,
     showEstimation: true,
     showStatus: false,
+    showHeader: false,
     target: 1,
+    headerTargetMessage: undefined,
+    itemName: undefined,
+    warn: undefined,
   }
 
   state = {
@@ -82,13 +101,19 @@ export default class ProgressBar extends PureComponent {
       current,
       target,
       showStatus,
-      percentageDecimals,
       showEstimation,
       className,
+      children,
+      showHeader,
+      headerTargetMessage,
+      itemName,
+      warn,
+      barClassName,
     } = this.props
     const { percentage = (current / target) * 100 } = this.props
     const { estimatedDuration, startTime, estimations } = this.state
-    const displayPercentage = Math.max(0, Math.min(100, percentage)).toFixed(percentageDecimals)
+    const fraction = Math.max(0, Math.min(1, percentage / 100))
+    const displayPercentage = (fraction || 0) * 100
     let displayEstimation = null
 
     if (showEstimation && percentage < 100) {
@@ -111,19 +136,42 @@ export default class ProgressBar extends PureComponent {
         )
     }
 
+    const fillerCls = classnames(style.filler, {
+      [style.warn]: warn >= 80,
+      [style.limit]: warn >= 100,
+    })
+
     return (
-      <div className={classnames(className, style.container)}>
-        <div className={style.bar}>
-          <div style={{ width: `${displayPercentage}%` }} className={style.filler} />
+      <div className={classnames(className, style.container)} data-test-id="progress-bar">
+        {showHeader && (
+          <div className={style.progressBarValues}>
+            <p className="m-0">
+              <b>
+                {current} {itemName}
+              </b>
+            </p>
+            {headerTargetMessage}
+          </div>
+        )}
+        <div className={classnames(style.bar, barClassName)}>
+          <div style={{ width: `${displayPercentage}%` }} className={fillerCls} />
         </div>
         {showStatus && (
           <div className={style.status}>
-            {this.props.percentage === undefined && (
+            {this.props.percentage === undefined && !showHeader && (
               <div>
-                {current} of {target} ({displayPercentage}% finished)
+                <Message content={m.progress} values={{ current, target }} /> (
+                <Message content={m.percentage} values={{ percentage: fraction }} />)
               </div>
             )}
-            {this.props.percentage !== undefined && <div>{displayPercentage}% finished</div>}
+            {children}
+            {this.props.percentage !== undefined && (
+              <Message
+                component="div"
+                content={m.percentage}
+                values={{ percentage: displayPercentage }}
+              />
+            )}
             {displayEstimation}
           </div>
         )}

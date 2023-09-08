@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import autoBind from 'auto-bind'
+
 import Marshaler from '../util/marshaler'
 
 class ApiKeys {
   constructor(registry, { parentRoutes }) {
     this._api = registry
     this._parentRoutes = parentRoutes
+    autoBind(this)
   }
 
   async getById(entityId, id) {
@@ -56,12 +59,20 @@ class ApiKeys {
   }
 
   async deleteById(entityId, id) {
-    return this.updateById(entityId, id, {
-      rights: [],
+    const entityIdRoute = this._parentRoutes.delete
+    const result = await this._api.DeleteAPIKey({
+      routeParams: { [entityIdRoute]: entityId, key_id: id },
     })
+
+    return Marshaler.payloadSingleResponse(result)
   }
 
-  async updateById(entityId, id, patch) {
+  async updateById(
+    entityId,
+    id,
+    patch,
+    mask = Marshaler.fieldMaskFromPatch(patch, this._api.UpdateAllowedFieldMaskPaths),
+  ) {
     const entityIdRoute = this._parentRoutes.update
     const result = await this._api.UpdateAPIKey(
       {
@@ -72,6 +83,7 @@ class ApiKeys {
       },
       {
         api_key: { ...patch },
+        field_mask: Marshaler.fieldMask(mask),
       },
     )
 

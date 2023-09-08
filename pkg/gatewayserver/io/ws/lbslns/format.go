@@ -28,11 +28,6 @@ var (
 	trafficEndPointPrefix   = "/traffic"
 )
 
-// State represents the LBS Session state.
-type State struct {
-	ID int32
-}
-
 type lbsLNS struct {
 	maxRoundTripDelay time.Duration
 	tokens            io.DownlinkTokens
@@ -48,6 +43,6 @@ func NewFormatter(maxRoundTripDelay time.Duration) ws.Formatter {
 func (f *lbsLNS) Endpoints() ws.Endpoints {
 	return ws.Endpoints{
 		ConnectionInfo: "/router-info",
-		Traffic:        fmt.Sprintf("%s/:id", trafficEndPointPrefix),
+		Traffic:        fmt.Sprintf("%s/{id}", trafficEndPointPrefix),
 	}
 }

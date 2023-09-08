@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _gateway_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on GatewayBrand with the rules
 // defined in the proto definition for this message. If any rules are
@@ -51,11 +48,11 @@ func (m *GatewayBrand) ValidateFields(paths ...string) error {
 		_ = subs
 		switch name {
 		case "id":
-			// no validation rules for ID
+			// no validation rules for Id
 		case "name":
 			// no validation rules for Name
 		case "url":
-			// no validation rules for URL
+			// no validation rules for Url
 		case "logos":
 
 		default:
@@ -139,16 +136,16 @@ func (m *GatewayModel) ValidateFields(paths ...string) error {
 		switch name {
 		case "brand_id":
 
-			if m.GetBrandID() != "" {
+			if m.GetBrandId() != "" {
 
-				if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+				if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 					return GatewayModelValidationError{
 						field:  "brand_id",
 						reason: "value length must be at most 36 runes",
 					}
 				}
 
-				if !_GatewayModel_BrandID_Pattern.MatchString(m.GetBrandID()) {
+				if !_GatewayModel_BrandId_Pattern.MatchString(m.GetBrandId()) {
 					return GatewayModelValidationError{
 						field:  "brand_id",
 						reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -159,16 +156,16 @@ func (m *GatewayModel) ValidateFields(paths ...string) error {
 
 		case "id":
 
-			if m.GetID() != "" {
+			if m.GetId() != "" {
 
-				if utf8.RuneCountInString(m.GetID()) > 36 {
+				if utf8.RuneCountInString(m.GetId()) > 36 {
 					return GatewayModelValidationError{
 						field:  "id",
 						reason: "value length must be at most 36 runes",
 					}
 				}
 
-				if !_GatewayModel_ID_Pattern.MatchString(m.GetID()) {
+				if !_GatewayModel_Id_Pattern.MatchString(m.GetId()) {
 					return GatewayModelValidationError{
 						field:  "id",
 						reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -243,9 +240,9 @@ var _ interface {
 	ErrorName() string
 } = GatewayModelValidationError{}
 
-var _GatewayModel_BrandID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GatewayModel_BrandId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
-var _GatewayModel_ID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GatewayModel_Id_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
 // ValidateFields checks the field values on GatewayVersionIdentifiers with the
 // rules defined in the proto definition for this message. If any rules are
@@ -264,16 +261,16 @@ func (m *GatewayVersionIdentifiers) ValidateFields(paths ...string) error {
 		switch name {
 		case "brand_id":
 
-			if m.GetBrandID() != "" {
+			if m.GetBrandId() != "" {
 
-				if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+				if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 					return GatewayVersionIdentifiersValidationError{
 						field:  "brand_id",
 						reason: "value length must be at most 36 runes",
 					}
 				}
 
-				if !_GatewayVersionIdentifiers_BrandID_Pattern.MatchString(m.GetBrandID()) {
+				if !_GatewayVersionIdentifiers_BrandId_Pattern.MatchString(m.GetBrandId()) {
 					return GatewayVersionIdentifiersValidationError{
 						field:  "brand_id",
 						reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -284,16 +281,16 @@ func (m *GatewayVersionIdentifiers) ValidateFields(paths ...string) error {
 
 		case "model_id":
 
-			if m.GetModelID() != "" {
+			if m.GetModelId() != "" {
 
-				if utf8.RuneCountInString(m.GetModelID()) > 36 {
+				if utf8.RuneCountInString(m.GetModelId()) > 36 {
 					return GatewayVersionIdentifiersValidationError{
 						field:  "model_id",
 						reason: "value length must be at most 36 runes",
 					}
 				}
 
-				if !_GatewayVersionIdentifiers_ModelID_Pattern.MatchString(m.GetModelID()) {
+				if !_GatewayVersionIdentifiers_ModelId_Pattern.MatchString(m.GetModelId()) {
 					return GatewayVersionIdentifiersValidationError{
 						field:  "model_id",
 						reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -387,9 +384,9 @@ var _ interface {
 	ErrorName() string
 } = GatewayVersionIdentifiersValidationError{}
 
-var _GatewayVersionIdentifiers_BrandID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GatewayVersionIdentifiers_BrandId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
-var _GatewayVersionIdentifiers_ModelID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GatewayVersionIdentifiers_ModelId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
 // ValidateFields checks the field values on GatewayRadio with the rules
 // defined in the proto definition for this message. If any rules are
@@ -413,7 +410,7 @@ func (m *GatewayRadio) ValidateFields(paths ...string) error {
 		case "frequency":
 			// no validation rules for Frequency
 		case "rssi_offset":
-			// no validation rules for RSSIOffset
+			// no validation rules for RssiOffset
 		case "tx_configuration":
 
 			if v, ok := interface{}(m.GetTxConfiguration()).(interface{ ValidateFields(...string) error }); ok {
@@ -489,118 +486,6 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = GatewayRadioValidationError{}
-
-// ValidateFields checks the field values on GatewayVersion with the rules
-// defined in the proto definition for this message. If any rules are
-// violated, an error is returned.
-func (m *GatewayVersion) ValidateFields(paths ...string) error {
-	if m == nil {
-		return nil
-	}
-
-	if len(paths) == 0 {
-		paths = GatewayVersionFieldPathsNested
-	}
-
-	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
-		_ = subs
-		switch name {
-		case "ids":
-
-			if v, ok := interface{}(&m.GatewayVersionIdentifiers).(interface{ ValidateFields(...string) error }); ok {
-				if err := v.ValidateFields(subs...); err != nil {
-					return GatewayVersionValidationError{
-						field:  "ids",
-						reason: "embedded message failed validation",
-						cause:  err,
-					}
-				}
-			}
-
-		case "photos":
-
-		case "radios":
-
-			for idx, item := range m.GetRadios() {
-				_, _ = idx, item
-
-				if v, ok := interface{}(item).(interface{ ValidateFields(...string) error }); ok {
-					if err := v.ValidateFields(subs...); err != nil {
-						return GatewayVersionValidationError{
-							field:  fmt.Sprintf("radios[%v]", idx),
-							reason: "embedded message failed validation",
-							cause:  err,
-						}
-					}
-				}
-
-			}
-
-		case "clock_source":
-			// no validation rules for ClockSource
-		default:
-			return GatewayVersionValidationError{
-				field:  name,
-				reason: "invalid field path",
-			}
-		}
-	}
-	return nil
-}
-
-// GatewayVersionValidationError is the validation error returned by
-// GatewayVersion.ValidateFields if the designated constraints aren't met.
-type GatewayVersionValidationError struct {
-	field  string
-	reason string
-	cause  error
-	key    bool
-}
-
-// Field function returns field value.
-func (e GatewayVersionValidationError) Field() string { return e.field }
-
-// Reason function returns reason value.
-func (e GatewayVersionValidationError) Reason() string { return e.reason }
-
-// Cause function returns cause value.
-func (e GatewayVersionValidationError) Cause() error { return e.cause }
-
-// Key function returns key value.
-func (e GatewayVersionValidationError) Key() bool { return e.key }
-
-// ErrorName returns error name.
-func (e GatewayVersionValidationError) ErrorName() string { return "GatewayVersionValidationError" }
-
-// Error satisfies the builtin error interface
-func (e GatewayVersionValidationError) Error() string {
-	cause := ""
-	if e.cause != nil {
-		cause = fmt.Sprintf(" | caused by: %v", e.cause)
-	}
-
-	key := ""
-	if e.key {
-		key = "key for "
-	}
-
-	return fmt.Sprintf(
-		"invalid %sGatewayVersion.%s: %s%s",
-		key,
-		e.field,
-		e.reason,
-		cause)
-}
-
-var _ error = GatewayVersionValidationError{}
-
-var _ interface {
-	Field() string
-	Reason() string
-	Key() bool
-	Cause() error
-	ErrorName() string
-} = GatewayVersionValidationError{}
 
 // ValidateFields checks the field values on GatewayClaimAuthenticationCode
 // with the rules defined in the proto definition for this message. If any
@@ -737,7 +622,14 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 		switch name {
 		case "ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetIds() == nil {
+				return GatewayValidationError{
+					field:  "ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayValidationError{
 						field:  "ids",
@@ -749,7 +641,7 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "created_at":
 
-			if v, ok := interface{}(&m.CreatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetCreatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayValidationError{
 						field:  "created_at",
@@ -761,7 +653,7 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "updated_at":
 
-			if v, ok := interface{}(&m.UpdatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetUpdatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayValidationError{
 						field:  "updated_at",
@@ -860,9 +752,33 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 			}
 
+		case "administrative_contact":
+
+			if v, ok := interface{}(m.GetAdministrativeContact()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayValidationError{
+						field:  "administrative_contact",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "technical_contact":
+
+			if v, ok := interface{}(m.GetTechnicalContact()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayValidationError{
+						field:  "technical_contact",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
 		case "version_ids":
 
-			if v, ok := interface{}(&m.GatewayVersionIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetVersionIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayValidationError{
 						field:  "version_ids",
@@ -877,7 +793,7 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 			if !_Gateway_GatewayServerAddress_Pattern.MatchString(m.GetGatewayServerAddress()) {
 				return GatewayValidationError{
 					field:  "gateway_server_address",
-					reason: "value does not match regex pattern \"^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\\\-]*[a-zA-Z0-9])\\\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$\"",
+					reason: "value does not match regex pattern \"^([a-z]{2,5}://)?(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\\\-]*[a-zA-Z0-9])\\\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$\"",
 				}
 			}
 
@@ -894,7 +810,7 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "frequency_plan_id":
 
-			if utf8.RuneCountInString(m.GetFrequencyPlanID()) > 64 {
+			if utf8.RuneCountInString(m.GetFrequencyPlanId()) > 64 {
 				return GatewayValidationError{
 					field:  "frequency_plan_id",
 					reason: "value length must be at most 64 runes",
@@ -903,14 +819,14 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "frequency_plan_ids":
 
-			if len(m.GetFrequencyPlanIDs()) > 8 {
+			if len(m.GetFrequencyPlanIds()) > 8 {
 				return GatewayValidationError{
 					field:  "frequency_plan_ids",
 					reason: "value must contain no more than 8 item(s)",
 				}
 			}
 
-			for idx, item := range m.GetFrequencyPlanIDs() {
+			for idx, item := range m.GetFrequencyPlanIds() {
 				_, _ = idx, item
 
 				if utf8.RuneCountInString(item) > 64 {
@@ -924,14 +840,14 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "antennas":
 
-			if len(m.Antennas) > 8 {
+			if len(m.GetAntennas()) > 8 {
 				return GatewayValidationError{
 					field:  "antennas",
 					reason: "value must contain no more than 8 item(s)",
 				}
 			}
 
-			for idx, item := range m.Antennas {
+			for idx, item := range m.GetAntennas() {
 				_, _ = idx, item
 
 				if v, ok := interface{}(item).(interface{ ValidateFields(...string) error }); ok {
@@ -979,7 +895,7 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 			// no validation rules for UpdateLocationFromStatus
 		case "lbs_lns_secret":
 
-			if v, ok := interface{}(m.GetLBSLNSSecret()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetLbsLnsSecret()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayValidationError{
 						field:  "lbs_lns_secret",
@@ -1003,9 +919,9 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "target_cups_uri":
 
-			if m.GetTargetCUPSURI() != "" {
+			if m.GetTargetCupsUri() != "" {
 
-				if uri, err := url.Parse(m.GetTargetCUPSURI()); err != nil {
+				if uri, err := url.Parse(m.GetTargetCupsUri()); err != nil {
 					return GatewayValidationError{
 						field:  "target_cups_uri",
 						reason: "value must be a valid URI",
@@ -1022,7 +938,7 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "target_cups_key":
 
-			if v, ok := interface{}(m.GetTargetCUPSKey()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetTargetCupsKey()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayValidationError{
 						field:  "target_cups_key",
@@ -1034,6 +950,20 @@ func (m *Gateway) ValidateFields(paths ...string) error {
 
 		case "require_authenticated_connection":
 			// no validation rules for RequireAuthenticatedConnection
+		case "lrfhss":
+
+			if v, ok := interface{}(m.GetLrfhss()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayValidationError{
+						field:  "lrfhss",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "disable_packet_broker_forwarding":
+			// no validation rules for DisablePacketBrokerForwarding
 		default:
 			return GatewayValidationError{
 				field:  name,
@@ -1100,7 +1030,7 @@ var _ interface {
 
 var _Gateway_Attributes_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
-var _Gateway_GatewayServerAddress_Pattern = regexp.MustCompile("^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$")
+var _Gateway_GatewayServerAddress_Pattern = regexp.MustCompile("^([a-z]{2,5}://)?(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$")
 
 // ValidateFields checks the field values on Gateways with the rules defined in
 // the proto definition for this message. If any rules are violated, an error
@@ -1215,7 +1145,14 @@ func (m *GetGatewayRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return GetGatewayRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetGatewayRequestValidationError{
 						field:  "gateway_ids",
@@ -1227,7 +1164,7 @@ func (m *GetGatewayRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetGatewayRequestValidationError{
 						field:  "field_mask",
@@ -1319,7 +1256,18 @@ func (m *GetGatewayIdentifiersForEUIRequest) ValidateFields(paths ...string) err
 		_ = subs
 		switch name {
 		case "eui":
-			// no validation rules for EUI
+
+			if len(m.GetEui()) > 0 {
+
+				if len(m.GetEui()) != 8 {
+					return GetGatewayIdentifiersForEUIRequestValidationError{
+						field:  "eui",
+						reason: "value length must be 8 bytes",
+					}
+				}
+
+			}
+
 		default:
 			return GetGatewayIdentifiersForEUIRequestValidationError{
 				field:  name,
@@ -1416,7 +1364,7 @@ func (m *ListGatewaysRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListGatewaysRequestValidationError{
 						field:  "field_mask",
@@ -1543,7 +1491,14 @@ func (m *CreateGatewayRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway":
 
-			if v, ok := interface{}(&m.Gateway).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGateway() == nil {
+				return CreateGatewayRequestValidationError{
+					field:  "gateway",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGateway()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateGatewayRequestValidationError{
 						field:  "gateway",
@@ -1555,7 +1510,14 @@ func (m *CreateGatewayRequest) ValidateFields(paths ...string) error {
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.Collaborator).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return CreateGatewayRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateGatewayRequestValidationError{
 						field:  "collaborator",
@@ -1648,7 +1610,14 @@ func (m *UpdateGatewayRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway":
 
-			if v, ok := interface{}(&m.Gateway).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGateway() == nil {
+				return UpdateGatewayRequestValidationError{
+					field:  "gateway",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGateway()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateGatewayRequestValidationError{
 						field:  "gateway",
@@ -1660,7 +1629,7 @@ func (m *UpdateGatewayRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateGatewayRequestValidationError{
 						field:  "field_mask",
@@ -1753,13 +1722,29 @@ func (m *ListGatewayAPIKeysRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return ListGatewayAPIKeysRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListGatewayAPIKeysRequestValidationError{
 						field:  "gateway_ids",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
+				}
+			}
+
+		case "order":
+
+			if _, ok := _ListGatewayAPIKeysRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return ListGatewayAPIKeysRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ api_key_id -api_key_id name -name created_at -created_at expires_at -expires_at]",
 				}
 			}
 
@@ -1841,6 +1826,18 @@ var _ interface {
 	ErrorName() string
 } = ListGatewayAPIKeysRequestValidationError{}
 
+var _ListGatewayAPIKeysRequest_Order_InLookup = map[string]struct{}{
+	"":            {},
+	"api_key_id":  {},
+	"-api_key_id": {},
+	"name":        {},
+	"-name":       {},
+	"created_at":  {},
+	"-created_at": {},
+	"expires_at":  {},
+	"-expires_at": {},
+}
+
 // ValidateFields checks the field values on GetGatewayAPIKeyRequest with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -1858,7 +1855,14 @@ func (m *GetGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return GetGatewayAPIKeyRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetGatewayAPIKeyRequestValidationError{
 						field:  "gateway_ids",
@@ -1869,7 +1873,7 @@ func (m *GetGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "key_id":
-			// no validation rules for KeyID
+			// no validation rules for KeyId
 		default:
 			return GetGatewayAPIKeyRequestValidationError{
 				field:  name,
@@ -1953,7 +1957,14 @@ func (m *CreateGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return CreateGatewayAPIKeyRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateGatewayAPIKeyRequestValidationError{
 						field:  "gateway_ids",
@@ -1999,6 +2010,29 @@ func (m *CreateGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
 					return CreateGatewayAPIKeyRequestValidationError{
 						field:  fmt.Sprintf("rights[%v]", idx),
 						reason: "value must be one of the defined enum values",
+					}
+				}
+
+			}
+
+		case "expires_at":
+
+			if t := m.GetExpiresAt(); t != nil {
+				ts, err := t.AsTime(), t.CheckValid()
+				if err != nil {
+					return CreateGatewayAPIKeyRequestValidationError{
+						field:  "expires_at",
+						reason: "value is not a valid timestamp",
+						cause:  err,
+					}
+				}
+
+				now := time.Now()
+
+				if ts.Sub(now) <= 0 {
+					return CreateGatewayAPIKeyRequestValidationError{
+						field:  "expires_at",
+						reason: "value must be greater than now",
 					}
 				}
 
@@ -2088,7 +2122,14 @@ func (m *UpdateGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return UpdateGatewayAPIKeyRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateGatewayAPIKeyRequestValidationError{
 						field:  "gateway_ids",
@@ -2100,10 +2141,29 @@ func (m *UpdateGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
 
 		case "api_key":
 
-			if v, ok := interface{}(&m.APIKey).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApiKey() == nil {
+				return UpdateGatewayAPIKeyRequestValidationError{
+					field:  "api_key",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApiKey()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateGatewayAPIKeyRequestValidationError{
 						field:  "api_key",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "field_mask":
+
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return UpdateGatewayAPIKeyRequestValidationError{
+						field:  "field_mask",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
@@ -2177,6 +2237,109 @@ var _ interface {
 	ErrorName() string
 } = UpdateGatewayAPIKeyRequestValidationError{}
 
+// ValidateFields checks the field values on DeleteGatewayAPIKeyRequest with
+// the rules defined in the proto definition for this message. If any rules
+// are violated, an error is returned.
+func (m *DeleteGatewayAPIKeyRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DeleteGatewayAPIKeyRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "gateway_ids":
+
+			if m.GetGatewayIds() == nil {
+				return DeleteGatewayAPIKeyRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteGatewayAPIKeyRequestValidationError{
+						field:  "gateway_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "key_id":
+			// no validation rules for KeyId
+		default:
+			return DeleteGatewayAPIKeyRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteGatewayAPIKeyRequestValidationError is the validation error returned
+// by DeleteGatewayAPIKeyRequest.ValidateFields if the designated constraints
+// aren't met.
+type DeleteGatewayAPIKeyRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteGatewayAPIKeyRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteGatewayAPIKeyRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteGatewayAPIKeyRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteGatewayAPIKeyRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteGatewayAPIKeyRequestValidationError) ErrorName() string {
+	return "DeleteGatewayAPIKeyRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DeleteGatewayAPIKeyRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteGatewayAPIKeyRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteGatewayAPIKeyRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteGatewayAPIKeyRequestValidationError{}
+
 // ValidateFields checks the field values on ListGatewayCollaboratorsRequest
 // with the rules defined in the proto definition for this message. If any
 // rules are violated, an error is returned.
@@ -2194,7 +2357,14 @@ func (m *ListGatewayCollaboratorsRequest) ValidateFields(paths ...string) error 
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return ListGatewayCollaboratorsRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListGatewayCollaboratorsRequestValidationError{
 						field:  "gateway_ids",
@@ -2215,6 +2385,15 @@ func (m *ListGatewayCollaboratorsRequest) ValidateFields(paths ...string) error 
 
 		case "page":
 			// no validation rules for Page
+		case "order":
+
+			if _, ok := _ListGatewayCollaboratorsRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return ListGatewayCollaboratorsRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ id -id -rights rights]",
+				}
+			}
+
 		default:
 			return ListGatewayCollaboratorsRequestValidationError{
 				field:  name,
@@ -2282,6 +2461,14 @@ var _ interface {
 	ErrorName() string
 } = ListGatewayCollaboratorsRequestValidationError{}
 
+var _ListGatewayCollaboratorsRequest_Order_InLookup = map[string]struct{}{
+	"":        {},
+	"id":      {},
+	"-id":     {},
+	"-rights": {},
+	"rights":  {},
+}
+
 // ValidateFields checks the field values on GetGatewayCollaboratorRequest with
 // the rules defined in the proto definition for this message. If any rules
 // are violated, an error is returned.
@@ -2299,7 +2486,14 @@ func (m *GetGatewayCollaboratorRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return GetGatewayCollaboratorRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetGatewayCollaboratorRequestValidationError{
 						field:  "gateway_ids",
@@ -2311,7 +2505,14 @@ func (m *GetGatewayCollaboratorRequest) ValidateFields(paths ...string) error {
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.OrganizationOrUserIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return GetGatewayCollaboratorRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetGatewayCollaboratorRequestValidationError{
 						field:  "collaborator",
@@ -2405,7 +2606,14 @@ func (m *SetGatewayCollaboratorRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "gateway_ids":
 
-			if v, ok := interface{}(&m.GatewayIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetGatewayIds() == nil {
+				return SetGatewayCollaboratorRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SetGatewayCollaboratorRequestValidationError{
 						field:  "gateway_ids",
@@ -2417,7 +2625,14 @@ func (m *SetGatewayCollaboratorRequest) ValidateFields(paths ...string) error {
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.Collaborator).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return SetGatewayCollaboratorRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SetGatewayCollaboratorRequestValidationError{
 						field:  "collaborator",
@@ -2494,6 +2709,126 @@ var _ interface {
 	ErrorName() string
 } = SetGatewayCollaboratorRequestValidationError{}
 
+// ValidateFields checks the field values on DeleteGatewayCollaboratorRequest
+// with the rules defined in the proto definition for this message. If any
+// rules are violated, an error is returned.
+func (m *DeleteGatewayCollaboratorRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DeleteGatewayCollaboratorRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "gateway_ids":
+
+			if m.GetGatewayIds() == nil {
+				return DeleteGatewayCollaboratorRequestValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteGatewayCollaboratorRequestValidationError{
+						field:  "gateway_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "collaborator_ids":
+
+			if m.GetCollaboratorIds() == nil {
+				return DeleteGatewayCollaboratorRequestValidationError{
+					field:  "collaborator_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaboratorIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteGatewayCollaboratorRequestValidationError{
+						field:  "collaborator_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return DeleteGatewayCollaboratorRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteGatewayCollaboratorRequestValidationError is the validation error
+// returned by DeleteGatewayCollaboratorRequest.ValidateFields if the
+// designated constraints aren't met.
+type DeleteGatewayCollaboratorRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteGatewayCollaboratorRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteGatewayCollaboratorRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteGatewayCollaboratorRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteGatewayCollaboratorRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteGatewayCollaboratorRequestValidationError) ErrorName() string {
+	return "DeleteGatewayCollaboratorRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DeleteGatewayCollaboratorRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteGatewayCollaboratorRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteGatewayCollaboratorRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteGatewayCollaboratorRequestValidationError{}
+
 // ValidateFields checks the field values on GatewayAntenna with the rules
 // defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -2513,7 +2848,7 @@ func (m *GatewayAntenna) ValidateFields(paths ...string) error {
 			// no validation rules for Gain
 		case "location":
 
-			if v, ok := interface{}(&m.Location).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetLocation()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayAntennaValidationError{
 						field:  "location",
@@ -2558,6 +2893,8 @@ func (m *GatewayAntenna) ValidateFields(paths ...string) error {
 
 			}
 
+		case "placement":
+			// no validation rules for Placement
 		default:
 			return GatewayAntennaValidationError{
 				field:  name,
@@ -2641,9 +2978,19 @@ func (m *GatewayStatus) ValidateFields(paths ...string) error {
 		switch name {
 		case "time":
 
+			if v, ok := interface{}(m.GetTime()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayStatusValidationError{
+						field:  "time",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
 		case "boot_time":
 
-			if v, ok := interface{}(&m.BootTime).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetBootTime()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayStatusValidationError{
 						field:  "boot_time",
@@ -2679,10 +3026,10 @@ func (m *GatewayStatus) ValidateFields(paths ...string) error {
 					}
 				}
 
-				if utf8.RuneCountInString(val) > 32 {
+				if utf8.RuneCountInString(val) > 128 {
 					return GatewayStatusValidationError{
 						field:  fmt.Sprintf("versions[%v]", key),
-						reason: "value length must be at most 32 runes",
+						reason: "value length must be at most 128 runes",
 					}
 				}
 
@@ -2714,14 +3061,14 @@ func (m *GatewayStatus) ValidateFields(paths ...string) error {
 
 		case "ip":
 
-			if len(m.GetIP()) > 10 {
+			if len(m.GetIp()) > 10 {
 				return GatewayStatusValidationError{
 					field:  "ip",
 					reason: "value must contain no more than 10 item(s)",
 				}
 			}
 
-			for idx, item := range m.GetIP() {
+			for idx, item := range m.GetIp() {
 				_, _ = idx, item
 
 				if ip := net.ParseIP(item); ip == nil {
@@ -2735,10 +3082,10 @@ func (m *GatewayStatus) ValidateFields(paths ...string) error {
 
 		case "metrics":
 
-			if len(m.GetMetrics()) > 10 {
+			if len(m.GetMetrics()) > 32 {
 				return GatewayStatusValidationError{
 					field:  "metrics",
-					reason: "value must contain no more than 10 pair(s)",
+					reason: "value must contain no more than 32 pair(s)",
 				}
 			}
 
@@ -2842,6 +3189,89 @@ var _GatewayStatus_Versions_Pattern = regexp.MustCompile("^[a-z0-9](?:[_-]?[a-z0
 
 var _GatewayStatus_Metrics_Pattern = regexp.MustCompile("^[a-z0-9](?:[_-]?[a-z0-9]){2,}$")
 
+// ValidateFields checks the field values on GatewayRemoteAddress with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *GatewayRemoteAddress) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = GatewayRemoteAddressFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "ip":
+			// no validation rules for Ip
+		default:
+			return GatewayRemoteAddressValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// GatewayRemoteAddressValidationError is the validation error returned by
+// GatewayRemoteAddress.ValidateFields if the designated constraints aren't met.
+type GatewayRemoteAddressValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GatewayRemoteAddressValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GatewayRemoteAddressValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GatewayRemoteAddressValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GatewayRemoteAddressValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GatewayRemoteAddressValidationError) ErrorName() string {
+	return "GatewayRemoteAddressValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e GatewayRemoteAddressValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGatewayRemoteAddress.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GatewayRemoteAddressValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GatewayRemoteAddressValidationError{}
+
 // ValidateFields checks the field values on GatewayConnectionStats with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -2863,6 +3293,18 @@ func (m *GatewayConnectionStats) ValidateFields(paths ...string) error {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GatewayConnectionStatsValidationError{
 						field:  "connected_at",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "disconnected_at":
+
+			if v, ok := interface{}(m.GetDisconnectedAt()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayConnectionStatsValidationError{
+						field:  "disconnected_at",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
@@ -2923,6 +3365,20 @@ func (m *GatewayConnectionStats) ValidateFields(paths ...string) error {
 
 		case "downlink_count":
 			// no validation rules for DownlinkCount
+		case "last_tx_acknowledgment_received_at":
+
+			if v, ok := interface{}(m.GetLastTxAcknowledgmentReceivedAt()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayConnectionStatsValidationError{
+						field:  "last_tx_acknowledgment_received_at",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "tx_acknowledgment_count":
+			// no validation rules for TxAcknowledgmentCount
 		case "round_trip_times":
 
 			if v, ok := interface{}(m.GetRoundTripTimes()).(interface{ ValidateFields(...string) error }); ok {
@@ -2950,6 +3406,18 @@ func (m *GatewayConnectionStats) ValidateFields(paths ...string) error {
 					}
 				}
 
+			}
+
+		case "gateway_remote_address":
+
+			if v, ok := interface{}(m.GetGatewayRemoteAddress()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GatewayConnectionStatsValidationError{
+						field:  "gateway_remote_address",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
 			}
 
 		default:
@@ -3106,6 +3574,87 @@ var _ interface {
 	ErrorName() string
 } = GatewayRadio_TxConfigurationValidationError{}
 
+// ValidateFields checks the field values on Gateway_LRFHSS with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *Gateway_LRFHSS) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = Gateway_LRFHSSFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "supported":
+			// no validation rules for Supported
+		default:
+			return Gateway_LRFHSSValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// Gateway_LRFHSSValidationError is the validation error returned by
+// Gateway_LRFHSS.ValidateFields if the designated constraints aren't met.
+type Gateway_LRFHSSValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e Gateway_LRFHSSValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e Gateway_LRFHSSValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e Gateway_LRFHSSValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e Gateway_LRFHSSValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e Gateway_LRFHSSValidationError) ErrorName() string { return "Gateway_LRFHSSValidationError" }
+
+// Error satisfies the builtin error interface
+func (e Gateway_LRFHSSValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGateway_LRFHSS.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = Gateway_LRFHSSValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = Gateway_LRFHSSValidationError{}
+
 // ValidateFields checks the field values on
 // GatewayConnectionStats_RoundTripTimes with the rules defined in the proto
 // definition for this message. If any rules are violated, an error is returned.
@@ -3123,9 +3672,30 @@ func (m *GatewayConnectionStats_RoundTripTimes) ValidateFields(paths ...string) 
 		switch name {
 		case "min":
 
+			if m.GetMin() == nil {
+				return GatewayConnectionStats_RoundTripTimesValidationError{
+					field:  "min",
+					reason: "value is required",
+				}
+			}
+
 		case "max":
 
+			if m.GetMax() == nil {
+				return GatewayConnectionStats_RoundTripTimesValidationError{
+					field:  "max",
+					reason: "value is required",
+				}
+			}
+
 		case "median":
+
+			if m.GetMedian() == nil {
+				return GatewayConnectionStats_RoundTripTimesValidationError{
+					field:  "median",
+					reason: "value is required",
+				}
+			}
 
 		case "count":
 			// no validation rules for Count

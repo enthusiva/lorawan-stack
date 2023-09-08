@@ -20,19 +20,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// JSONCodec can be used to override the default gogoproto/jsonpb.
+// JSONCodec can be used to override the jsonpb codec.
 var JSONCodec interface {
-	Marshal(v interface{}) ([]byte, error)
-	Unmarshal(data []byte, v interface{}) error
+	Marshal(v any) ([]byte, error)
+	Unmarshal(data []byte, v any) error
 } = jsonpb.TTN()
 
 // MarshalJSON implements json.Marshaler.
-func (d Definition) MarshalJSON() ([]byte, error) {
+func (d *Definition) MarshalJSON() ([]byte, error) {
+	if d == nil {
+		return []byte("null"), nil
+	}
 	return JSONCodec.Marshal(d.GRPCStatus().Proto())
 }
 
 // MarshalJSON implements json.Marshaler.
-func (e Error) MarshalJSON() ([]byte, error) {
+func (e *Error) MarshalJSON() ([]byte, error) {
+	if e == nil {
+		return []byte("null"), nil
+	}
 	return JSONCodec.Marshal(e.GRPCStatus().Proto())
 }
 
@@ -41,11 +47,11 @@ func (e Error) MarshalJSON() ([]byte, error) {
 // This func is purely implemented for consistency. In practice,
 // you probably want to unmarshal into an *Error instead of a *Definition.
 func (d *Definition) UnmarshalJSON(data []byte) error {
-	e := new(Error)
+	e := &Error{Definition: &Definition{}}
 	if err := e.UnmarshalJSON(data); err != nil {
 		return err
 	}
-	*d = e.Definition
+	*d = *e.Definition
 	return nil
 }
 
@@ -55,6 +61,7 @@ func (e *Error) UnmarshalJSON(data []byte) error {
 	if err := JSONCodec.Unmarshal(data, s); err != nil {
 		return err
 	}
-	*e = FromGRPCStatus(status.FromProto(s))
+	errFromStatus := FromGRPCStatus(status.FromProto(s))
+	*e = *errFromStatus
 	return nil
 }

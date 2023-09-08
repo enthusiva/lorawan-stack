@@ -15,34 +15,34 @@
 package test
 
 import (
+	"bytes"
 	"context"
-	"reflect"
 	"sync"
-	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type MockEventPubSub struct {
-	PublishFunc   func(events.Event)
-	SubscribeFunc func(context.Context, string, []*ttnpb.EntityIdentifiers, events.Handler) error
+	PublishFunc   func(...events.Event)
+	SubscribeFunc func(context.Context, []string, []*ttnpb.EntityIdentifiers, events.Handler) error
 }
 
 // Publish calls PublishFunc if set and panics otherwise.
-func (m MockEventPubSub) Publish(ev events.Event) {
+func (m MockEventPubSub) Publish(evs ...events.Event) {
 	if m.PublishFunc == nil {
 		panic("Publish called, but not set")
 	}
-	m.PublishFunc(ev)
+	m.PublishFunc(evs...)
 }
 
 // Subscribe calls SubscribeFunc if set and panics otherwise.
-func (m MockEventPubSub) Subscribe(ctx context.Context, name string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
+func (m MockEventPubSub) Subscribe(ctx context.Context, names []string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
 	if m.SubscribeFunc == nil {
 		panic("Subscribe called, but not set")
 	}
-	return m.SubscribeFunc(ctx, name, ids, hdl)
+	return m.SubscribeFunc(ctx, names, ids, hdl)
 }
 
 type EventPubSubPublishRequest struct {
@@ -50,14 +50,16 @@ type EventPubSubPublishRequest struct {
 	Response chan<- struct{}
 }
 
-func MakeEventPubSubPublishChFunc(reqCh chan<- EventPubSubPublishRequest) func(events.Event) {
-	return func(ev events.Event) {
-		respCh := make(chan struct{})
-		reqCh <- EventPubSubPublishRequest{
-			Event:    ev,
-			Response: respCh,
+func MakeEventPubSubPublishChFunc(reqCh chan<- EventPubSubPublishRequest) func(...events.Event) {
+	return func(evs ...events.Event) {
+		for _, ev := range evs {
+			respCh := make(chan struct{})
+			reqCh <- EventPubSubPublishRequest{
+				Event:    ev,
+				Response: respCh,
+			}
+			<-respCh
 		}
-		<-respCh
 	}
 }
 
@@ -133,12 +135,12 @@ func MakeEventEqual(conf EventEqualConfig) func(a, b events.Event) bool {
 		}
 
 		if !conf.UniqueID {
-			ap.UniqueID = ""
-			bp.UniqueID = ""
+			ap.UniqueId = ""
+			bp.UniqueId = ""
 		}
 		if !conf.Time {
-			ap.Time = time.Time{}
-			bp.Time = time.Time{}
+			ap.Time = nil
+			bp.Time = nil
 		}
 		if !conf.Identifiers {
 			ap.Identifiers = nil
@@ -149,8 +151,8 @@ func MakeEventEqual(conf EventEqualConfig) func(a, b events.Event) bool {
 			bp.Data = nil
 		}
 		if !conf.CorrelationIDs {
-			ap.CorrelationIDs = nil
-			bp.CorrelationIDs = nil
+			ap.CorrelationIds = nil
+			bp.CorrelationIds = nil
 		}
 		if !conf.Origin {
 			ap.Origin = ""
@@ -169,14 +171,25 @@ func MakeEventEqual(conf EventEqualConfig) func(a, b events.Event) bool {
 			bp.Authentication = nil
 		}
 		if !conf.RemoteIP {
-			ap.RemoteIP = ""
-			bp.RemoteIP = ""
+			ap.RemoteIp = ""
+			bp.RemoteIp = ""
 		}
 		if !conf.UserAgent {
 			ap.UserAgent = ""
 			bp.UserAgent = ""
 		}
-		return reflect.DeepEqual(ap, bp)
+
+		apb, err := proto.Marshal(ap)
+		if err != nil {
+			return false
+		}
+
+		bpb, err := proto.Marshal(bp)
+		if err != nil {
+			return false
+		}
+
+		return bytes.Equal(apb, bpb)
 	}
 }
 
@@ -199,18 +212,18 @@ func EventBuilderEqual(a, b events.Builder) bool {
 var (
 	eventsPubSubMu               = &sync.RWMutex{}
 	eventsPubSub   events.PubSub = &MockEventPubSub{
-		PublishFunc:   func(events.Event) {},
-		SubscribeFunc: func(context.Context, string, []*ttnpb.EntityIdentifiers, events.Handler) error { return nil },
+		PublishFunc:   func(...events.Event) {},
+		SubscribeFunc: func(context.Context, []string, []*ttnpb.EntityIdentifiers, events.Handler) error { return nil },
 	}
 )
 
 func init() {
 	events.SetDefaultPubSub(&MockEventPubSub{
-		PublishFunc: func(ev events.Event) {
-			eventsPubSub.Publish(ev)
+		PublishFunc: func(evs ...events.Event) {
+			eventsPubSub.Publish(evs...)
 		},
-		SubscribeFunc: func(ctx context.Context, name string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
-			return eventsPubSub.Subscribe(ctx, name, ids, hdl)
+		SubscribeFunc: func(ctx context.Context, names []string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
+			return eventsPubSub.Subscribe(ctx, names, ids, hdl)
 		},
 	})
 }
@@ -232,7 +245,7 @@ func SetDefaultEventsPubSub(ps events.PubSub) func() {
 func CollectEvents(f func()) []events.Event {
 	var evs []events.Event
 	defer SetDefaultEventsPubSub(&MockEventPubSub{
-		PublishFunc: func(ev events.Event) { evs = append(evs, ev) },
+		PublishFunc: func(evts ...events.Event) { evs = append(evs, evts...) },
 	})()
 	f()
 	return evs
@@ -242,8 +255,12 @@ func CollectEvents(f func()) []events.Event {
 // provided channel until the returned function is called.
 func RedirectEvents(ch chan events.Event) func() {
 	return SetDefaultEventsPubSub(&MockEventPubSub{
-		PublishFunc: func(ev events.Event) { ch <- ev },
-		SubscribeFunc: func(ctx context.Context, name string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
+		PublishFunc: func(evs ...events.Event) {
+			for _, ev := range evs {
+				ch <- ev
+			}
+		},
+		SubscribeFunc: func(ctx context.Context, names []string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
 			return nil
 		},
 	})

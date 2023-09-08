@@ -17,8 +17,8 @@ package ttnpb_test
 import (
 	"encoding"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,69 +26,27 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/smartystreets/assertions"
+	jsonplugin "github.com/TheThingsIndustries/protoc-gen-go-json/jsonplugin"
+	"github.com/smarty/assertions"
 	. "go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
-func TestStringers(t *testing.T) {
-	for _, tc := range []struct {
-		Stringer fmt.Stringer
-		String   string
-	}{
-		{
-			Stringer: MAC_V1_0,
-			String:   "1.0.0",
-		},
-		{
-			Stringer: MAC_V1_0_1,
-			String:   "1.0.1",
-		},
-		{
-			Stringer: MAC_V1_0_2,
-			String:   "1.0.2",
-		},
-		{
-			Stringer: MAC_V1_1,
-			String:   "1.1.0",
-		},
-		{
-			Stringer: PHY_V1_0,
-			String:   "1.0.0",
-		},
-		{
-			Stringer: PHY_V1_0_1,
-			String:   "1.0.1",
-		},
-		{
-			Stringer: PHY_V1_0_2_REV_A,
-			String:   "1.0.2-a",
-		},
-		{
-			Stringer: PHY_V1_0_2_REV_B,
-			String:   "1.0.2-b",
-		},
-		{
-			Stringer: PHY_V1_1_REV_A,
-			String:   "1.1.0-a",
-		},
-		{
-			Stringer: PHY_V1_1_REV_B,
-			String:   "1.1.0-b",
-		},
-	} {
-		assertions.New(t).So(tc.Stringer.String(), should.Equal, tc.String)
-	}
-}
+var writeGolden = flag.Bool("write-golden", false, "Write golden files")
 
 func TestMarshalers(t *testing.T) {
+	defer func() {
+		if t.Failed() {
+			t.Log("NOTE: If you encounter a diff, you may have to run this test with the -write-golden flag.")
+		}
+	}()
+
 	var vals [][]interface{}
 
 	vals = append(vals, []interface{}{
-		BoolValue{},
-		BoolValue{Value: true},
+		&BoolValue{},
+		&BoolValue{Value: true},
 	})
 
 	var mTypes []interface{}
@@ -123,7 +81,7 @@ func TestMarshalers(t *testing.T) {
 
 	var drIdxVals []interface{}
 	for i := range DataRateIndex_name {
-		drIdxVals = append(drIdxVals, DataRateIndexValue{
+		drIdxVals = append(drIdxVals, &DataRateIndexValue{
 			Value: DataRateIndex(i),
 		})
 	}
@@ -137,23 +95,36 @@ func TestMarshalers(t *testing.T) {
 
 	var drOffsetVals []interface{}
 	for i := range DataRateOffset_name {
-		drOffsetVals = append(drOffsetVals, DataRateOffsetValue{
+		drOffsetVals = append(drOffsetVals, &DataRateOffsetValue{
 			Value: DataRateOffset(i),
 		})
 	}
 	vals = append(vals, drOffsetVals)
 
 	vals = append(vals, []interface{}{
-		FrequencyValue{Value: 100000},
-		FrequencyValue{Value: 2000000},
-		FrequencyValue{Value: 30000000},
+		&FrequencyValue{Value: 100000},
+		&FrequencyValue{Value: 2000000},
+		&FrequencyValue{Value: 30000000},
 	})
 
-	var rejoins []interface{}
-	for i := range RejoinType_name {
-		rejoins = append(rejoins, RejoinType(i))
+	vals = append(vals, []interface{}{
+		&ZeroableFrequencyValue{Value: 0},
+		&ZeroableFrequencyValue{Value: 100000},
+		&ZeroableFrequencyValue{Value: 2000000},
+		&ZeroableFrequencyValue{Value: 30000000},
+	})
+
+	var joinRequestTypes []interface{}
+	for i := range JoinRequestType_name {
+		joinRequestTypes = append(joinRequestTypes, JoinRequestType(i))
 	}
-	vals = append(vals, rejoins)
+	vals = append(vals, joinRequestTypes)
+
+	var rejoinRequestTypes []interface{}
+	for i := range RejoinRequestType_name {
+		rejoinRequestTypes = append(rejoinRequestTypes, RejoinRequestType(i))
+	}
+	vals = append(vals, rejoinRequestTypes)
 
 	var cfLists []interface{}
 	for i := range CFListType_name {
@@ -187,7 +158,7 @@ func TestMarshalers(t *testing.T) {
 
 	var dutyCycleVals []interface{}
 	for i := range AggregatedDutyCycle_name {
-		dutyCycleVals = append(dutyCycleVals, AggregatedDutyCycleValue{
+		dutyCycleVals = append(dutyCycleVals, &AggregatedDutyCycleValue{
 			Value: AggregatedDutyCycle(i),
 		})
 	}
@@ -201,7 +172,7 @@ func TestMarshalers(t *testing.T) {
 
 	var pingSlotVals []interface{}
 	for i := range PingSlotPeriod_name {
-		pingSlotVals = append(pingSlotVals, PingSlotPeriodValue{
+		pingSlotVals = append(pingSlotVals, &PingSlotPeriodValue{
 			Value: PingSlotPeriod(i),
 		})
 	}
@@ -231,6 +202,14 @@ func TestMarshalers(t *testing.T) {
 	}
 	vals = append(vals, deviceEIRPs)
 
+	var deviceEIRPVals []interface{}
+	for i := range DeviceEIRP_name {
+		deviceEIRPVals = append(deviceEIRPVals, &DeviceEIRPValue{
+			Value: DeviceEIRP(i),
+		})
+	}
+	vals = append(vals, deviceEIRPVals)
+
 	var ackLimitExponents []interface{}
 	for i := range ADRAckLimitExponent_name {
 		ackLimitExponents = append(ackLimitExponents, ADRAckLimitExponent(i))
@@ -239,7 +218,7 @@ func TestMarshalers(t *testing.T) {
 
 	var ackLimitExponentVals []interface{}
 	for i := range ADRAckLimitExponent_name {
-		ackLimitExponentVals = append(ackLimitExponentVals, ADRAckLimitExponentValue{
+		ackLimitExponentVals = append(ackLimitExponentVals, &ADRAckLimitExponentValue{
 			Value: ADRAckLimitExponent(i),
 		})
 	}
@@ -253,7 +232,7 @@ func TestMarshalers(t *testing.T) {
 
 	var ackDelayExponentVals []interface{}
 	for i := range ADRAckDelayExponent_name {
-		ackDelayExponentVals = append(ackDelayExponentVals, ADRAckDelayExponentValue{
+		ackDelayExponentVals = append(ackDelayExponentVals, &ADRAckDelayExponentValue{
 			Value: ADRAckDelayExponent(i),
 		})
 	}
@@ -267,7 +246,7 @@ func TestMarshalers(t *testing.T) {
 
 	var rxDelayVals []interface{}
 	for i := range RxDelay_name {
-		rxDelayVals = append(rxDelayVals, RxDelayValue{
+		rxDelayVals = append(rxDelayVals, &RxDelayValue{
 			Value: RxDelay(i),
 		})
 	}
@@ -309,12 +288,27 @@ func TestMarshalers(t *testing.T) {
 	}
 	vals = append(vals, rights)
 
+	var gatewayAntennaPlacements []interface{}
+	for i := range GatewayAntennaPlacement_name {
+		gatewayAntennaPlacements = append(gatewayAntennaPlacements, GatewayAntennaPlacement(i))
+	}
+	vals = append(vals, gatewayAntennaPlacements)
+
 	var outLines []string
 	for _, vs := range vals {
 		typ := reflect.TypeOf(vs[0])
-		newV := func() interface{} { return reflect.New(typ).Interface() }
+		typName := typ.String()
+		if typ.Kind() == reflect.Pointer {
+			typName = typ.Elem().String()
+		}
+		newV := func() interface{} {
+			if typ.Kind() == reflect.Pointer {
+				return reflect.New(typ.Elem()).Interface()
+			}
+			return reflect.New(typ).Interface()
+		}
 
-		t.Run(typ.String(), func(t *testing.T) {
+		t.Run(typName, func(t *testing.T) {
 			for _, v := range vs {
 				t.Run(fmt.Sprint(v), func(t *testing.T) {
 					if m, ok := v.(encoding.TextMarshaler); ok {
@@ -324,7 +318,7 @@ func TestMarshalers(t *testing.T) {
 							if !a.So(err, should.BeNil) {
 								t.Error(test.FormatError(err))
 							}
-							outLines = append(outLines, fmt.Sprintf(`Text | %s | %v | %s`, typ, v, b))
+							outLines = append(outLines, fmt.Sprintf(`Text | %s | %v | %s`, typName, v, b))
 
 							got, ok := newV().(encoding.TextUnmarshaler)
 							if !ok {
@@ -333,24 +327,6 @@ func TestMarshalers(t *testing.T) {
 
 							err = got.UnmarshalText(b)
 							a.So(err, should.BeNil)
-							a.So(reflect.Indirect(reflect.ValueOf(got)).Interface(), should.Resemble, v)
-
-							sv, ok := v.(fmt.Stringer)
-							if !ok {
-								// Structs (e.g. Value wrappers) implement String() on pointer types and do not
-								// require compatibility of string and text encoding
-								return
-							}
-							var s string
-							if !a.So(func() { s = sv.String() }, should.NotPanic) {
-								t.Fatalf("Failed to call String()")
-							}
-
-							got = newV().(encoding.TextUnmarshaler)
-							err = got.UnmarshalText([]byte(s))
-							if !a.So(err, should.BeNil) {
-								t.Error(test.FormatError(err))
-							}
 							a.So(reflect.Indirect(reflect.ValueOf(got)).Interface(), should.Resemble, v)
 						})
 					}
@@ -362,7 +338,7 @@ func TestMarshalers(t *testing.T) {
 							if !a.So(err, should.BeNil) {
 								t.Error(test.FormatError(err))
 							}
-							outLines = append(outLines, fmt.Sprintf(`Binary | %s | %v | %v`, typ, v, b))
+							outLines = append(outLines, fmt.Sprintf(`Binary | %s | %v | %v`, typName, v, b))
 
 							got, ok := newV().(encoding.BinaryUnmarshaler)
 							if !ok {
@@ -384,7 +360,7 @@ func TestMarshalers(t *testing.T) {
 							if !a.So(err, should.BeNil) {
 								t.Error(test.FormatError(err))
 							}
-							outLines = append(outLines, fmt.Sprintf(`JSON | %s | %v | %s`, typ, v, b))
+							outLines = append(outLines, fmt.Sprintf(`JSON | %s | %v | %s`, typName, v, b))
 
 							got, ok := newV().(json.Unmarshaler)
 							if !ok {
@@ -399,22 +375,23 @@ func TestMarshalers(t *testing.T) {
 						})
 					}
 
-					if m, ok := v.(jsonpb.JSONPBMarshaler); ok {
-						t.Run("JSONPB", func(t *testing.T) {
+					if m, ok := v.(jsonplugin.Marshaler); ok {
+						t.Run("ProtoJSON", func(t *testing.T) {
 							a := assertions.New(t)
-							b, err := m.MarshalJSONPB(&jsonpb.Marshaler{})
+
+							b, err := jsonplugin.MarshalerConfig{EnumsAsInts: true}.Marshal(m)
 							if !a.So(err, should.BeNil) {
 								t.Error(test.FormatError(err))
 							}
-							outLines = append(outLines, fmt.Sprintf(`JSONPB | %s | %v | %s`, typ, v, b))
+							outLines = append(outLines, fmt.Sprintf(`ProtoJSON | %s | %v | %s`, typName, v, b))
 
 							{
-								got, ok := newV().(jsonpb.JSONPBUnmarshaler)
+								got, ok := newV().(jsonplugin.Unmarshaler)
 								if !ok {
-									t.Fatal("Does not implement JSONPBUnmarshaler")
+									t.Fatalf("%T Does not implement JSONPBUnmarshaler", got)
 								}
 
-								err = got.UnmarshalJSONPB(&jsonpb.Unmarshaler{}, b)
+								jsonplugin.UnmarshalerConfig{}.Unmarshal(b, got)
 								if !a.So(err, should.BeNil) {
 									t.Error(test.FormatError(err))
 								}
@@ -442,16 +419,16 @@ func TestMarshalers(t *testing.T) {
 	sort.Strings(outLines)
 	out := fmt.Sprintf(`Format | Type | Value | Encoding
 :---: | :---: | :---: | :---:
-%s`,
+%s`+"\n",
 		strings.Join(outLines, "\n"),
 	)
 	goldenPath := filepath.Join("testdata", "ttnpb_encoding_golden.md")
-	if os.Getenv("TEST_WRITE_GOLDEN") == "1" {
-		if err := ioutil.WriteFile(goldenPath, []byte(out), 0o644); err != nil {
+	if *writeGolden {
+		if err := os.WriteFile(goldenPath, []byte(out), 0o644); err != nil {
 			t.Fatalf("Failed to write golden file: %s", err)
 		}
 	} else {
-		prevOut, err := ioutil.ReadFile(goldenPath)
+		prevOut, err := os.ReadFile(goldenPath)
 		if err != nil {
 			t.Fatalf("Failed to read golden file: %s", err)
 		}

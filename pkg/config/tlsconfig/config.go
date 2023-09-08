@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package tlsconfig provides configuration for TLS clients and servers.
 package tlsconfig
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
+	"os"
 	"sync/atomic"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -31,7 +33,7 @@ type ACME struct {
 	manager *autocert.Manager
 
 	// TODO: Remove Enable (https://github.com/TheThingsNetwork/lorawan-stack/issues/1450)
-	Enable      bool     `name:"enable" description:"Enable automated certificate management (ACME). This setting is deprecated; set the TLS config source to acme instead"`
+	Enable      bool     `name:"enable" description:"Enable automated certificate management (ACME). This setting is deprecated; set the TLS config source to acme instead"` //nolint:lll
 	Endpoint    string   `name:"endpoint" description:"ACME endpoint"`
 	Dir         string   `name:"dir" description:"Location of ACME storage directory"`
 	Email       string   `name:"email" description:"Email address to register with the ACME account"`
@@ -40,9 +42,8 @@ type ACME struct {
 }
 
 var (
-	errACMEAlreadyInitialized = errors.Define("acme_already_initialized", "ACME already initialized")
-	errMissingACMEDir         = errors.Define("missing_acme_dir", "missing ACME storage directory")
-	errMissingACMEEndpoint    = errors.Define("missing_acme_endpoint", "missing ACME endpoint")
+	errMissingACMEDir      = errors.Define("missing_acme_dir", "missing ACME storage directory")
+	errMissingACMEEndpoint = errors.Define("missing_acme_endpoint", "missing ACME endpoint")
 )
 
 // Initialize initializes the autocert manager for the ACME configuration.
@@ -79,18 +80,12 @@ func (a ACME) IsZero() bool {
 		len(a.Hosts) == 0
 }
 
-// KeyVault defines configuration for loading a certificate from the key vault.
-type KeyVault struct {
-	KeyVault interface {
-		ExportCertificate(ctx context.Context, id string) (*tls.Certificate, error)
+// ServerKeyVault defines configuration for loading a TLS server certificate from the key vault.
+type ServerKeyVault struct {
+	CertificateProvider interface {
+		ServerCertificate(ctx context.Context, id string) (tls.Certificate, error)
 	} `name:"-"`
-
 	ID string `name:"id" description:"ID of the certificate"`
-}
-
-// IsZero returns whether the TLS KeyVault is empty.
-func (t KeyVault) IsZero() bool {
-	return t.ID == ""
 }
 
 // Config represents TLS configuration.
@@ -104,41 +99,74 @@ type FileReader interface {
 	ReadFile(filename string) ([]byte, error)
 }
 
+type fetcherFileReader struct {
+	fetcher fetch.Interface
+}
+
+var errFetchFile = errors.Define("fetch_file", "fetch file `{name}`")
+
+func (r fetcherFileReader) ReadFile(name string) ([]byte, error) {
+	b, err := r.fetcher.File(name)
+	if err != nil {
+		return nil, errFetchFile.WithCause(err).WithAttributes("name", name)
+	}
+	return b, nil
+}
+
+// FromFetcher returns a FileReader that reads files from the given fetcher.
+func FromFetcher(fetcher fetch.Interface) FileReader {
+	return fetcherFileReader{fetcher}
+}
+
 // Client is client-side configuration for server TLS.
 type Client struct {
 	FileReader         FileReader `json:"-" yaml:"-" name:"-"`
-	RootCA             string     `json:"root-ca" yaml:"root-ca" name:"root-ca" description:"Location of TLS root CA certificate (optional)"`
-	InsecureSkipVerify bool       `name:"insecure-skip-verify" description:"Skip verification of certificate chains (insecure)"`
+	RootCA             string     `json:"root-ca" yaml:"root-ca" name:"root-ca" description:"Location of TLS root CA certificate (optional)"` //nolint:lll
+	InsecureSkipVerify bool       `name:"insecure-skip-verify" description:"Skip verification of certificate chains (insecure)"`              //nolint:lll
+}
+
+// Equals checks if the other configuration is equivalent to this.
+func (c Client) Equals(other Client) bool {
+	return c.RootCA == other.RootCA &&
+		c.InsecureSkipVerify == other.InsecureSkipVerify
 }
 
 // ApplyTo applies the client configuration options to the given TLS configuration.
 // If tlsConfig is nil, this is a no-op.
-func (c *Client) ApplyTo(tlsConfig *tls.Config) error {
+func (c Client) ApplyTo(tlsConfig *tls.Config) error {
 	if tlsConfig == nil {
 		return nil
 	}
+
+	var (
+		rootCABytes []byte
+		err         error
+	)
 	if c.RootCA != "" {
-		readFile := ioutil.ReadFile
+		readFile := os.ReadFile
 		if c.FileReader != nil {
 			readFile = c.FileReader.ReadFile
 		}
-		pem, err := readFile(c.RootCA)
+		rootCABytes, err = readFile(c.RootCA)
 		if err != nil {
 			return err
 		}
+	}
+
+	if len(rootCABytes) > 0 {
 		if tlsConfig.RootCAs == nil {
 			if tlsConfig.RootCAs, err = x509.SystemCertPool(); err != nil {
 				tlsConfig.RootCAs = x509.NewCertPool()
 			}
 		}
-		tlsConfig.RootCAs.AppendCertsFromPEM(pem)
+		tlsConfig.RootCAs.AppendCertsFromPEM(rootCABytes)
 	}
 	tlsConfig.InsecureSkipVerify = c.InsecureSkipVerify
 	return nil
 }
 
 func readCert(fileReader FileReader, certFile, keyFile string) (*tls.Certificate, error) {
-	readFile := ioutil.ReadFile
+	readFile := os.ReadFile
 	if fileReader != nil {
 		readFile = fileReader.ReadFile
 	}
@@ -159,19 +187,53 @@ func readCert(fileReader FileReader, certFile, keyFile string) (*tls.Certificate
 
 // ServerAuth is configuration for TLS server authentication.
 type ServerAuth struct {
-	Source      string     `name:"source" description:"Source of the TLS certificate (file, acme, key-vault)"`
-	FileReader  FileReader `json:"-" yaml:"-" name:"-"`
-	Certificate string     `json:"certificate" yaml:"certificate" name:"certificate" description:"Location of TLS certificate"`
-	Key         string     `json:"key" yaml:"key" name:"key" description:"Location of TLS private key"`
-	ACME        ACME       `name:"acme"`
-	KeyVault    KeyVault   `name:"key-vault"`
+	Source       string         `name:"source" description:"Source of the TLS certificate (file, acme, key-vault)"`
+	FileReader   FileReader     `json:"-" yaml:"-" name:"-"`
+	Certificate  string         `json:"certificate" yaml:"certificate" name:"certificate" description:"Location of TLS certificate"` //nolint:lll
+	Key          string         `json:"key" yaml:"key" name:"key" description:"Location of TLS private key"`
+	ACME         ACME           `name:"acme"`
+	KeyVault     ServerKeyVault `name:"key-vault"`
+	CipherSuites []string       `name:"cipher-suites" description:"List of IANA names of TLS cipher suites to use (DEPRECATED)"` //nolint:lll
 }
 
 var (
-	errInvalidTLSConfigSource = errors.DefineFailedPrecondition("tls_config_source_invalid", "invalid TLS configuration source `{source}`")
-	errEmptyTLSSource         = errors.DefineFailedPrecondition("tls_source_empty", "empty TLS source")
-	errTLSKeyVaultID          = errors.DefineFailedPrecondition("tls_key_vault_id", "invalid TLS key vault ID")
+	errInvalidTLSConfigSource = errors.DefineFailedPrecondition(
+		"tls_config_source_invalid", "invalid TLS configuration source `{source}`",
+	)
+	errEmptyTLSSource = errors.DefineFailedPrecondition(
+		"tls_source_empty", "empty TLS source",
+	)
+	errTLSKeyVaultID = errors.DefineFailedPrecondition(
+		"tls_key_vault_id", "invalid TLS key vault ID",
+	)
+	errInvalidCipherSuite = errors.DefineFailedPrecondition(
+		"tls_cipher_suite_invalid", "invalid TLS cipher suite {cipher}",
+	)
 )
+
+// GetCipherSuites returns a list of IDs of cipher suites in configuration.
+// This list can be passed to tls.Config.
+func (c *ServerAuth) GetCipherSuites() ([]uint16, error) {
+	cs := make(map[string]uint16, len(tls.CipherSuites())+len(tls.InsecureCipherSuites()))
+	for _, c := range tls.CipherSuites() {
+		cs[c.Name] = c.ID
+	}
+	for _, c := range tls.InsecureCipherSuites() {
+		cs[c.Name] = c.ID
+	}
+	cipherSuites := make([]uint16, 0, len(c.CipherSuites))
+	for _, c := range c.CipherSuites {
+		cipher, got := cs[c]
+		if !got {
+			return nil, errInvalidCipherSuite.WithAttributes("cipher", c)
+		}
+		cipherSuites = append(cipherSuites, cipher)
+	}
+	if len(cipherSuites) == 0 {
+		return nil, nil
+	}
+	return cipherSuites, nil
+}
 
 // ApplyTo applies the TLS authentication configuration options to the given TLS configuration.
 // If tlsConfig is nil, this is a no-op.
@@ -190,7 +252,7 @@ func (c *ServerAuth) ApplyTo(tlsConfig *tls.Config) error {
 		}
 		atomicCert.Store(cert)
 		// TODO: Reload certificates on signal.
-		tlsConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		tlsConfig.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			cert := atomicCert.Load().(*tls.Certificate)
 			return cert, nil
 		}
@@ -210,8 +272,12 @@ func (c *ServerAuth) ApplyTo(tlsConfig *tls.Config) error {
 		if c.KeyVault.ID == "" {
 			return errTLSKeyVaultID.New()
 		}
-		tlsConfig.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-			return c.KeyVault.KeyVault.ExportCertificate(context.Background(), c.KeyVault.ID)
+		tlsConfig.GetCertificate = func(inf *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			cert, err := c.KeyVault.CertificateProvider.ServerCertificate(inf.Context(), c.KeyVault.ID)
+			if err != nil {
+				return nil, err
+			}
+			return &cert, nil
 		}
 	default:
 		return errInvalidTLSConfigSource.WithAttributes("source", c.Source)
@@ -219,13 +285,21 @@ func (c *ServerAuth) ApplyTo(tlsConfig *tls.Config) error {
 	return nil
 }
 
+// ClientKeyVault defines configuration for loading a TLS client certificate from the key vault.
+type ClientKeyVault struct {
+	CertificateProvider interface {
+		ClientCertificate(ctx context.Context, label string) (tls.Certificate, error)
+	} `name:"-"`
+	ID string `name:"id" description:"ID of the certificate"`
+}
+
 // ClientAuth is (client-side) configuration for TLS client authentication.
 type ClientAuth struct {
-	Source      string     `name:"source" description:"Source of the TLS certificate (file, key-vault)"`
-	FileReader  FileReader `json:"-" yaml:"-" name:"-"`
-	Certificate string     `json:"certificate" yaml:"certificate" name:"certificate" description:"Location of TLS certificate"`
-	Key         string     `json:"key" yaml:"key" name:"key" description:"Location of TLS private key"`
-	KeyVault    KeyVault   `name:"key-vault"`
+	Source      string         `name:"source" description:"Source of the TLS certificate (file, key-vault)"`
+	FileReader  FileReader     `json:"-" yaml:"-" name:"-"`
+	Certificate string         `json:"certificate" yaml:"certificate" name:"certificate" description:"Location of TLS certificate"` //nolint:lll
+	Key         string         `json:"key" yaml:"key" name:"key" description:"Location of TLS private key"`
+	KeyVault    ClientKeyVault `name:"key-vault"`
 }
 
 // ApplyTo applies the TLS authentication configuration options to the given TLS configuration.
@@ -245,16 +319,17 @@ func (c *ClientAuth) ApplyTo(tlsConfig *tls.Config) error {
 		}
 		atomicCert.Store(cert)
 		// TODO: Reload certificates on signal.
-		tlsConfig.GetClientCertificate = func(hello *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		tlsConfig.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			cert := atomicCert.Load().(*tls.Certificate)
 			return cert, nil
 		}
 	case "key-vault":
-		if c.KeyVault.ID == "" {
-			return errTLSKeyVaultID.New()
-		}
-		tlsConfig.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return c.KeyVault.KeyVault.ExportCertificate(context.Background(), c.KeyVault.ID)
+		tlsConfig.GetClientCertificate = func(r *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			cert, err := c.KeyVault.CertificateProvider.ClientCertificate(r.Context(), c.KeyVault.ID)
+			if err != nil {
+				return nil, err
+			}
+			return &cert, nil
 		}
 	default:
 		return errInvalidTLSConfigSource.WithAttributes("source", c.Source)

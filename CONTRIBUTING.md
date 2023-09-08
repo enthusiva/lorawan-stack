@@ -70,16 +70,23 @@ The topic is typically a few characters long and should always be present. Accep
 - `ci`: Continuous Integration tooling
 - `cli`: Command-line Interface
 - `console`: The Console component including backend and frontend
+- `cs`: The Crypto Server component
 - `data`: Data from external repositories
+- `dcs`: The Device Claiming Server component
 - `dev`: Development tooling
+- `dr`: The Device Repository component
 - `dtc`: The Device Template Converter component
+- `es`: The Events Server component
 - `gcs`: The Gateway Configuration Server component
 - `gs`: The Gateway Server component
 - `is`: The Identity Server component
 - `js`: The Join Server component
+- `noc`: The Network Operations Center component
 - `ns`: The Network Server component
+- `pba`: The Packet Broker Agent component
 - `qrg`: The QR Code Generator component
-- `util`: utilities
+- `tbs`: The Tenant Billing Server component
+- `util`: Utilities
 
 Changes that affect multiple components can be comma separated.
 
@@ -116,12 +123,7 @@ Some key points:
 
 ## <a name="security-issues"></a>Security Issues
 
-We do our utmost best to build secure systems, but we're human too, so we sometimes make mistakes. If you find any vulnerability in our systems, please contact us directly. We can be reached on Slack, by email and a number of other communication platforms.
-
-- Johan Stokking - [keybase.io/johanstokking](https://keybase.io/johanstokking) `EE80D01EB2BE7EC8`
-- Hylke Visser - [keybase.io/htdvisser](https://keybase.io/htdvisser) `A115FF80DC8A2270`
-
-Our email addresses follow the pattern `<firstname>@thethingsnetwork.org`.
+We do our utmost best to build secure systems, but we're human too, so we sometimes make mistakes. If you find any vulnerability in our systems, please report it via our [responsible disclosure process](https://www.thethingsnetwork.org/responsible-disclosure)
 
 ## Legal
 

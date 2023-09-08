@@ -15,12 +15,12 @@
 package lorawan_test
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	_ "go.thethings.network/lorawan-stack/v3/pkg/crypto" // Needed to make the populators work.
+	"github.com/smarty/assertions"
 	. "go.thethings.network/lorawan-stack/v3/pkg/encoding/lorawan"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -32,36 +32,38 @@ var baseBytes = [...]byte{'t', 'e', 's', 't'}
 func TestFCtrl(t *testing.T) {
 	for _, tc := range []struct {
 		Bytes    []byte
-		FCtrl    ttnpb.FCtrl
+		FCtrl    *ttnpb.FCtrl
 		FOptsLen uint8
 		IsUplink bool
 	}{
 		{
 			Bytes: []byte{0},
+			FCtrl: &ttnpb.FCtrl{},
 		},
 		{
 			Bytes:    []byte{0},
+			FCtrl:    &ttnpb.FCtrl{},
 			IsUplink: true,
 		},
 		{
 			Bytes: []byte{0b1_0_0_0_0010},
-			FCtrl: ttnpb.FCtrl{
-				ADR: true,
+			FCtrl: &ttnpb.FCtrl{
+				Adr: true,
 			},
 			FOptsLen: 2,
 		},
 		{
 			Bytes: []byte{0b1_0_0_0_0010},
-			FCtrl: ttnpb.FCtrl{
-				ADR: true,
+			FCtrl: &ttnpb.FCtrl{
+				Adr: true,
 			},
 			FOptsLen: 2,
 			IsUplink: true,
 		},
 		{
 			Bytes: []byte{0b1_0_1_1_0100},
-			FCtrl: ttnpb.FCtrl{
-				ADR:      true,
+			FCtrl: &ttnpb.FCtrl{
+				Adr:      true,
 				Ack:      true,
 				FPending: true,
 			},
@@ -69,9 +71,9 @@ func TestFCtrl(t *testing.T) {
 		},
 		{
 			Bytes: []byte{0b1_1_1_1_0100},
-			FCtrl: ttnpb.FCtrl{
-				ADR:       true,
-				ADRAckReq: true,
+			FCtrl: &ttnpb.FCtrl{
+				Adr:       true,
+				AdrAckReq: true,
 				Ack:       true,
 				ClassB:    true,
 			},
@@ -81,9 +83,9 @@ func TestFCtrl(t *testing.T) {
 	} {
 		var name string
 		if tc.IsUplink {
-			name = fmt.Sprintf("uplink/ADR:%v,ADRACKReq:%v,ACK:%v,ClassB:%v,FOptsLen:%d", tc.FCtrl.ADR, tc.FCtrl.ADRAckReq, tc.FCtrl.Ack, tc.FCtrl.ClassB, tc.FOptsLen)
+			name = fmt.Sprintf("uplink/ADR:%v,ADRACKReq:%v,ACK:%v,ClassB:%v,FOptsLen:%d", tc.FCtrl.Adr, tc.FCtrl.AdrAckReq, tc.FCtrl.Ack, tc.FCtrl.ClassB, tc.FOptsLen)
 		} else {
-			name = fmt.Sprintf("downlink/ADR:%v,ACK:%v,FPending:%v,FOptsLen:%d", tc.FCtrl.ADR, tc.FCtrl.Ack, tc.FCtrl.FPending, tc.FOptsLen)
+			name = fmt.Sprintf("downlink/ADR:%v,ACK:%v,FPending:%v,FOptsLen:%d", tc.FCtrl.Adr, tc.FCtrl.Ack, tc.FCtrl.FPending, tc.FOptsLen)
 		}
 		t.Run(name, func(t *testing.T) {
 			a := assertions.New(t)
@@ -95,9 +97,9 @@ func TestFCtrl(t *testing.T) {
 			}
 			a.So(dst, should.Resemble, baseBytes[:])
 
-			var fCtrl ttnpb.FCtrl
+			fCtrl := &ttnpb.FCtrl{}
 			b = append([]byte{}, tc.Bytes...)
-			err = UnmarshalFCtrl(b, &fCtrl, tc.IsUplink)
+			err = UnmarshalFCtrl(b, fCtrl, tc.IsUplink)
 			if a.So(err, should.BeNil) {
 				a.So(fCtrl, should.Resemble, tc.FCtrl)
 			}
@@ -107,34 +109,40 @@ func TestFCtrl(t *testing.T) {
 }
 
 func TestAppendFHDR(t *testing.T) {
-	fCtrl := ttnpb.FCtrl{
-		ADR: true,
+	fCtrl := &ttnpb.FCtrl{
+		Adr: true,
 		Ack: true,
 	}
 	for _, tc := range []struct {
 		Bytes    []byte
-		FHDR     ttnpb.FHDR
+		FHDR     *ttnpb.FHDR
 		IsUplink bool
 	}{
 		{
 			Bytes: []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x00, 0x00, 0x00, 0x00}.Bytes(),
+			},
 		},
 		{
-			Bytes:    []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			Bytes: []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x00, 0x00, 0x00, 0x00}.Bytes(),
+			},
 			IsUplink: true,
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0xfe, 0xff},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16 - 1,
 				FCtrl:   fCtrl,
 			},
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0xfe, 0xff},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16 - 1,
 				FCtrl:   fCtrl,
 			},
@@ -142,16 +150,16 @@ func TestAppendFHDR(t *testing.T) {
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0xff, 0xff},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16,
 				FCtrl:   fCtrl,
 			},
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0xff, 0xff},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16,
 				FCtrl:   fCtrl,
 			},
@@ -159,16 +167,16 @@ func TestAppendFHDR(t *testing.T) {
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0x00, 0x00},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16 + 1,
 				FCtrl:   fCtrl,
 			},
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0x00, 0x00},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16 + 1,
 				FCtrl:   fCtrl,
 			},
@@ -176,16 +184,16 @@ func TestAppendFHDR(t *testing.T) {
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0x01, 0x00},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16 + 2,
 				FCtrl:   fCtrl,
 			},
 		},
 		{
 			Bytes: []byte{0xff, 0xff, 0xff, 0x42, 0b1_0_1_0_0000, 0x01, 0x00},
-			FHDR: ttnpb.FHDR{
-				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff},
+			FHDR: &ttnpb.FHDR{
+				DevAddr: types.DevAddr{0x42, 0xff, 0xff, 0xff}.Bytes(),
 				FCnt:    math.MaxUint16 + 2,
 				FCtrl:   fCtrl,
 			},
@@ -196,15 +204,23 @@ func TestAppendFHDR(t *testing.T) {
 		if tc.IsUplink {
 			dirStr = "uplink"
 		}
-		t.Run(fmt.Sprintf("%s/DevAddr:%v,FCnt:%v,FOpts:(%s)", dirStr, tc.FHDR.DevAddr, tc.FHDR.FCnt, tc.FHDR.FOpts), func(t *testing.T) {
-			a := assertions.New(t)
+		t.Run(
+			fmt.Sprintf("%s/DevAddr:%v,FCnt:%v,FOpts:(%s)",
+				dirStr,
+				types.MustDevAddr(tc.FHDR.DevAddr).OrZero(),
+				tc.FHDR.FCnt,
+				hex.EncodeToString(tc.FHDR.FOpts),
+			),
+			func(t *testing.T) {
+				a := assertions.New(t)
 
-			dst := append([]byte{}, baseBytes[:]...)
-			b, err := AppendFHDR(dst, tc.FHDR, tc.IsUplink)
-			if a.So(err, should.BeNil) {
-				a.So(b, should.Resemble, append(baseBytes[:], tc.Bytes...))
-			}
-			a.So(dst, should.Resemble, baseBytes[:])
-		})
+				dst := append([]byte{}, baseBytes[:]...)
+				b, err := AppendFHDR(dst, tc.FHDR, tc.IsUplink)
+				if a.So(err, should.BeNil) {
+					a.So(b, should.Resemble, append(baseBytes[:], tc.Bytes...))
+				}
+				a.So(dst, should.Resemble, baseBytes[:])
+			},
+		)
 	}
 }

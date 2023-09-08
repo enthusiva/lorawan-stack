@@ -9,13 +9,11 @@ var ApplicationLinkFieldPathsNested = []string{
 	"default_formatters.up_formatter",
 	"default_formatters.up_formatter_parameter",
 	"skip_payload_crypto",
-	"tls",
 }
 
 var ApplicationLinkFieldPathsTopLevel = []string{
 	"default_formatters",
 	"skip_payload_crypto",
-	"tls",
 }
 var GetApplicationLinkRequestFieldPathsNested = []string{
 	"application_ids",
@@ -38,7 +36,6 @@ var SetApplicationLinkRequestFieldPathsNested = []string{
 	"link.default_formatters.up_formatter",
 	"link.default_formatters.up_formatter_parameter",
 	"link.skip_payload_crypto",
-	"link.tls",
 }
 
 var SetApplicationLinkRequestFieldPathsTopLevel = []string{
@@ -66,13 +63,16 @@ var ApplicationLinkStatsFieldPathsTopLevel = []string{
 var AsConfigurationFieldPathsNested = []string{
 	"pubsub",
 	"pubsub.providers",
-	"pubsub.providers.aws_iot",
 	"pubsub.providers.mqtt",
 	"pubsub.providers.nats",
+	"webhooks",
+	"webhooks.unhealthy_attempts_threshold",
+	"webhooks.unhealthy_retry_interval",
 }
 
 var AsConfigurationFieldPathsTopLevel = []string{
 	"pubsub",
+	"webhooks",
 }
 var GetAsConfigurationRequestFieldPathsNested []string
 var GetAsConfigurationRequestFieldPathsTopLevel []string
@@ -80,9 +80,11 @@ var GetAsConfigurationResponseFieldPathsNested = []string{
 	"configuration",
 	"configuration.pubsub",
 	"configuration.pubsub.providers",
-	"configuration.pubsub.providers.aws_iot",
 	"configuration.pubsub.providers.mqtt",
 	"configuration.pubsub.providers.nats",
+	"configuration.webhooks",
+	"configuration.webhooks.unhealthy_attempts_threshold",
+	"configuration.webhooks.unhealthy_retry_interval",
 }
 
 var GetAsConfigurationResponseFieldPathsTopLevel = []string{
@@ -101,6 +103,9 @@ var EncodeDownlinkRequestFieldPathsNested = []string{
 	"downlink.class_b_c.absolute_time",
 	"downlink.class_b_c.gateways",
 	"downlink.confirmed",
+	"downlink.confirmed_retry",
+	"downlink.confirmed_retry.attempt",
+	"downlink.confirmed_retry.max_attempts",
 	"downlink.correlation_ids",
 	"downlink.decoded_payload",
 	"downlink.decoded_payload_warnings",
@@ -139,6 +144,9 @@ var EncodeDownlinkResponseFieldPathsNested = []string{
 	"downlink.class_b_c.absolute_time",
 	"downlink.class_b_c.gateways",
 	"downlink.confirmed",
+	"downlink.confirmed_retry",
+	"downlink.confirmed_retry.attempt",
+	"downlink.confirmed_retry.max_attempts",
 	"downlink.correlation_ids",
 	"downlink.decoded_payload",
 	"downlink.decoded_payload_warnings",
@@ -176,19 +184,31 @@ var DecodeUplinkRequestFieldPathsNested = []string{
 	"uplink.frm_payload",
 	"uplink.last_a_f_cnt_down",
 	"uplink.locations",
+	"uplink.network_ids",
+	"uplink.network_ids.cluster_address",
+	"uplink.network_ids.cluster_id",
+	"uplink.network_ids.net_id",
+	"uplink.network_ids.tenant_address",
+	"uplink.network_ids.tenant_id",
+	"uplink.normalized_payload",
+	"uplink.normalized_payload_warnings",
 	"uplink.received_at",
 	"uplink.rx_metadata",
 	"uplink.session_key_id",
 	"uplink.settings",
-	"uplink.settings.coding_rate",
+	"uplink.settings.concentrator_timestamp",
 	"uplink.settings.data_rate",
 	"uplink.settings.data_rate.modulation",
 	"uplink.settings.data_rate.modulation.fsk",
 	"uplink.settings.data_rate.modulation.fsk.bit_rate",
 	"uplink.settings.data_rate.modulation.lora",
 	"uplink.settings.data_rate.modulation.lora.bandwidth",
+	"uplink.settings.data_rate.modulation.lora.coding_rate",
 	"uplink.settings.data_rate.modulation.lora.spreading_factor",
-	"uplink.settings.data_rate_index",
+	"uplink.settings.data_rate.modulation.lrfhss",
+	"uplink.settings.data_rate.modulation.lrfhss.coding_rate",
+	"uplink.settings.data_rate.modulation.lrfhss.modulation_type",
+	"uplink.settings.data_rate.modulation.lrfhss.operating_channel_width",
 	"uplink.settings.downlink",
 	"uplink.settings.downlink.antenna_index",
 	"uplink.settings.downlink.invert_polarization",
@@ -197,6 +217,12 @@ var DecodeUplinkRequestFieldPathsNested = []string{
 	"uplink.settings.frequency",
 	"uplink.settings.time",
 	"uplink.settings.timestamp",
+	"uplink.version_ids",
+	"uplink.version_ids.band_id",
+	"uplink.version_ids.brand_id",
+	"uplink.version_ids.firmware_version",
+	"uplink.version_ids.hardware_version",
+	"uplink.version_ids.model_id",
 	"version_ids",
 	"version_ids.band_id",
 	"version_ids.brand_id",
@@ -227,19 +253,31 @@ var DecodeUplinkResponseFieldPathsNested = []string{
 	"uplink.frm_payload",
 	"uplink.last_a_f_cnt_down",
 	"uplink.locations",
+	"uplink.network_ids",
+	"uplink.network_ids.cluster_address",
+	"uplink.network_ids.cluster_id",
+	"uplink.network_ids.net_id",
+	"uplink.network_ids.tenant_address",
+	"uplink.network_ids.tenant_id",
+	"uplink.normalized_payload",
+	"uplink.normalized_payload_warnings",
 	"uplink.received_at",
 	"uplink.rx_metadata",
 	"uplink.session_key_id",
 	"uplink.settings",
-	"uplink.settings.coding_rate",
+	"uplink.settings.concentrator_timestamp",
 	"uplink.settings.data_rate",
 	"uplink.settings.data_rate.modulation",
 	"uplink.settings.data_rate.modulation.fsk",
 	"uplink.settings.data_rate.modulation.fsk.bit_rate",
 	"uplink.settings.data_rate.modulation.lora",
 	"uplink.settings.data_rate.modulation.lora.bandwidth",
+	"uplink.settings.data_rate.modulation.lora.coding_rate",
 	"uplink.settings.data_rate.modulation.lora.spreading_factor",
-	"uplink.settings.data_rate_index",
+	"uplink.settings.data_rate.modulation.lrfhss",
+	"uplink.settings.data_rate.modulation.lrfhss.coding_rate",
+	"uplink.settings.data_rate.modulation.lrfhss.modulation_type",
+	"uplink.settings.data_rate.modulation.lrfhss.operating_channel_width",
 	"uplink.settings.downlink",
 	"uplink.settings.downlink.antenna_index",
 	"uplink.settings.downlink.invert_polarization",
@@ -248,6 +286,12 @@ var DecodeUplinkResponseFieldPathsNested = []string{
 	"uplink.settings.frequency",
 	"uplink.settings.time",
 	"uplink.settings.timestamp",
+	"uplink.version_ids",
+	"uplink.version_ids.band_id",
+	"uplink.version_ids.brand_id",
+	"uplink.version_ids.firmware_version",
+	"uplink.version_ids.hardware_version",
+	"uplink.version_ids.model_id",
 }
 
 var DecodeUplinkResponseFieldPathsTopLevel = []string{
@@ -259,6 +303,9 @@ var DecodeDownlinkRequestFieldPathsNested = []string{
 	"downlink.class_b_c.absolute_time",
 	"downlink.class_b_c.gateways",
 	"downlink.confirmed",
+	"downlink.confirmed_retry",
+	"downlink.confirmed_retry.attempt",
+	"downlink.confirmed_retry.max_attempts",
 	"downlink.correlation_ids",
 	"downlink.decoded_payload",
 	"downlink.decoded_payload_warnings",
@@ -297,6 +344,9 @@ var DecodeDownlinkResponseFieldPathsNested = []string{
 	"downlink.class_b_c.absolute_time",
 	"downlink.class_b_c.gateways",
 	"downlink.confirmed",
+	"downlink.confirmed_retry",
+	"downlink.confirmed_retry.attempt",
+	"downlink.confirmed_retry.max_attempts",
 	"downlink.correlation_ids",
 	"downlink.decoded_payload",
 	"downlink.decoded_payload_warnings",
@@ -312,7 +362,6 @@ var DecodeDownlinkResponseFieldPathsTopLevel = []string{
 }
 var AsConfiguration_PubSubFieldPathsNested = []string{
 	"providers",
-	"providers.aws_iot",
 	"providers.mqtt",
 	"providers.nats",
 }
@@ -320,14 +369,21 @@ var AsConfiguration_PubSubFieldPathsNested = []string{
 var AsConfiguration_PubSubFieldPathsTopLevel = []string{
 	"providers",
 }
+var AsConfiguration_WebhooksFieldPathsNested = []string{
+	"unhealthy_attempts_threshold",
+	"unhealthy_retry_interval",
+}
+
+var AsConfiguration_WebhooksFieldPathsTopLevel = []string{
+	"unhealthy_attempts_threshold",
+	"unhealthy_retry_interval",
+}
 var AsConfiguration_PubSub_ProvidersFieldPathsNested = []string{
-	"aws_iot",
 	"mqtt",
 	"nats",
 }
 
 var AsConfiguration_PubSub_ProvidersFieldPathsTopLevel = []string{
-	"aws_iot",
 	"mqtt",
 	"nats",
 }

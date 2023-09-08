@@ -20,7 +20,12 @@ import Input from '@ttn-lw/components/input'
 import Checkbox from '@ttn-lw/components/checkbox'
 import Form from '@ttn-lw/components/form'
 import Notification from '@ttn-lw/components/notification'
+import ModalButton from '@ttn-lw/components/button/modal-button'
+import toast from '@ttn-lw/components/toast'
 
+import Message from '@ttn-lw/lib/components/message'
+
+import tooltipIds from '@ttn-lw/lib/constants/tooltip-ids'
 import diff from '@ttn-lw/lib/diff'
 import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
@@ -47,7 +52,8 @@ const isAppKeyHidden = ({ root_keys }) =>
 const netIdDecoder = value => (value === null ? '' : value)
 
 const JoinServerForm = React.memo(props => {
-  const { device, onSubmit, onSubmitSuccess, mayReadKeys, mayEditKeys } = props
+  const { device, onSubmit, onSubmitSuccess, mayReadKeys, mayEditKeys, onUsedDevNoncesReset } =
+    props
 
   // Fallback to 1.1.0 in case NS is not available and lorawan version is not set present.
   const isNewLorawanVersion = parseLorawanMacVersion(device.lorawan_version || '1.1.0') >= 110
@@ -72,6 +78,21 @@ const JoinServerForm = React.memo(props => {
     () => validationSchema.cast(device, { context: validationContext }),
     [device, validationContext],
   )
+
+  const handleUsedDevNoncesReset = React.useCallback(async () => {
+    try {
+      await onUsedDevNoncesReset()
+      toast({
+        message: messages.resetSuccess,
+        type: toast.types.SUCCESS,
+      })
+    } catch (err) {
+      toast({
+        message: messages.resetFailure,
+        type: toast.types.ERROR,
+      })
+    }
+  }, [onUsedDevNoncesReset])
 
   // Setup and memoize callbacks for changes to `resets_join_nonces` for displaying the field warning.
   const handleResetsJoinNoncesChange = React.useCallback(
@@ -105,6 +126,8 @@ const JoinServerForm = React.memo(props => {
   let appKeyPlaceholder
   if (externalJs) {
     appKeyPlaceholder = sharedMessages.provisionedOnExternalJoinServer
+  } else if (!mayEditKeys) {
+    appKeyPlaceholder = sharedMessages.insufficientAppKeyRights
   } else if (appKeyHidden) {
     appKeyPlaceholder = sharedMessages.unexposed
   }
@@ -112,6 +135,8 @@ const JoinServerForm = React.memo(props => {
   let nwkKeyPlaceholder
   if (externalJs) {
     nwkKeyPlaceholder = sharedMessages.provisionedOnExternalJoinServer
+  } else if (!mayEditKeys) {
+    nwkKeyPlaceholder = sharedMessages.insufficientNwkKeyRights
   } else if (nwkKeyHidden) {
     nwkKeyPlaceholder = sharedMessages.unexposed
   }
@@ -158,15 +183,37 @@ const JoinServerForm = React.memo(props => {
         description={sharedMessages.nsServerKekLabelDescription}
         component={Input}
       />
-      {isNewLorawanVersion && (
-        <Form.Field
-          title={sharedMessages.resetsJoinNonces}
-          onChange={handleResetsJoinNoncesChange}
-          warning={resetsJoinNonces ? sharedMessages.resetWarning : undefined}
-          name="resets_join_nonces"
-          component={Checkbox}
+      <Form.Field
+        title={sharedMessages.resetsJoinNonces}
+        onChange={handleResetsJoinNoncesChange}
+        warning={resetsJoinNonces ? sharedMessages.resetWarning : undefined}
+        name="resets_join_nonces"
+        component={Checkbox}
+        tooltipId={tooltipIds.RESETS_JOIN_NONCES}
+      />
+      <Form.InfoField
+        title={messages.resetUsedDevNonces}
+        tooltipId={tooltipIds.RESET_USED_DEV_NONCES}
+      >
+        <ModalButton
+          type="button"
+          warning
+          message={messages.resetUsedDevNonces}
+          modalData={{
+            children: (
+              <div>
+                <Message
+                  content={messages.resetUsedDevNoncesModal}
+                  values={{
+                    break: <br />,
+                  }}
+                />
+              </div>
+            ),
+          }}
+          onApprove={handleUsedDevNoncesReset}
         />
-      )}
+      </Form.InfoField>
       {showResetNotification && <Notification content={messages.keysResetWarning} info small />}
       <Form.Field
         title={sharedMessages.appKey}
@@ -175,15 +222,12 @@ const JoinServerForm = React.memo(props => {
         min={16}
         max={16}
         placeholder={appKeyPlaceholder}
-        description={
-          isNewLorawanVersion
-            ? sharedMessages.appKeyNewDescription
-            : sharedMessages.appKeyDescription
-        }
         component={Input.Generate}
         disabled={appKeyHidden || !mayEditKeys}
         mayGenerateValue={mayEditKeys && !appKeyHidden}
         onGenerateValue={generate16BytesKey}
+        tooltipId={tooltipIds.APP_KEY}
+        sensitive
       />
       {isNewLorawanVersion && (
         <Form.Field
@@ -193,11 +237,12 @@ const JoinServerForm = React.memo(props => {
           min={16}
           max={16}
           placeholder={nwkKeyPlaceholder}
-          description={sharedMessages.nwkKeyDescription}
           component={Input.Generate}
           disabled={nwkKeyHidden || !mayEditKeys}
           mayGenerateValue={mayEditKeys && !nwkKeyHidden}
           onGenerateValue={generate16BytesKey}
+          tooltipId={tooltipIds.NETWORK_KEY}
+          sensitive
         />
       )}
       <SubmitBar>
@@ -213,6 +258,7 @@ JoinServerForm.propTypes = {
   mayReadKeys: PropTypes.bool.isRequired,
   onSubmit: PropTypes.func.isRequired,
   onSubmitSuccess: PropTypes.func.isRequired,
+  onUsedDevNoncesReset: PropTypes.func.isRequired,
 }
 
 export default JoinServerForm

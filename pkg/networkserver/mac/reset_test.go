@@ -18,12 +18,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/mac"
+	"go.thethings.network/lorawan-stack/v3/pkg/random"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -40,46 +40,46 @@ func TestHandleResetInd(t *testing.T) {
 		{
 			Name: "nil payload",
 			Device: &ttnpb.EndDevice{
-				LoRaWANVersion:    ttnpb.MAC_V1_1,
-				LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+				LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+				LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 				SupportsJoin:      false,
-				MACState:          &ttnpb.MACState{},
+				MacState:          &ttnpb.MACState{},
 			},
 			Expected: &ttnpb.EndDevice{
-				LoRaWANVersion:    ttnpb.MAC_V1_1,
-				LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+				LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+				LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 				SupportsJoin:      false,
-				MACState:          &ttnpb.MACState{},
+				MacState:          &ttnpb.MACState{},
 			},
 			Error: ErrNoPayload,
 		},
 		{
 			Name: "empty queue",
 			Device: &ttnpb.EndDevice{
-				LoRaWANVersion:    ttnpb.MAC_V1_1,
-				LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+				LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+				LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 				SupportsJoin:      false,
-				FrequencyPlanID:   test.EUFrequencyPlanID,
-				MACState: &ttnpb.MACState{
-					CurrentParameters: *ttnpb.NewPopulatedMACParameters(test.Randy, false),
-					DesiredParameters: *ttnpb.NewPopulatedMACParameters(test.Randy, false),
+				FrequencyPlanId:   test.EUFrequencyPlanID,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: genMACParameters(),
+					DesiredParameters: genMACParameters(),
 					QueuedResponses:   []*ttnpb.MACCommand{},
 				},
 			},
 			Expected: func() *ttnpb.EndDevice {
 				dev := &ttnpb.EndDevice{
-					LoRaWANVersion:    ttnpb.MAC_V1_1,
-					LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+					LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 					SupportsJoin:      false,
-					FrequencyPlanID:   test.EUFrequencyPlanID,
+					FrequencyPlanId:   test.EUFrequencyPlanID,
 				}
-				macState, err := NewState(dev, frequencyplans.NewStore(test.FrequencyPlansFetcher), ttnpb.MACSettings{})
+				macState, err := NewState(dev, frequencyplans.NewStore(test.FrequencyPlansFetcher), &ttnpb.MACSettings{})
 				if err != nil {
 					t.Fatalf("Failed to reset MACState: %v", errors.Stack(err))
 				}
-				dev.MACState = macState
-				dev.MACState.LoRaWANVersion = ttnpb.MAC_V1_1
-				dev.MACState.QueuedResponses = []*ttnpb.MACCommand{
+				dev.MacState = macState
+				dev.MacState.LorawanVersion = ttnpb.MACVersion_MAC_V1_1
+				dev.MacState.QueuedResponses = []*ttnpb.MACCommand{
 					(&ttnpb.MACCommand_ResetConf{
 						MinorVersion: 1,
 					}).MACCommand(),
@@ -101,13 +101,13 @@ func TestHandleResetInd(t *testing.T) {
 		{
 			Name: "non-empty queue",
 			Device: &ttnpb.EndDevice{
-				LoRaWANVersion:    ttnpb.MAC_V1_1,
-				LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+				LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+				LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 				SupportsJoin:      false,
-				FrequencyPlanID:   test.EUFrequencyPlanID,
-				MACState: &ttnpb.MACState{
-					CurrentParameters: *ttnpb.NewPopulatedMACParameters(test.Randy, false),
-					DesiredParameters: *ttnpb.NewPopulatedMACParameters(test.Randy, false),
+				FrequencyPlanId:   test.EUFrequencyPlanID,
+				MacState: &ttnpb.MACState{
+					CurrentParameters: genMACParameters(),
+					DesiredParameters: genMACParameters(),
 					QueuedResponses: []*ttnpb.MACCommand{
 						{},
 						{},
@@ -117,18 +117,18 @@ func TestHandleResetInd(t *testing.T) {
 			},
 			Expected: func() *ttnpb.EndDevice {
 				dev := &ttnpb.EndDevice{
-					LoRaWANVersion:    ttnpb.MAC_V1_1,
-					LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+					LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 					SupportsJoin:      false,
-					FrequencyPlanID:   test.EUFrequencyPlanID,
+					FrequencyPlanId:   test.EUFrequencyPlanID,
 				}
-				macState, err := NewState(dev, frequencyplans.NewStore(test.FrequencyPlansFetcher), ttnpb.MACSettings{})
+				macState, err := NewState(dev, frequencyplans.NewStore(test.FrequencyPlansFetcher), &ttnpb.MACSettings{})
 				if err != nil {
 					t.Fatalf("Failed to reset MACState: %v", errors.Stack(err))
 				}
-				dev.MACState = macState
-				dev.MACState.LoRaWANVersion = ttnpb.MAC_V1_1
-				dev.MACState.QueuedResponses = []*ttnpb.MACCommand{
+				dev.MacState = macState
+				dev.MacState.LorawanVersion = ttnpb.MACVersion_MAC_V1_1
+				dev.MacState.QueuedResponses = []*ttnpb.MACCommand{
 					(&ttnpb.MACCommand_ResetConf{
 						MinorVersion: 1,
 					}).MACCommand(),
@@ -153,9 +153,9 @@ func TestHandleResetInd(t *testing.T) {
 			Name:     tc.Name,
 			Parallel: true,
 			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
-				dev := CopyEndDevice(tc.Device)
+				dev := ttnpb.Clone(tc.Device)
 
-				evs, err := HandleResetInd(ctx, dev, tc.Payload, frequencyplans.NewStore(test.FrequencyPlansFetcher), ttnpb.MACSettings{})
+				evs, err := HandleResetInd(ctx, dev, tc.Payload, frequencyplans.NewStore(test.FrequencyPlansFetcher), &ttnpb.MACSettings{})
 				if tc.Error != nil && !a.So(err, should.EqualErrorOrDefinition, tc.Error) ||
 					tc.Error == nil && !a.So(err, should.BeNil) {
 					t.FailNow()
@@ -164,5 +164,32 @@ func TestHandleResetInd(t *testing.T) {
 				a.So(evs, should.ResembleEventBuilders, tc.Events)
 			},
 		})
+	}
+}
+
+func genMACParameters() *ttnpb.MACParameters {
+	randomVal := random.Int63n(100)
+	channels := make([]*ttnpb.MACParameters_Channel, randomVal%16)
+	for i := range channels {
+		channels[i] = &ttnpb.MACParameters_Channel{
+			MinDataRateIndex:  ttnpb.DataRateIndex(randomVal % 5),
+			MaxDataRateIndex:  ttnpb.DataRateIndex(randomVal % 16),
+			UplinkFrequency:   uint64((randomVal + int64(i)) * 1000000000),
+			DownlinkFrequency: uint64((randomVal + int64(i)) * 1000000000),
+		}
+	}
+	return &ttnpb.MACParameters{
+		MaxEirp:           float32(randomVal),
+		AdrDataRateIndex:  ttnpb.DataRateIndex(randomVal % 16),
+		AdrTxPowerIndex:   uint32(randomVal % 16),
+		AdrNbTrans:        uint32(1 + randomVal%15),
+		MaxDutyCycle:      ttnpb.AggregatedDutyCycle(randomVal % 16),
+		Channels:          channels,
+		Rx1Delay:          5,
+		Rx1DataRateOffset: 2,
+		Rx2DataRateIndex:  2,
+		Rx2Frequency:      868100000,
+		BeaconFrequency:   869525000,
+		PingSlotFrequency: 869525000,
 	}
 }

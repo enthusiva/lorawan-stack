@@ -19,12 +19,14 @@ import EVENT_STORE_LIMIT from '@console/constants/event-store-limit'
 import hamburgerMenuClose from '@assets/misc/hamburger-menu-close.svg'
 
 import Button from '@ttn-lw/components/button'
+import Routes from '@ttn-lw/components/switch'
 import Icon from '@ttn-lw/components/icon'
 
 import Message from '@ttn-lw/lib/components/message'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 import PropTypes from '@ttn-lw/lib/prop-types'
+import { composeDataUri, downloadDataUriAsFile } from '@ttn-lw/lib/data-uri'
 
 import EventsList from './list'
 import EventDetails from './details'
@@ -35,9 +37,24 @@ import { getEventId } from './utils'
 import style from './events.styl'
 
 const Events = React.memo(
-  ({ events, scoped, paused, onClear, onPauseToggle, entityId, truncated }) => {
+  ({
+    events,
+    scoped,
+    paused,
+    onClear,
+    onPauseToggle,
+    onFilterChange,
+    entityId,
+    truncated,
+    filter,
+    disableFiltering,
+  }) => {
     const [focus, setFocus] = useState({ eventId: undefined, visible: false })
     const onPause = useCallback(() => onPauseToggle(paused), [onPauseToggle, paused])
+    const onExport = useCallback(() => {
+      const eventLogData = composeDataUri(JSON.stringify(events, undefined, 2))
+      downloadDataUriAsFile(eventLogData, `${entityId}_live_data_${Date.now()}.json`)
+    }, [entityId, events])
     const handleRowClick = useCallback(
       eventId => {
         if (eventId !== focus.eventId) {
@@ -48,6 +65,10 @@ const Events = React.memo(
       },
       [focus],
     )
+
+    const handleVerboseFilterChange = useCallback(() => {
+      onFilterChange(Boolean(filter) ? undefined : 'default')
+    }, [onFilterChange, filter])
 
     const handleEventInfoCloseClick = useCallback(() => {
       setFocus({ eventId: undefined, visible: false })
@@ -65,21 +86,26 @@ const Events = React.memo(
             <Message content={m.dataPreview} className={style.cellData} component="div" />
             <div className={style.stickyContainer}>
               <div className={style.actions}>
+                {!disableFiltering && (
+                  <label className={style.toggleContainer}>
+                    <Message content={m.verboseStream} className={style.toggleLabel} />
+                    <Routes onChange={handleVerboseFilterChange} checked={!Boolean(filter)} />
+                  </label>
+                )}
+                <Button
+                  onClick={onExport}
+                  message={sharedMessages.exportJson}
+                  naked
+                  icon="file_download"
+                />
                 <Button
                   onClick={onPause}
                   message={paused ? sharedMessages.resume : sharedMessages.pause}
                   naked
-                  secondary={!paused}
                   warning={paused}
                   icon={paused ? 'play_arrow' : 'pause'}
                 />
-                <Button
-                  onClick={onClear}
-                  message={sharedMessages.clear}
-                  naked
-                  secondary
-                  icon="delete"
-                />
+                <Button onClick={onClear} message={sharedMessages.clear} naked icon="delete" />
               </div>
             </div>
           </div>
@@ -125,9 +151,12 @@ const Events = React.memo(
 )
 
 Events.propTypes = {
+  disableFiltering: PropTypes.bool,
   entityId: PropTypes.string.isRequired,
   events: PropTypes.events.isRequired,
+  filter: PropTypes.eventFilter,
   onClear: PropTypes.func,
+  onFilterChange: PropTypes.func,
   onPauseToggle: PropTypes.func,
   paused: PropTypes.bool.isRequired,
   scoped: PropTypes.bool,
@@ -135,9 +164,12 @@ Events.propTypes = {
 }
 
 Events.defaultProps = {
+  disableFiltering: false,
+  filter: undefined,
   scoped: false,
   onClear: () => null,
   onPauseToggle: () => null,
+  onFilterChange: () => null,
 }
 
 Events.Widget = Widget

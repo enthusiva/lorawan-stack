@@ -28,11 +28,7 @@ import traverse from 'traverse'
  * @param {object} minimum - Paths that will always be merged for all records.
  * @returns {object} The merged device record.
  */
-export default function mergeDevice(
-  parts,
-  base = {},
-  minimum = [['ids'], ['created_at'], ['updated_at']],
-) {
+export default (parts, base = {}, minimum = [['ids'], ['created_at'], ['updated_at']]) => {
   const result = base
 
   // Cycle through all responses.
@@ -61,7 +57,7 @@ export default function mergeDevice(
             continue
           }
 
-          traverse(val).forEach(function(e) {
+          traverse(val).forEach(function (e) {
             if (Array.isArray(e) && e.length > 0) {
               traverse(result).set(path, val)
 
@@ -69,6 +65,12 @@ export default function mergeDevice(
             }
 
             if (this.isLeaf) {
+              // TODO: Instead of ignoring empty time values, the merge order should be improved
+              // as described in the following issue comment:
+              // https://github.com/TheThingsNetwork/lorawan-stack/issues/4766#issuecomment-952691708
+              if (this.key.endsWith('_at') && e === '0001-01-01T00:00:00Z') {
+                return
+              }
               // Write the sub object leaf into the result.
               traverse(result).set([...path, ...this.path], e)
             }

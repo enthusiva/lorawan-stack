@@ -18,7 +18,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -28,8 +27,7 @@ import (
 )
 
 var (
-	selectApplicationLinkFlags = util.FieldMaskFlags(&ttnpb.ApplicationLink{})
-	setApplicationLinkFlags    = util.FieldFlags(&ttnpb.ApplicationLink{})
+	selectApplicationLinkFlags = util.NormalizedFlagSet()
 
 	selectAllApplicationLinkFlags = util.SelectAllFlagSet("application link")
 )
@@ -55,9 +53,12 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
-			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationLinkFlags)
+			paths, err := ttnpb.PathsFromSelectFlagsForApplicationLink(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			if len(paths) == 0 {
 				logger.Warn("No fields selected, will select everything")
 				selectApplicationLinkFlags.VisitAll(func(flag *pflag.Flag) {
@@ -71,8 +72,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewAsClient(as).GetLink(ctx, &ttnpb.GetApplicationLinkRequest{
-				ApplicationIdentifiers: *appID,
-				FieldMask:              types.FieldMask{Paths: paths},
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -88,12 +89,11 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setApplicationLinkFlags)
-
-			var link ttnpb.ApplicationLink
-			if err := util.SetFields(&link, setApplicationLinkFlags); err != nil {
+			link := &ttnpb.ApplicationLink{}
+			paths, err := link.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			newPaths, err := parsePayloadFormatterParameterFlags("default-formatters", link.DefaultFormatters, cmd.Flags())
@@ -106,9 +106,9 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewAsClient(as).SetLink(ctx, &ttnpb.SetApplicationLinkRequest{
-				ApplicationIdentifiers: *appID,
-				ApplicationLink:        link,
-				FieldMask:              types.FieldMask{Paths: paths},
+				ApplicationIds: appID,
+				Link:           link,
+				FieldMask:      ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -124,7 +124,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
@@ -142,12 +142,13 @@ var (
 )
 
 func init() {
+	ttnpb.AddSelectFlagsForApplicationLink(selectApplicationLinkFlags, "", false)
 	applicationsLinkGetCommand.Flags().AddFlagSet(applicationIDFlags())
 	applicationsLinkGetCommand.Flags().AddFlagSet(selectApplicationLinkFlags)
 	applicationsLinkGetCommand.Flags().AddFlagSet(selectAllApplicationLinkFlags)
 	applicationsLinkCommand.AddCommand(applicationsLinkGetCommand)
 	applicationsLinkSetCommand.Flags().AddFlagSet(applicationIDFlags())
-	applicationsLinkSetCommand.Flags().AddFlagSet(setApplicationLinkFlags)
+	ttnpb.AddSetFlagsForApplicationLink(applicationsLinkSetCommand.Flags(), "", false)
 	applicationsLinkSetCommand.Flags().AddFlagSet(payloadFormatterParameterFlags("default-formatters"))
 	applicationsLinkSetCommand.Flags().AddFlagSet(deprecatedApplicationLinkFlags())
 	applicationsLinkCommand.AddCommand(applicationsLinkSetCommand)

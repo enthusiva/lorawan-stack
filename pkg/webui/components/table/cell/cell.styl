@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 .cell
+  display: table-cell
   padding: $cs.m
+  vertical-align: middle
 
   +media-query($bp.s)
     padding: $cs.m $cs.xs
@@ -25,8 +26,9 @@
   &:first-child
     font-weight: $fw.bold
 
-  &:last-child:not(&-centered)
-    text-align: right
+  &:not(&-centered):not(&-left)
+    &:last-child
+      text-align: right
 
   &-small
     padding-top: $cs.xs
@@ -34,6 +36,12 @@
 
   &-centered
     text-align: center
+
+  &-left
+    text-align: left
+
+  &-right
+    text-align: right
 
   &-head
     font-weight: normal
@@ -46,5 +54,5 @@
     text-overflow: ellipsis
 
 
-  &-head:not(&-centered)
+  &-head:not(&-centered):not(&-right)
     text-align: left

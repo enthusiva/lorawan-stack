@@ -17,11 +17,11 @@ package api_test
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/packages/loradms/v1/api"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -61,7 +61,7 @@ func TestNoAuth(t *testing.T) {
 			a := assertions.New(t)
 
 			respChan <- &http.Response{
-				Body: ioutil.NopCloser(bytes.NewBufferString("")),
+				Body: io.NopCloser(bytes.NewBufferString("")),
 			}
 			errChan <- nil
 
@@ -79,7 +79,7 @@ func TestAuth(t *testing.T) {
 			a := assertions.New(t)
 
 			respChan <- &http.Response{
-				Body: ioutil.NopCloser(bytes.NewBufferString("")),
+				Body: io.NopCloser(bytes.NewBufferString("")),
 			}
 			errChan <- nil
 

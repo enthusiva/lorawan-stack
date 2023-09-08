@@ -31,7 +31,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), args)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -58,7 +58,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), args)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -66,8 +66,9 @@ var (
 				return err
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
+			order := getOrder(cmd.Flags())
 			res, err := ttnpb.NewClientAccessClient(is).ListCollaborators(ctx, &ttnpb.ListClientCollaboratorsRequest{
-				ClientIdentifiers: *cliID, Limit: limit, Page: page,
+				ClientIds: cliID, Limit: limit, Page: page, Order: order,
 			}, opt)
 			if err != nil {
 				return err
@@ -84,11 +85,11 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), nil)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 			collaborator := getCollaborator(cmd.Flags())
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -96,8 +97,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewClientAccessClient(is).GetCollaborator(ctx, &ttnpb.GetClientCollaboratorRequest{
-				ClientIdentifiers:             *cliID,
-				OrganizationOrUserIdentifiers: *collaborator,
+				ClientIds:    cliID,
+				Collaborator: collaborator,
 			})
 			if err != nil {
 				return err
@@ -113,15 +114,15 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), nil)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 			collaborator := getCollaborator(cmd.Flags())
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 			rights := getRights(cmd.Flags())
 			if len(rights) == 0 {
-				return errNoCollaboratorRights
+				return errNoCollaboratorRights.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -129,10 +130,10 @@ var (
 				return err
 			}
 			_, err = ttnpb.NewClientAccessClient(is).SetCollaborator(ctx, &ttnpb.SetClientCollaboratorRequest{
-				ClientIdentifiers: *cliID,
-				Collaborator: ttnpb.Collaborator{
-					OrganizationOrUserIdentifiers: *collaborator,
-					Rights:                        rights,
+				ClientIds: cliID,
+				Collaborator: &ttnpb.Collaborator{
+					Ids:    collaborator,
+					Rights: rights,
 				},
 			})
 			if err != nil {
@@ -146,26 +147,23 @@ var (
 		Use:     "delete",
 		Aliases: []string{"del", "remove", "rm"},
 		Short:   "Delete a client collaborator",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cliID := getClientID(cmd.Flags(), nil)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 			collaborator := getCollaborator(cmd.Flags())
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			_, err = ttnpb.NewClientAccessClient(is).SetCollaborator(ctx, &ttnpb.SetClientCollaboratorRequest{
-				ClientIdentifiers: *cliID,
-				Collaborator: ttnpb.Collaborator{
-					OrganizationOrUserIdentifiers: *collaborator,
-					Rights:                        nil,
-				},
+			_, err = ttnpb.NewClientAccessClient(is).DeleteCollaborator(ctx, &ttnpb.DeleteClientCollaboratorRequest{
+				ClientIds:       cliID,
+				CollaboratorIds: collaborator,
 			})
 			if err != nil {
 				return err
@@ -185,6 +183,7 @@ func init() {
 	clientsCommand.AddCommand(clientRights)
 
 	clientCollaboratorsList.Flags().AddFlagSet(paginationFlags())
+	clientCollaboratorsList.Flags().AddFlagSet(orderFlags())
 	clientCollaborators.AddCommand(clientCollaboratorsList)
 	clientCollaboratorsGet.Flags().AddFlagSet(collaboratorFlags())
 	clientCollaborators.AddCommand(clientCollaboratorsGet)

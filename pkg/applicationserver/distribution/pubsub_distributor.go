@@ -27,10 +27,10 @@ import (
 // NewPubSubDistributor creates a Distributor on top of the provided PubSub.
 // The underlying subscription sets can timeout if there are no active subscribers.
 // A timeout of 0 means the underlying subscription sets never timeout.
-func NewPubSubDistributor(ctx context.Context, rd RequestDecoupler, timeout time.Duration, pubsub PubSub) Distributor {
+func NewPubSubDistributor(ctx context.Context, rd RequestDecoupler, timeout time.Duration, pubsub PubSub, mapOpts []io.SubscriptionOption) Distributor {
 	return &pubSubDistributor{
 		pubsub:        pubsub,
-		subscriptions: newSubscriptionMap(ctx, rd, timeout, subscribeSetToPubSub(pubsub)),
+		subscriptions: newSubscriptionMap(ctx, rd, timeout, subscribeSetToPubSub(pubsub), mapOpts...),
 	}
 }
 
@@ -51,15 +51,15 @@ func (d *pubSubDistributor) Subscribe(ctx context.Context, protocol string, ids 
 	if ids == nil {
 		return nil, errMissingIdentifiers.New()
 	}
-	s, err := d.subscriptions.LoadOrCreate(ctx, *ids)
+	s, err := d.subscriptions.LoadOrCreate(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	return s.Subscribe(ctx, protocol, ids)
 }
 
-func subscribeSetToPubSub(pubsub PubSub) func(*subscriptionSet, ttnpb.ApplicationIdentifiers) error {
-	return func(set *subscriptionSet, ids ttnpb.ApplicationIdentifiers) error {
+func subscribeSetToPubSub(pubsub PubSub) func(*subscriptionSet, *ttnpb.ApplicationIdentifiers) error {
+	return func(set *subscriptionSet, ids *ttnpb.ApplicationIdentifiers) error {
 		go func() {
 			ctx := set.Context()
 			if err := pubsub.Subscribe(ctx, ids, set.Publish); err != nil {

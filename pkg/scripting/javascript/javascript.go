@@ -30,16 +30,16 @@ type js struct {
 }
 
 // New returns a new Javascript scripting engine.
-func New(options scripting.Options) scripting.Engine {
+func New(options scripting.Options) scripting.AheadOfTimeEngine {
 	return &js{options}
 }
 
 var (
 	errScriptTimeout      = errors.DefineDeadlineExceeded("script_timeout", "script timeout")
 	errScriptInterrupt    = errors.DefineAborted("script_interrupt", "script interrupt")
-	errScript             = errors.Define("script", "{message}")
+	errScript             = errors.DefineAborted("script", "{message}")
 	errNoScriptOutput     = errors.DefineAborted("no_script_output", "no script output")
-	errRuntime            = errors.Define("runtime", "runtime error")
+	errRuntime            = errors.DefineAborted("runtime", "{message}")
 	errEntrypointNotFound = errors.DefineNotFound("entrypoint_not_found", "entrypoint `{entrypoint}` not found")
 )
 
@@ -56,12 +56,46 @@ func convertError(err error) error {
 	case *goja.Exception:
 		return errScript.WithAttributes("message", gojaErr.Error()).WithCause(err)
 	default:
-		return errRuntime.WithCause(err)
+		return errRuntime.WithAttributes("message", err.Error()).WithCause(err)
 	}
 }
 
-// Run executes the Javascript script in the environment env and returns the output.
-func (j *js) Run(ctx context.Context, script, fn string, params ...interface{}) (as func(target interface{}) error, err error) {
+// Run executes the Javascript script and returns the output.
+func (j *js) Run(ctx context.Context, script, fn string, params ...any) (as func(target any) error, err error) {
+	run := func(vm *goja.Runtime) (goja.Value, error) {
+		return vm.RunString(script)
+	}
+	return j.run(ctx, run, fn, params...)
+}
+
+// Compile compiles the Javascript script and returns the compiled program.
+func (j *js) Compile(ctx context.Context, script string) (run func(context.Context, string, ...any) (func(any) error, error), err error) {
+	defer trace.StartRegion(ctx, "compile javascript").End()
+
+	start := time.Now()
+	defer func() {
+		compilationsLatency.Observe(time.Since(start).Seconds())
+		if err != nil {
+			compilations.WithLabelValues("error").Inc()
+		} else {
+			compilations.WithLabelValues("ok").Inc()
+		}
+	}()
+
+	program, err := goja.Compile("", script, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(ctx context.Context, fn string, params ...any) (func(any) error, error) {
+		run := func(vm *goja.Runtime) (goja.Value, error) {
+			return vm.RunProgram(program)
+		}
+		return j.run(ctx, run, fn, params...)
+	}, nil
+}
+
+func (j *js) run(ctx context.Context, f func(*goja.Runtime) (goja.Value, error), fn string, params ...any) (as func(target any) error, err error) {
 	defer trace.StartRegion(ctx, "run javascript").End()
 
 	start := time.Now()
@@ -87,14 +121,14 @@ func (j *js) Run(ctx context.Context, script, fn string, params ...interface{}) 
 		if caught := recover(); caught != nil {
 			switch val := caught.(type) {
 			case error:
-				err = errRuntime.WithCause(val)
+				err = errRuntime.WithAttributes("message", val.Error()).WithCause(val)
 			default:
-				err = errRuntime.New()
+				err = errRuntime.WithAttributes("message", "runtime error")
 			}
 		}
 	}()
 
-	_, err = vm.RunString(script)
+	_, err = f(vm)
 	if err != nil {
 		return nil, convertError(err)
 	}
@@ -113,14 +147,14 @@ func (j *js) Run(ctx context.Context, script, fn string, params ...interface{}) 
 		return nil, convertError(err)
 	}
 
-	return func(target interface{}) (err error) {
+	return func(target any) (err error) {
 		defer func() {
 			if caught := recover(); caught != nil {
 				switch val := caught.(type) {
 				case error:
-					err = errRuntime.WithCause(val)
+					err = errRuntime.WithAttributes("message", val.Error()).WithCause(val)
 				default:
-					err = errRuntime.New()
+					err = errRuntime.WithAttributes("message", "runtime error")
 				}
 			}
 		}()

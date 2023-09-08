@@ -19,7 +19,9 @@ import (
 	"net"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/metrics"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcclient"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/hooks"
@@ -34,7 +36,7 @@ func (c *Component) initGRPC() {
 	}
 	rpclog.ReplaceGrpcLogger(c.grpcLogger)
 
-	c.grpc = rpcserver.New(
+	c.GRPC = rpcserver.New(
 		c.ctx,
 		rpcserver.WithContextFiller(c.FillContext),
 		rpcserver.WithTrustedProxies(c.config.GRPC.TrustedProxies...),
@@ -45,17 +47,23 @@ func (c *Component) initGRPC() {
 
 func (c *Component) setupGRPC() (err error) {
 	for _, sub := range c.grpcSubsystems {
-		sub.RegisterServices(c.grpc.Server)
+		sub.RegisterServices(c.GRPC.Server)
 	}
-	metrics.InitializeServerMetrics(c.grpc.Server)
+	metrics.InitializeServerMetrics(c.GRPC.Server)
 	c.logger.Debug("Starting loopback connection")
-	c.loopback, err = rpcserver.StartLoopback(c.ctx, c.grpc.Server, rpcclient.DefaultDialOptions(c.ctx)...)
+	c.loopback, err = rpcserver.StartLoopback(
+		c.ctx, c.GRPC.Server,
+		rpcclient.DefaultDialOptions(
+			// Suppress loopback client logs, because we already have server logs.
+			log.NewContext(c.ctx, log.Noop),
+		)...,
+	)
 	if err != nil {
 		return errors.New("could not start loopback connection").WithCause(err)
 	}
 	c.logger.Debug("Setting up gRPC gateway")
 	for _, sub := range c.grpcSubsystems {
-		sub.RegisterHandlers(c.grpc.ServeMux, c.loopback)
+		sub.RegisterHandlers(c.GRPC.ServeMux, c.loopback)
 	}
 	return nil
 }
@@ -67,13 +75,13 @@ func (c *Component) LoopbackConn() *grpc.ClientConn {
 }
 
 func (c *Component) serveGRPC(lis net.Listener) error {
-	return c.grpc.Serve(lis)
+	return c.GRPC.Serve(lis)
 }
 
 func (c *Component) grpcEndpoints() []Endpoint {
 	return []Endpoint{
 		NewTCPEndpoint(c.config.GRPC.Listen, "gRPC"),
-		NewTLSEndpoint(c.config.GRPC.ListenTLS, "gRPC", WithNextProtos("h2", "http/1.1")),
+		NewTLSEndpoint(c.config.GRPC.ListenTLS, "gRPC", tlsconfig.WithNextProtos("h2", "http/1.1")),
 	}
 }
 
@@ -83,7 +91,7 @@ func (c *Component) listenGRPC() (err error) {
 
 // RegisterGRPC registers a gRPC subsystem to the component.
 func (c *Component) RegisterGRPC(s rpcserver.Registerer) {
-	if c.grpc == nil {
+	if c.GRPC == nil {
 		c.initGRPC()
 	}
 	c.grpcSubsystems = append(c.grpcSubsystems, s)
@@ -98,7 +106,7 @@ func (c *Component) WithClusterAuth() grpc.CallOption {
 // If a call can't be identified as coming from the cluster, it will be discarded.
 func (c *Component) ClusterAuthUnaryHook() hooks.UnaryHandlerMiddleware {
 	return func(next grpc.UnaryHandler) grpc.UnaryHandler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			ctx = c.cluster.WithVerifiedSource(ctx)
 			return next(ctx, req)
 		}
@@ -109,7 +117,7 @@ func (c *Component) ClusterAuthUnaryHook() hooks.UnaryHandlerMiddleware {
 // If a call can't be identified as coming from the cluster, it will be discarded.
 func (c *Component) ClusterAuthStreamHook() hooks.StreamHandlerMiddleware {
 	return func(hdl grpc.StreamHandler) grpc.StreamHandler {
-		return func(srv interface{}, stream grpc.ServerStream) error {
+		return func(srv any, stream grpc.ServerStream) error {
 			wrapped := grpc_middleware.WrapServerStream(stream)
 			ctx := c.cluster.WithVerifiedSource(stream.Context())
 			wrapped.WrappedContext = ctx

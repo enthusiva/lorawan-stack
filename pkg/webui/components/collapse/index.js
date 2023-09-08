@@ -30,7 +30,7 @@ const m = defineMessages({
 })
 
 const Collapse = props => {
-  const { className, title, description, initialCollapsed, children, disabled } = props
+  const { className, id, title, description, initialCollapsed, children, disabled } = props
 
   const [collapsed, setCollapsed] = React.useState(initialCollapsed)
   const onCollapsedChange = React.useCallback(() => {
@@ -41,7 +41,7 @@ const Collapse = props => {
 
   const cls = classnames(className, style.section)
   return (
-    <section className={cls} data-test-id="collapsible-section">
+    <section className={cls} data-test-id={id}>
       <div className={style.header}>
         <div className={style.headerContent}>
           <Message className={style.title} component="h3" content={title} />
@@ -50,7 +50,6 @@ const Collapse = props => {
         <div className={style.button}>
           <Button
             type="button"
-            secondary
             className={style.expandButton}
             disabled={disabled}
             message={collapsed ? m.expand : m.collapse}
@@ -68,14 +67,16 @@ Collapse.propTypes = {
   className: PropTypes.string,
   description: PropTypes.message.isRequired,
   disabled: PropTypes.bool,
+  id: PropTypes.string,
   initialCollapsed: PropTypes.bool,
   title: PropTypes.message.isRequired,
 }
 
 Collapse.defaultProps = {
   className: undefined,
-  initialCollapsed: true,
   disabled: false,
+  id: 'collapsible-section',
+  initialCollapsed: true,
 }
 
 export default Collapse

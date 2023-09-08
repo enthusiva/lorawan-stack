@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
-import { connect } from 'react-redux'
-import { Switch, Route } from 'react-router'
+import React, { useEffect } from 'react'
+import { Routes, Route, useParams } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
 
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import applicationIcon from '@assets/misc/application.svg'
+
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 import SideNavigation from '@ttn-lw/components/navigation/side'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
 import Breadcrumbs from '@ttn-lw/components/breadcrumbs'
 
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
-import withRequest from '@ttn-lw/lib/components/with-request'
-import { withEnv } from '@ttn-lw/lib/components/env'
-import NotFoundRoute from '@ttn-lw/lib/components/not-found-route'
+import RequireRequest from '@ttn-lw/lib/components/require-request'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
+
+import Require from '@console/lib/components/require'
 
 import ApplicationOverview from '@console/views/application-overview'
 import ApplicationGeneralSettings from '@console/views/application-general-settings'
@@ -38,8 +41,8 @@ import ApplicationIntegrationsMqtt from '@console/views/application-integrations
 import ApplicationIntegrationsLoRaCloud from '@console/views/application-integrations-lora-cloud'
 import Devices from '@console/views/devices'
 
-import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import { selectApplicationSiteName } from '@ttn-lw/lib/selectors/env'
 
 import {
   mayViewApplicationInfo,
@@ -51,194 +54,164 @@ import {
   mayViewOrEditApplicationApiKeys,
   mayViewOrEditApplicationCollaborators,
   mayViewOrEditApplicationPackages,
+  mayAddPubSubIntegrations,
+  mayViewApplications,
 } from '@console/lib/feature-checks'
 
 import {
   getApplication,
-  stopApplicationEventsStream,
   getApplicationsRightsList,
+  stopApplicationEventsStream,
 } from '@console/store/actions/applications'
+import { getAsConfiguration } from '@console/store/actions/application-server'
 
 import {
-  selectSelectedApplication,
-  selectApplicationFetching,
-  selectApplicationError,
   selectApplicationRights,
-  selectApplicationRightsFetching,
-  selectApplicationRightsError,
+  selectSelectedApplication,
 } from '@console/store/selectors/applications'
+import {
+  selectMqttProviderDisabled,
+  selectNatsProviderDisabled,
+} from '@console/store/selectors/application-server'
 
-@connect(
-  (state, props) => {
-    return {
-      appId: props.match.params.appId,
-      fetching: selectApplicationFetching(state) || selectApplicationRightsFetching(state),
-      application: selectSelectedApplication(state),
-      error: selectApplicationError(state) || selectApplicationRightsError(state),
-      rights: selectApplicationRights(state),
-    }
-  },
-  dispatch => ({
-    stopStream: id => dispatch(stopApplicationEventsStream(id)),
-    loadData: id => {
-      dispatch(getApplication(id, 'name,description,attributes'))
-      dispatch(getApplicationsRightsList(id))
-    },
-  }),
-)
-@withRequest(
-  ({ appId, loadData }) => loadData(appId),
-  ({ fetching, application }) => fetching || !Boolean(application),
-)
-@withBreadcrumb('apps.single', props => {
-  const {
-    appId,
-    application: { name },
-  } = props
-  return <Breadcrumb path={`/applications/${appId}`} content={name || appId} />
-})
-@withEnv
-export default class Application extends React.Component {
-  static propTypes = {
-    appId: PropTypes.string.isRequired,
-    application: PropTypes.application.isRequired,
-    env: PropTypes.env,
-    match: PropTypes.match.isRequired,
-    rights: PropTypes.rights.isRequired,
-    stopStream: PropTypes.func.isRequired,
-  }
-
-  static defaultProps = {
-    env: undefined,
-  }
-
-  componentWillUnmount() {
-    const { appId, stopStream } = this.props
-
-    stopStream(appId)
-  }
-
-  render() {
-    const {
-      match: { url: matchedUrl, path },
-      application,
+const Application = () => {
+  const { appId } = useParams()
+  const actions = [
+    getApplication(
       appId,
-      env,
-      rights,
-    } = this.props
+      'name,description,attributes,dev_eui_counter,network_server_address,application_server_address,join_server_address,administrative_contact,technical_contact',
+    ),
+    getApplicationsRightsList(appId),
+    getAsConfiguration(),
+  ]
 
-    return (
-      <React.Fragment>
-        <Breadcrumbs />
-        <IntlHelmet titleTemplate={`%s - ${application.name || appId} - ${env.siteName}`} />
-        <SideNavigation
-          header={{ icon: 'application', title: application.name || appId, to: matchedUrl }}
-        >
-          {mayViewApplicationInfo.check(rights) && (
+  // Check whether application still exists after it has been possibly deleted.
+  const application = useSelector(selectSelectedApplication)
+  const hasApplication = Boolean(application)
+
+  return (
+    <Require featureCheck={mayViewApplications} otherwise={{ redirect: '/' }}>
+      <RequireRequest requestAction={actions}>
+        {hasApplication && <ApplicationInner />}
+      </RequireRequest>
+    </Require>
+  )
+}
+
+const ApplicationInner = () => {
+  const { appId } = useParams()
+  const application = useSelector(selectSelectedApplication)
+  const name = application.name || appId
+  const rights = useSelector(selectApplicationRights)
+  const siteName = selectApplicationSiteName()
+  const natsDisabled = useSelector(selectNatsProviderDisabled)
+  const mqttDisabled = useSelector(selectMqttProviderDisabled)
+
+  const dispatch = useDispatch()
+  const stopStream = React.useCallback(id => dispatch(stopApplicationEventsStream(id)), [dispatch])
+
+  useEffect(() => () => stopStream(appId), [appId, stopStream])
+  useBreadcrumbs('apps.single', <Breadcrumb path={`/applications/${appId}`} content={name} />)
+
+  return (
+    <>
+      <Breadcrumbs />
+      <IntlHelmet titleTemplate={`%s - ${name} - ${siteName}`} />
+      <SideNavigation
+        header={{
+          icon: applicationIcon,
+          iconAlt: sharedMessages.application,
+          title: name,
+          to: '',
+        }}
+      >
+        {mayViewApplicationInfo.check(rights) && (
+          <SideNavigation.Item title={sharedMessages.overview} path="" icon="overview" exact />
+        )}
+        {mayViewApplicationDevices.check(rights) && (
+          <SideNavigation.Item title={sharedMessages.devices} path="devices" icon="devices" />
+        )}
+        {mayViewApplicationEvents.check(rights) && (
+          <SideNavigation.Item title={sharedMessages.liveData} path="data" icon="data" />
+        )}
+        {maySetApplicationPayloadFormatters.check(rights) && (
+          <SideNavigation.Item title={sharedMessages.payloadFormatters} icon="code">
             <SideNavigation.Item
-              title={sharedMessages.overview}
-              path={matchedUrl}
-              icon="overview"
-              exact
+              title={sharedMessages.uplink}
+              path="payload-formatters/uplink"
+              icon="uplink"
             />
-          )}
-          {mayViewApplicationDevices.check(rights) && (
             <SideNavigation.Item
-              title={sharedMessages.devices}
-              path={`${matchedUrl}/devices`}
-              icon="devices"
+              title={sharedMessages.downlink}
+              path="payload-formatters/downlink"
+              icon="downlink"
             />
-          )}
-          {mayViewApplicationEvents.check(rights) && (
+          </SideNavigation.Item>
+        )}
+        {mayCreateOrEditApplicationIntegrations.check(rights) && (
+          <SideNavigation.Item title={sharedMessages.integrations} icon="integration">
             <SideNavigation.Item
-              title={sharedMessages.liveData}
-              path={`${matchedUrl}/data`}
-              icon="data"
+              title={sharedMessages.mqtt}
+              path="integrations/mqtt"
+              icon="extension"
             />
-          )}
-          {maySetApplicationPayloadFormatters.check(rights) && (
-            <SideNavigation.Item title={sharedMessages.payloadFormatters} icon="code">
-              <SideNavigation.Item
-                title={sharedMessages.uplink}
-                path={`${matchedUrl}/payload-formatters/uplink`}
-                icon="uplink"
-              />
-              <SideNavigation.Item
-                title={sharedMessages.downlink}
-                path={`${matchedUrl}/payload-formatters/downlink`}
-                icon="downlink"
-              />
-            </SideNavigation.Item>
-          )}
-          {mayCreateOrEditApplicationIntegrations.check(rights) && (
-            <SideNavigation.Item title={sharedMessages.integrations} icon="integration">
-              <SideNavigation.Item
-                title={sharedMessages.mqtt}
-                path={`${matchedUrl}/integrations/mqtt`}
-                icon="extension"
-              />
-              <SideNavigation.Item
-                title={sharedMessages.webhooks}
-                path={`${matchedUrl}/integrations/webhooks`}
-                icon="extension"
-              />
+            <SideNavigation.Item
+              title={sharedMessages.webhooks}
+              path="integrations/webhooks"
+              icon="extension"
+            />
+            {mayAddPubSubIntegrations.check(natsDisabled, mqttDisabled) && (
               <SideNavigation.Item
                 title={sharedMessages.pubsubs}
-                path={`${matchedUrl}/integrations/pubsubs`}
+                path="integrations/pubsubs"
                 icon="extension"
               />
-              {mayViewOrEditApplicationPackages.check(rights) && (
-                <SideNavigation.Item
-                  title={sharedMessages.loraCloud}
-                  path={`${matchedUrl}/integrations/lora-cloud`}
-                  icon="extension"
-                />
-              )}
-            </SideNavigation.Item>
-          )}
-          {mayViewOrEditApplicationCollaborators.check(rights) && (
-            <SideNavigation.Item
-              title={sharedMessages.collaborators}
-              path={`${matchedUrl}/collaborators`}
-              icon="organization"
-            />
-          )}
-          {mayViewOrEditApplicationApiKeys.check(rights) && (
-            <SideNavigation.Item
-              title={sharedMessages.apiKeys}
-              path={`${matchedUrl}/api-keys`}
-              icon="api_keys"
-            />
-          )}
-          {mayEditBasicApplicationInfo.check(rights) && (
-            <SideNavigation.Item
-              title={sharedMessages.generalSettings}
-              path={`${matchedUrl}/general-settings`}
-              icon="general_settings"
-            />
-          )}
-        </SideNavigation>
-        <Switch>
-          <Route exact path={`${path}`} component={ApplicationOverview} />
-          <Route path={`${path}/general-settings`} component={ApplicationGeneralSettings} />
-          <Route path={`${path}/api-keys`} component={ApplicationApiKeys} />
-          <Route path={`${path}/devices`} component={Devices} />
-          <Route path={`${path}/collaborators`} component={ApplicationCollaborators} />
-          <Route path={`${path}/data`} component={ApplicationData} />
-          <Route path={`${path}/payload-formatters`} component={ApplicationPayloadFormatters} />
-          <Route path={`${path}/integrations/mqtt`} component={ApplicationIntegrationsMqtt} />
-          <Route
-            path={`${path}/integrations/webhooks`}
-            component={ApplicationIntegrationsWebhooks}
+            )}
+            {mayViewOrEditApplicationPackages.check(rights) && (
+              <SideNavigation.Item
+                title={sharedMessages.loraCloud}
+                path="integrations/lora-cloud"
+                icon="extension"
+              />
+            )}
+          </SideNavigation.Item>
+        )}
+        {mayViewOrEditApplicationCollaborators.check(rights) && (
+          <SideNavigation.Item
+            title={sharedMessages.collaborators}
+            path="collaborators"
+            icon="organization"
           />
-          <Route path={`${path}/integrations/pubsubs`} component={ApplicationIntegrationsPubsubs} />
-          <Route
-            path={`${path}/integrations/lora-cloud`}
-            component={ApplicationIntegrationsLoRaCloud}
+        )}
+        {mayViewOrEditApplicationApiKeys.check(rights) && (
+          <SideNavigation.Item title={sharedMessages.apiKeys} path="api-keys" icon="api_keys" />
+        )}
+        {mayEditBasicApplicationInfo.check(rights) && (
+          <SideNavigation.Item
+            title={sharedMessages.generalSettings}
+            path="general-settings"
+            icon="general_settings"
           />
-          <NotFoundRoute />
-        </Switch>
-      </React.Fragment>
-    )
-  }
+        )}
+      </SideNavigation>
+      <Routes>
+        <Route index Component={ApplicationOverview} />
+        <Route path="general-settings" Component={ApplicationGeneralSettings} />
+        <Route path="api-keys/*" Component={ApplicationApiKeys} />
+        <Route path="devices/*" Component={Devices} />
+        <Route path="collaborators/*" Component={ApplicationCollaborators} />
+        <Route path="data" Component={ApplicationData} />
+        <Route path="payload-formatters/*" Component={ApplicationPayloadFormatters} />
+        <Route path="integrations/mqtt" Component={ApplicationIntegrationsMqtt} />
+        <Route path="integrations/webhooks/*" Component={ApplicationIntegrationsWebhooks} />
+        {mayAddPubSubIntegrations.check(natsDisabled, mqttDisabled) && (
+          <Route path="integrations/pubsubs/*" Component={ApplicationIntegrationsPubsubs} />
+        )}
+        <Route path="integrations/lora-cloud" Component={ApplicationIntegrationsLoRaCloud} />
+        <Route path="*" element={<GenericNotFound />} />
+      </Routes>
+    </>
+  )
 }
+
+export default Application

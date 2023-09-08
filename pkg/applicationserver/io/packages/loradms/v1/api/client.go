@@ -15,15 +15,17 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	urlutil "go.thethings.network/lorawan-stack/v3/pkg/util/url"
-	"go.thethings.network/lorawan-stack/v3/pkg/version"
 )
 
 // Option is an option for the API client.
@@ -47,33 +49,27 @@ type Client struct {
 
 const (
 	contentType      = "application/json"
-	defaultServerURL = "https://das.loracloud.com"
+	defaultServerURL = "https://mgs.loracloud.com"
 	basePath         = "/api/v1"
 )
 
-var (
-	userAgent        = "ttn-lw-application-server/" + version.TTN
-	DefaultServerURL *url.URL
-)
+// DefaultServerURL is the default server URL for LoRa Cloud Device Management v1.
+var DefaultServerURL = func() *url.URL {
+	parsed, err := url.Parse(defaultServerURL)
+	if err != nil {
+		panic(fmt.Sprintf("loradms: failed to parse base URL: %v", err))
+	}
+	return parsed
+}()
 
-type queryParam struct {
-	key, value string
-}
-
-func (c *Client) newRequest(ctx context.Context, method, category, entity, operation string, body io.Reader, queryParams ...queryParam) (*http.Request, error) {
+func (c *Client) newRequest(ctx context.Context, method, category, entity, operation string, body io.Reader) (*http.Request, error) {
 	u := urlutil.CloneURL(c.baseURL)
 	u.Path = path.Join(basePath, category, entity, operation)
-	q := u.Query()
-	for _, p := range queryParams {
-		q.Add(p.key, p.value)
-	}
-	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("User-Agent", userAgent)
 	if c.token != "" {
 		req.Header.Set("Authorization", c.token)
 	}
@@ -81,8 +77,20 @@ func (c *Client) newRequest(ctx context.Context, method, category, entity, opera
 }
 
 // Do executes a new HTTP request with the given parameters and body and returns the response.
-func (c *Client) Do(ctx context.Context, method, category, entity, operation string, body io.Reader, queryParams ...queryParam) (*http.Response, error) {
-	req, err := c.newRequest(ctx, method, category, entity, operation, body, queryParams...)
+func (c *Client) Do(ctx context.Context, method, category, entity, operation string, body any) (*http.Response, error) {
+	buffer := bytes.NewBuffer(nil)
+	err := json.NewEncoder(buffer).Encode(body)
+	if err != nil {
+		return nil, err
+	}
+	log.FromContext(ctx).WithFields(log.Fields(
+		"method", method,
+		"category", category,
+		"entity", entity,
+		"operation", operation,
+		"body", buffer.String(),
+	)).Debug("Run DAS request")
+	req, err := c.newRequest(ctx, method, category, entity, operation, buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -114,12 +122,4 @@ func New(cl *http.Client, opts ...Option) (*Client, error) {
 		opt.apply(client)
 	}
 	return client, nil
-}
-
-func init() {
-	var err error
-	DefaultServerURL, err = url.Parse(defaultServerURL)
-	if err != nil {
-		panic(fmt.Sprintf("loradms: failed to parse base URL: %v", err))
-	}
 }

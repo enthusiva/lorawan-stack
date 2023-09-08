@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,15 +18,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/jinzhu/gorm"
 )
 
 type paginationOptionsKeyType struct{}
 
 var paginationOptionsKey paginationOptionsKeyType
 
-type paginationOptions struct {
+// PaginationOptions stores the pagination options that are propagated in the context.
+type PaginationOptions struct {
 	limit  uint32
 	offset uint32
 	total  *uint64
@@ -38,34 +37,27 @@ func WithPagination(ctx context.Context, limit, page uint32, total *uint64) cont
 	if page == 0 {
 		page = 1
 	}
-	return context.WithValue(ctx, paginationOptionsKey, paginationOptions{
+	return context.WithValue(ctx, paginationOptionsKey, PaginationOptions{
 		limit:  limit,
 		offset: (page - 1) * limit,
 		total:  total,
 	})
 }
 
-// countTotal counts the total number of results (without limiting) and sets it
-// into the destination set by SetTotalCount.
-func countTotal(ctx context.Context, db *gorm.DB) {
-	if opts, ok := ctx.Value(paginationOptionsKey).(paginationOptions); ok && opts.total != nil && *opts.total == 0 {
-		db.Count(opts.total)
-	}
-}
-
-// setTotal sets the total number of results into the destination set by
+// SetTotal sets the total number of results into the destination set by
 // SetTotalCount if not already set.
-func setTotal(ctx context.Context, total uint64) {
-	if opts, ok := ctx.Value(paginationOptionsKey).(paginationOptions); ok && opts.total != nil && *opts.total == 0 {
+func SetTotal(ctx context.Context, total uint64) {
+	if opts, ok := ctx.Value(paginationOptionsKey).(PaginationOptions); ok && opts.total != nil && *opts.total == 0 {
 		*opts.total = total
 	}
 }
 
-func limitAndOffsetFromContext(ctx context.Context) (limit, offset uint32) {
-	if opts, ok := ctx.Value(paginationOptionsKey).(paginationOptions); ok {
+// LimitAndOffsetFromContext gets the limit and offset from the context.
+func LimitAndOffsetFromContext(ctx context.Context) (limit, offset uint32) {
+	if opts, ok := ctx.Value(paginationOptionsKey).(PaginationOptions); ok {
 		return opts.limit, opts.offset
 	}
-	return
+	return 0, 0
 }
 
 // WithOrder instructs the store to sort the results by the given field.
@@ -75,14 +67,14 @@ func WithOrder(ctx context.Context, spec string) context.Context {
 		return ctx
 	}
 	field := spec
-	order := "ASC"
+	direction := "ASC"
 	if strings.HasPrefix(spec, "-") {
 		field = strings.TrimPrefix(spec, "-")
-		order = "DESC"
+		direction = "DESC"
 	}
-	return context.WithValue(ctx, orderOptionsKey, orderOptions{
-		field: field,
-		order: order,
+	return context.WithValue(ctx, orderOptionsKey, OrderOptions{
+		Field:     field,
+		Direction: direction,
 	})
 }
 
@@ -90,22 +82,38 @@ type orderOptionsKeyType struct{}
 
 var orderOptionsKey orderOptionsKeyType
 
-type orderOptions struct {
-	field string
-	order string
+// OrderOptions stores the ordering options that are propagated in the context.
+type OrderOptions struct {
+	Field     string
+	Direction string
 }
 
-func orderFromContext(ctx context.Context, table, defaultTableField, defaultOrder string) string {
-	if opts, ok := ctx.Value(orderOptionsKey).(orderOptions); ok && opts.field != "" {
-		order := opts.order
-		if order == "" {
-			order = "ASC"
-		}
-		if (table == "organizations" && opts.field == "organization_id") || (table == "users" && opts.field == "user_id") {
-			table = "accounts"
-			opts.field = "uid"
-		}
-		return fmt.Sprintf(`"%s"."%s" %s`, table, opts.field, order)
+// OrderOptionsFromContext returns the ordering options for the query.
+func OrderOptionsFromContext(ctx context.Context) OrderOptions {
+	if opts, ok := ctx.Value(orderOptionsKey).(OrderOptions); ok {
+		return opts
 	}
-	return fmt.Sprintf("%s %s", defaultTableField, defaultOrder)
+	return OrderOptions{}
+}
+
+// OrderFromContext returns the ordering string (field and direction) for the query.
+// If the context contains ordering options, those are used. Otherwise, the default
+// field and order are used.
+func OrderFromContext(ctx context.Context, table, defaultTableField, defaultDirection string) string {
+	if opts, ok := ctx.Value(orderOptionsKey).(OrderOptions); ok && opts.Field != "" {
+		direction := opts.Direction
+		if direction == "" {
+			direction = "ASC"
+		}
+		if (table == "organizations" && opts.Field == "organization_id") || (table == "users" && opts.Field == "user_id") {
+			table = "accounts"
+			opts.Field = "uid"
+		}
+		tableField := fmt.Sprintf(`"%s"."%s"`, table, opts.Field)
+		if tableField != defaultTableField && opts.Field != defaultTableField {
+			return fmt.Sprintf(`%s %s, %s %s`, tableField, direction, defaultTableField, direction)
+		}
+		return fmt.Sprintf(`%s %s`, tableField, direction)
+	}
+	return fmt.Sprintf("%s %s", defaultTableField, defaultDirection)
 }

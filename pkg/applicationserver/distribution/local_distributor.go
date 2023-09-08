@@ -26,10 +26,10 @@ import (
 // NewLocalDistributor creates a Distributor that routes the traffic locally.
 // The underlying subscription sets can timeout if there are no active subscribers.
 // A timeout of 0 means the underlying subscriptions never timeout.
-func NewLocalDistributor(ctx context.Context, rd RequestDecoupler, timeout time.Duration) Distributor {
+func NewLocalDistributor(ctx context.Context, rd RequestDecoupler, timeout time.Duration, broadcastOpts []io.SubscriptionOption, mapOpts []io.SubscriptionOption) Distributor {
 	return &localDistributor{
-		broadcast:     newSubscriptionSet(ctx, rd, 0),
-		subscriptions: newSubscriptionMap(ctx, rd, timeout, noSetup),
+		broadcast:     newSubscriptionSet(ctx, rd, 0, broadcastOpts...),
+		subscriptions: newSubscriptionMap(ctx, rd, timeout, noSetup, mapOpts...),
 	}
 }
 
@@ -43,7 +43,7 @@ func (d *localDistributor) Publish(ctx context.Context, up *ttnpb.ApplicationUp)
 	if err := d.broadcast.Publish(ctx, up); err != nil {
 		return err
 	}
-	set, err := d.subscriptions.Load(ctx, up.ApplicationIdentifiers)
+	set, err := d.subscriptions.Load(ctx, up.EndDeviceIds.ApplicationIds)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	} else if err == nil {
@@ -58,7 +58,7 @@ func (d *localDistributor) Subscribe(ctx context.Context, protocol string, ids *
 	if ids == nil {
 		return d.broadcast.Subscribe(ctx, protocol, ids)
 	}
-	s, err := d.subscriptions.LoadOrCreate(ctx, *ids)
+	s, err := d.subscriptions.LoadOrCreate(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

@@ -17,7 +17,6 @@ package commands
 import (
 	"fmt"
 	stdio "io"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"strings"
@@ -61,6 +60,10 @@ func getInputDecoder(reader stdio.Reader) (io.Decoder, error) {
 	switch config.InputFormat {
 	case "json":
 		return io.NewJSONDecoder(reader), nil
+	case "hex":
+		return io.NewHexDecoder(reader), nil
+	case "base64":
+		return io.NewBase64Decoder(reader), nil
 	default:
 		return nil, fmt.Errorf("unknown input format: %s", config.InputFormat)
 	}
@@ -83,7 +86,7 @@ func parsePayloadFormatterParameterFlags(prefix string, formatters *ttnpb.Messag
 	r, err := getDataReader(prefix+".up-formatter-parameter", flags)
 	switch err {
 	case nil:
-		b, err := ioutil.ReadAll(r)
+		b, err := stdio.ReadAll(r)
 		if err != nil {
 			return nil, err
 		}
@@ -98,7 +101,7 @@ func parsePayloadFormatterParameterFlags(prefix string, formatters *ttnpb.Messag
 	r, err = getDataReader(prefix+".down-formatter-parameter", flags)
 	switch err {
 	case nil:
-		b, err := ioutil.ReadAll(r)
+		b, err := stdio.ReadAll(r)
 		if err != nil {
 			return nil, err
 		}

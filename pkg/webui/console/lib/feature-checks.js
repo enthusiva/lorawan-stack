@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import { selectStackConfig } from '@ttn-lw/lib/selectors/env'
 import { selectApplicationRights } from '@console/store/selectors/applications'
 import { selectGatewayRights } from '@console/store/selectors/gateways'
 import { selectOrganizationRights } from '@console/store/selectors/organizations'
-import { selectUserRights, selectUserIsAdmin } from '@console/store/selectors/user'
+import { selectUserRights, selectUserIsAdmin } from '@console/store/selectors/logout'
 
 const stackConfig = selectStackConfig()
 const asEnabled = stackConfig.as.enabled
@@ -56,6 +56,10 @@ export const mayViewOrEditApiKeys = {
   rightsSelector: selectUserRights,
   check: rights => rights.includes('RIGHT_USER_SETTINGS_API_KEYS'),
 }
+export const maySendInvites = {
+  rightsSelector: selectUserRights,
+  check: rights => rights.includes('RIGHT_SEND_INVITES'),
+}
 
 // Application related feature checks.
 export const mayViewApplicationInfo = {
@@ -66,9 +70,13 @@ export const mayEditBasicApplicationInfo = {
   rightsSelector: selectApplicationRights,
   check: rights => rights.includes('RIGHT_APPLICATION_SETTINGS_BASIC'),
 }
-export const maySetApplicationPayloadFormatters = {
+export const mayViewApplicationLink = {
   rightsSelector: selectApplicationRights,
   check: rights => rights.includes('RIGHT_APPLICATION_LINK') && asEnabled,
+}
+export const maySetApplicationPayloadFormatters = {
+  rightsSelector: selectApplicationRights,
+  check: rights => rights.includes('RIGHT_APPLICATION_SETTINGS_BASIC') && asEnabled,
 }
 export const mayViewApplicationEvents = {
   rightsSelector: selectApplicationRights,
@@ -164,6 +172,14 @@ export const mayViewGatewayConfJson = {
   rightsSelector: selectGatewayRights,
   check: rights => rights.includes('RIGHT_GATEWAY_INFO') && gcsEnabled,
 }
+export const mayViewGatewaySecrets = {
+  rightsSelector: selectGatewayRights,
+  check: rights => rights.includes('RIGHT_GATEWAY_READ_SECRETS'),
+}
+export const mayEditGatewaySecrets = {
+  rightsSelector: selectGatewayRights,
+  check: rights => rights.includes('RIGHT_GATEWAY_WRITE_SECRETS'),
+}
 
 // Organization related feature checks.
 export const mayViewOrganizationInformation = {
@@ -213,10 +229,9 @@ export const mayPerformAdminActions = {
   check: isAdmin => isAdmin,
 }
 
-export const mayManageUsers = {
-  rightsSelector: selectUserIsAdmin,
-  check: mayPerformAdminActions.check,
-}
+export const mayManageUsers = mayPerformAdminActions
+export const mayPurgeEntities = mayPerformAdminActions
+export const mayConfigurePacketBroker = mayPerformAdminActions
 
 // Composite feature checks.
 export const mayViewApplications = {
@@ -232,4 +247,9 @@ export const mayViewGateways = {
 export const mayWriteTraffic = {
   rightsSelector: selectApplicationRights,
   check: rights => mayScheduleDownlinks.check(rights) || maySendUplink.check(rights),
+}
+
+// Pub/Sub feature checks.
+export const mayAddPubSubIntegrations = {
+  check: (natsDisabled, mqttDisabled) => !natsDisabled || !mqttDisabled,
 }

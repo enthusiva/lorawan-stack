@@ -20,8 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errorcontext"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/rpctest"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -29,6 +28,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestFooBarExampleServer(t *testing.T) {
@@ -81,7 +81,7 @@ func TestFooBarExampleServer(t *testing.T) {
 			a.So(err, should.BeNil)
 			cancel()
 			err = stream.RecvMsg(&rpctest.Bar{})
-			a.So(grpc.Code(err), should.Equal, codes.Canceled)
+			a.So(status.Code(err), should.Equal, codes.Canceled)
 		}
 
 		{
@@ -90,8 +90,8 @@ func TestFooBarExampleServer(t *testing.T) {
 			err = stream.Send(&rpctest.Foo{Message: "foo"})
 			a.So(err, should.BeNil)
 			time.Sleep(150 * time.Millisecond)
-			err = stream.RecvMsg(&empty.Empty{})
-			a.So(grpc.Code(err), should.Equal, codes.Unknown)
+			err = stream.RecvMsg(&emptypb.Empty{})
+			a.So(status.Code(err), should.Equal, codes.Unknown)
 		}
 	})
 

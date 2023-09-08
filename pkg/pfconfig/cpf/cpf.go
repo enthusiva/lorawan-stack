@@ -53,17 +53,17 @@ func (conf LorafwdConfig) MarshalText() ([]byte, error) {
 
 // LoradGatewayConf contains the Lorad configuration for the gateway's server connection.
 type LoradGatewayConf struct {
-	BeaconEnable    bool        `json:"beacon_enable"`
-	BeaconPeriod    uint        `json:"beacon_period,omitempty"`
-	BeaconFreqHz    uint        `json:"beacon_freq_hz,omitempty"`
-	BeaconFreqNb    uint        `json:"beacon_freq_nb,omitempty"`
-	BeaconStep      uint        `json:"beacon_step,omitempty"`
-	BeaconDatarate  uint        `json:"beacon_datarate,omitempty"`
-	BeaconBwHz      uint        `json:"beacon_bw_hz,omitempty"`
-	BeaconPower     uint        `json:"beacon_power,omitempty"`
-	BeaconInfodesc  interface{} `json:"beacon_infodesc,omitempty"`
-	BeaconLatitude  float64     `json:"beacon_latitude,omitempty"`
-	BeaconLongitude float64     `json:"beacon_longitude,omitempty"`
+	BeaconEnable    bool    `json:"beacon_enable"`
+	BeaconPeriod    uint    `json:"beacon_period,omitempty"`
+	BeaconFreqHz    uint    `json:"beacon_freq_hz,omitempty"`
+	BeaconFreqNb    uint    `json:"beacon_freq_nb,omitempty"`
+	BeaconStep      uint    `json:"beacon_step,omitempty"`
+	BeaconDatarate  uint    `json:"beacon_datarate,omitempty"`
+	BeaconBwHz      uint    `json:"beacon_bw_hz,omitempty"`
+	BeaconPower     uint    `json:"beacon_power,omitempty"`
+	BeaconInfodesc  any     `json:"beacon_infodesc,omitempty"`
+	BeaconLatitude  float64 `json:"beacon_latitude,omitempty"`
+	BeaconLongitude float64 `json:"beacon_longitude,omitempty"`
 }
 
 type LoradSX1301Conf struct {
@@ -81,7 +81,7 @@ type LoradConfig struct {
 
 // BuildLorad builds Lorad configuration for the given gateway, using the given frequency plan store.
 func BuildLorad(gtw *ttnpb.Gateway, fps *frequencyplans.Store) (*LoradConfig, error) {
-	fp, err := fps.GetByID(gtw.FrequencyPlanID)
+	fp, err := fps.GetByID(gtw.FrequencyPlanId)
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +93,13 @@ func BuildLorad(gtw *ttnpb.Gateway, fps *frequencyplans.Store) (*LoradConfig, er
 		}
 	}
 	var gatewayConf LoradGatewayConf
-	if len(gtw.Antennas) > 0 {
-		a := gtw.Antennas[0]
-		sx1301Conf.AntennaGain = a.Gain
-		gatewayConf.BeaconLatitude = a.Location.Latitude
-		gatewayConf.BeaconLongitude = a.Location.Longitude
+	if antennas := gtw.GetAntennas(); len(antennas) > 0 {
+		antenna := antennas[0]
+		sx1301Conf.AntennaGain = antenna.Gain
+		if location := antenna.Location; location != nil {
+			gatewayConf.BeaconLatitude = location.Latitude
+			gatewayConf.BeaconLongitude = location.Longitude
+		}
 	}
 	// TODO: Configure Class B (https://github.com/TheThingsNetwork/lorawan-stack/issues/1748).
 	return &LoradConfig{
@@ -120,7 +122,7 @@ func BuildLorafwd(gtw *ttnpb.Gateway) (*LorafwdConfig, error) {
 	}
 	return &LorafwdConfig{
 		Gateway: LorafwdGatewayConfig{
-			ID: gtw.EUI,
+			ID: types.MustEUI64(gtw.GetIds().GetEui()),
 		},
 		GWMP: LorafwdGWMPConfig{
 			Node:            host,

@@ -17,7 +17,7 @@ package commands
 import (
 	"os"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -29,8 +29,7 @@ import (
 )
 
 var (
-	selectOrganizationFlags = util.FieldMaskFlags(&ttnpb.Organization{})
-	setOrganizationFlags    = util.FieldFlags(&ttnpb.Organization{})
+	selectOrganizationFlags = util.NormalizedFlagSet()
 
 	selectAllOrganizationFlags = util.SelectAllFlagSet("organization")
 )
@@ -56,15 +55,8 @@ func getOrganizationID(flagSet *pflag.FlagSet, args []string) *ttnpb.Organizatio
 	if organizationID == "" {
 		return nil
 	}
-	return &ttnpb.OrganizationIdentifiers{OrganizationID: organizationID}
+	return &ttnpb.OrganizationIdentifiers{OrganizationId: organizationID}
 }
-
-var searchOrganizationsFlags = func() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-	flagSet.AddFlagSet(searchFlags)
-	// NOTE: These flags need to be named with underscores, not dashes!
-	return flagSet
-}()
 
 var (
 	organizationsCommand = &cobra.Command{
@@ -77,22 +69,27 @@ var (
 		Aliases: []string{"ls"},
 		Short:   "List organizations",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			req := &ttnpb.ListOrganizationsRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectOrganizationFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.OrganizationRegistry/List"].Allowed)
-
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			limit, page, opt, getTotal := withPagination(cmd.Flags())
-			res, err := ttnpb.NewOrganizationRegistryClient(is).List(ctx, &ttnpb.ListOrganizationsRequest{
-				Collaborator: getUserID(cmd.Flags(), nil).GetOrganizationOrUserIdentifiers(),
-				FieldMask:    types.FieldMask{Paths: paths},
-				Limit:        limit,
-				Page:         page,
-				Order:        getOrder(cmd.Flags()),
-				Deleted:      getDeleted(cmd.Flags()),
-			}, opt)
+			userID := getUserID(cmd.Flags(), nil)
+			if userID == nil {
+				return errNoCollaborator.New()
+			}
+			req.Collaborator = userID.GetOrganizationOrUserIdentifiers()
+			_, _, opt, getTotal := withPagination(cmd.Flags())
+			res, err := ttnpb.NewOrganizationRegistryClient(is).List(ctx, req, opt)
 			if err != nil {
 				return err
 			}
@@ -109,16 +106,18 @@ var (
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.EntityRegistrySearch/SearchOrganizations"].Allowed)
 
 			req := &ttnpb.SearchOrganizationsRequest{}
-			if err := util.SetFields(req, searchOrganizationsFlags); err != nil {
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			var (
 				opt      grpc.CallOption
 				getTotal func() uint64
 			)
-			req.Limit, req.Page, opt, getTotal = withPagination(cmd.Flags())
-			req.FieldMask.Paths = paths
-			req.Deleted = getDeleted(cmd.Flags())
+			_, _, opt, getTotal = withPagination(cmd.Flags())
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -140,7 +139,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			orgID := getOrganizationID(cmd.Flags(), args)
 			if orgID == nil {
-				return errNoOrganizationID
+				return errNoOrganizationID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectOrganizationFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.OrganizationRegistry/Get"].Allowed)
@@ -150,8 +149,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewOrganizationRegistryClient(is).Get(ctx, &ttnpb.GetOrganizationRequest{
-				OrganizationIdentifiers: *orgID,
-				FieldMask:               types.FieldMask{Paths: paths},
+				OrganizationIds: orgID,
+				FieldMask:       ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -165,27 +164,27 @@ var (
 		Aliases: []string{"add", "register"},
 		Short:   "Create an organization",
 		RunE: asBulk(func(cmd *cobra.Command, args []string) (err error) {
-			orgID := getOrganizationID(cmd.Flags(), args)
 			collaborator := getUserID(cmd.Flags(), nil).GetOrganizationOrUserIdentifiers()
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 			var organization ttnpb.Organization
 			if inputDecoder != nil {
-				_, err := inputDecoder.Decode(&organization)
+				err := inputDecoder.Decode(&organization)
 				if err != nil {
 					return err
 				}
 			}
-			if err := util.SetFields(&organization, setOrganizationFlags); err != nil {
+			_, err = organization.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
-			organization.Attributes = mergeAttributes(organization.Attributes, cmd.Flags())
-			if orgID != nil && orgID.OrganizationID != "" {
-				organization.OrganizationID = orgID.OrganizationID
+			orgID := getOrganizationID(cmd.Flags(), args)
+			if orgID.GetOrganizationId() != "" {
+				organization.Ids = &ttnpb.OrganizationIdentifiers{OrganizationId: orgID.GetOrganizationId()}
 			}
-			if organization.OrganizationID == "" {
-				return errNoOrganizationID
+			if organization.GetIds().GetOrganizationId() == "" {
+				return errNoOrganizationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -193,8 +192,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewOrganizationRegistryClient(is).Create(ctx, &ttnpb.CreateOrganizationRequest{
-				Organization: organization,
-				Collaborator: *collaborator,
+				Organization: &organization,
+				Collaborator: collaborator,
 			})
 			if err != nil {
 				return err
@@ -208,29 +207,30 @@ var (
 		Aliases: []string{"set"},
 		Short:   "Set properties of an organization",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var organization ttnpb.Organization
+			paths, err := organization.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			orgID := getOrganizationID(cmd.Flags(), args)
 			if orgID == nil {
-				return errNoOrganizationID
+				return errNoOrganizationID.New()
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setOrganizationFlags, attributesFlags())
-			if len(paths) == 0 {
+			organization.Ids = orgID
+			rawUnsetPaths, _ := cmd.Flags().GetStringSlice("unset")
+			unsetPaths := util.NormalizePaths(rawUnsetPaths)
+			if len(paths)+len(unsetPaths) == 0 {
 				logger.Warn("No fields selected, won't update anything")
 				return nil
 			}
-			var organization ttnpb.Organization
-			if err := util.SetFields(&organization, setOrganizationFlags); err != nil {
-				return err
-			}
-			organization.Attributes = mergeAttributes(organization.Attributes, cmd.Flags())
-			organization.OrganizationIdentifiers = *orgID
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
 			res, err := ttnpb.NewOrganizationRegistryClient(is).Update(ctx, &ttnpb.UpdateOrganizationRequest{
-				Organization: organization,
-				FieldMask:    types.FieldMask{Paths: paths},
+				Organization: &organization,
+				FieldMask:    ttnpb.FieldMask(append(paths, unsetPaths...)...),
 			})
 			if err != nil {
 				return err
@@ -247,7 +247,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			orgID := getOrganizationID(cmd.Flags(), args)
 			if orgID == nil {
-				return errNoOrganizationID
+				return errNoOrganizationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -268,7 +268,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			orgID := getOrganizationID(cmd.Flags(), args)
 			if orgID == nil {
-				return errNoOrganizationID
+				return errNoOrganizationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -290,14 +290,14 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			orgID := getOrganizationID(cmd.Flags(), args)
 			if orgID == nil {
-				return errNoOrganizationID
+				return errNoOrganizationID.New()
 			}
 			force, err := cmd.Flags().GetBool("force")
 			if err != nil {
 				return err
 			}
 			if !confirmChoice(organizationPurgeWarning, force) {
-				return errNoConfirmation
+				return errNoConfirmation.New()
 			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -315,22 +315,22 @@ var (
 	organizationsContactInfoCommand = contactInfoCommands("organization", func(cmd *cobra.Command, args []string) (*ttnpb.EntityIdentifiers, error) {
 		orgID := getOrganizationID(cmd.Flags(), args)
 		if orgID == nil {
-			return nil, errNoOrganizationID
+			return nil, errNoOrganizationID.New()
 		}
-		return orgID.EntityIdentifiers(), nil
+		return orgID.GetEntityIdentifiers(), nil
 	})
 )
 
 func init() {
-	organizationsListCommand.Flags().AddFlagSet(collaboratorFlags())
-	organizationsListCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSelectFlagsForOrganization(selectOrganizationFlags, "", false)
+	ttnpb.AddSetFlagsForListOrganizationsRequest(organizationsListCommand.Flags(), "", false)
+	AddCollaboratorFlagAlias(organizationsListCommand.Flags(), "collaborator")
 	organizationsListCommand.Flags().AddFlagSet(selectOrganizationFlags)
 	organizationsListCommand.Flags().AddFlagSet(selectAllOrganizationFlags)
 	organizationsListCommand.Flags().AddFlagSet(paginationFlags())
 	organizationsListCommand.Flags().AddFlagSet(orderFlags())
 	organizationsCommand.AddCommand(organizationsListCommand)
-	organizationsSearchCommand.Flags().AddFlagSet(searchOrganizationsFlags)
-	organizationsSearchCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSetFlagsForSearchOrganizationsRequest(organizationsSearchCommand.Flags(), "", false)
 	organizationsSearchCommand.Flags().AddFlagSet(selectOrganizationFlags)
 	organizationsSearchCommand.Flags().AddFlagSet(selectAllOrganizationFlags)
 	organizationsCommand.AddCommand(organizationsSearchCommand)
@@ -338,14 +338,13 @@ func init() {
 	organizationsGetCommand.Flags().AddFlagSet(selectOrganizationFlags)
 	organizationsGetCommand.Flags().AddFlagSet(selectAllOrganizationFlags)
 	organizationsCommand.AddCommand(organizationsGetCommand)
-	organizationsCreateCommand.Flags().AddFlagSet(organizationIDFlags())
-	organizationsCreateCommand.Flags().AddFlagSet(collaboratorFlags())
-	organizationsCreateCommand.Flags().AddFlagSet(setOrganizationFlags)
-	organizationsCreateCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForOrganization(organizationsCreateCommand.Flags(), "", false)
+	flagsplugin.AddAlias(organizationsCreateCommand.Flags(), "ids.organization-id", "organization-id", flagsplugin.WithHidden(false))
+	organizationsCreateCommand.Flags().AddFlagSet(userIDFlags())
 	organizationsCommand.AddCommand(organizationsCreateCommand)
-	organizationsSetCommand.Flags().AddFlagSet(organizationIDFlags())
-	organizationsSetCommand.Flags().AddFlagSet(setOrganizationFlags)
-	organizationsSetCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForOrganization(organizationsSetCommand.Flags(), "", false)
+	flagsplugin.AddAlias(organizationsSetCommand.Flags(), "ids.organization-id", "organization-id", flagsplugin.WithHidden(false))
+	organizationsSetCommand.Flags().AddFlagSet(util.UnsetFlagSet())
 	organizationsCommand.AddCommand(organizationsSetCommand)
 	organizationsDeleteCommand.Flags().AddFlagSet(organizationIDFlags())
 	organizationsCommand.AddCommand(organizationsDeleteCommand)

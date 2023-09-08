@@ -21,17 +21,19 @@ import (
 	"strings"
 	"sync"
 
-	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/events/basic"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"gocloud.dev/pubsub"
+	"google.golang.org/protobuf/proto"
 )
 
 // NewPubSub creates a new PubSub that publishes and subscribes to Go Cloud.
 // If the subURL is an empty string, this PubSub will only publish to Go Cloud.
-func NewPubSub(ctx context.Context, taskStarter component.TaskStarter, pubURL, subURL string) (*PubSub, error) {
+func NewPubSub(ctx context.Context, taskStarter task.Starter, pubURL, subURL string) (*PubSub, error) {
 	ctx = log.NewContextWithField(ctx, "namespace", "events/cloud")
 	ctx, cancel := context.WithCancel(ctx)
 	ps := &PubSub{
@@ -54,7 +56,7 @@ func NewPubSub(ctx context.Context, taskStarter component.TaskStarter, pubURL, s
 type PubSub struct {
 	events.PubSub
 
-	taskStarter component.TaskStarter
+	taskStarter task.Starter
 	ctx         context.Context
 	cancel      context.CancelFunc
 	contentType string
@@ -105,7 +107,7 @@ func (ps *PubSub) subscribeTask(ctx context.Context) error {
 		switch m {
 		case "application/protobuf":
 			var e ttnpb.Event
-			if err = e.Unmarshal(msg.Body); err != nil {
+			if err = proto.Unmarshal(msg.Body, &e); err != nil {
 				logger.WithError(err).Warn("Failed to unmarshal event from binary")
 				continue
 			}
@@ -127,17 +129,19 @@ func (ps *PubSub) subscribeTask(ctx context.Context) error {
 }
 
 // Subscribe to events from Go Cloud.
-func (ps *PubSub) Subscribe(ctx context.Context, name string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
+func (ps *PubSub) Subscribe(
+	ctx context.Context, names []string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler,
+) error {
 	ps.subOnce.Do(func() {
-		ps.taskStarter.StartTask(&component.TaskConfig{
+		ps.taskStarter.StartTask(&task.Config{
 			Context: ps.ctx,
 			ID:      "events_cloud_subscribe",
 			Func:    ps.subscribeTask,
-			Restart: component.TaskRestartOnFailure,
-			Backoff: component.DefaultTaskBackoffConfig,
+			Restart: task.RestartOnFailure,
+			Backoff: task.DefaultBackoffConfig,
 		})
 	})
-	return ps.PubSub.Subscribe(ctx, name, ids, hdl)
+	return ps.PubSub.Subscribe(ctx, names, ids, hdl)
 }
 
 func (ps *PubSub) getMetadata(evt events.Event) map[string]string {
@@ -145,26 +149,28 @@ func (ps *PubSub) getMetadata(evt events.Event) map[string]string {
 	for _, id := range evt.Identifiers() {
 		k := id.EntityType() + "_id"
 		ids[k] = append(ids[k], id.IDString())
-		if gtwID := id.GetGatewayIDs(); gtwID != nil {
-			ids["gateway_eui"] = append(ids["gateway_eui"], gtwID.EUI.String())
+		if gtwEUI := types.MustEUI64(id.GetGatewayIds().GetEui()); gtwEUI != nil {
+			ids["gateway_eui"] = append(ids["gateway_eui"], gtwEUI.String())
 		}
-		if devID := id.GetDeviceIDs(); devID != nil {
-			ids["application_id"] = append(ids["application_id"], devID.ApplicationID)
-			if devID.DevEUI != nil {
-				ids["dev_eui"] = append(ids["dev_eui"], devID.DevEUI.String())
+		if devID := id.GetDeviceIds(); devID != nil {
+			if devID.ApplicationIds != nil {
+				ids["application_id"] = append(ids["application_id"], devID.GetApplicationIds().GetApplicationId())
 			}
-			if devID.JoinEUI != nil {
-				ids["join_eui"] = append(ids["join_eui"], devID.JoinEUI.String())
+			if devID.DevEui != nil {
+				ids["dev_eui"] = append(ids["dev_eui"], types.MustEUI64(devID.DevEui).String())
+			}
+			if devID.JoinEui != nil {
+				ids["join_eui"] = append(ids["join_eui"], types.MustEUI64(devID.JoinEui).String())
 			}
 			if devID.DevAddr != nil {
-				ids["dev_addr"] = append(ids["dev_addr"], devID.DevAddr.String())
+				ids["dev_addr"] = append(ids["dev_addr"], types.MustDevAddr(devID.DevAddr).String())
 			}
 		}
 	}
 	md := make(map[string]string, len(ids)+3)
 	md["content-type"] = ps.contentType
 	md["event"] = evt.Name()
-	md["correlation_ids"] = strings.Join(evt.CorrelationIDs(), ",")
+	md["correlation_ids"] = strings.Join(evt.CorrelationIds(), ",")
 	for k, v := range ids {
 		md[k] = strings.Join(v, ",")
 	}
@@ -172,31 +178,35 @@ func (ps *PubSub) getMetadata(evt events.Event) map[string]string {
 }
 
 // Publish an event to Go Cloud.
-func (ps *PubSub) Publish(evt events.Event) {
+func (ps *PubSub) Publish(evs ...events.Event) {
 	logger := log.FromContext(ps.ctx)
-	var body []byte
-	switch ps.contentType {
-	case "application/protobuf":
-		evtpb, err := events.Proto(evt)
-		if err != nil {
-			logger.WithError(err).Warn("Failed to marshal event to protobuf")
-			return
+	for _, evt := range evs {
+		var body []byte
+		switch ps.contentType {
+		case "application/protobuf":
+			evtpb, err := events.Proto(evt)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to marshal event to protobuf")
+				continue
+			}
+			body, err = proto.Marshal(evtpb)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to marshal event to binary")
+				continue
+			}
+		case "application/json":
+			var err error
+			body, err = json.Marshal(evt)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to marshal event to JSON")
+				continue
+			}
 		}
-		body, err = evtpb.Marshal()
-		if err != nil {
-			logger.WithError(err).Warn("Failed to marshal event to binary")
-			return
-		}
-	case "application/json":
-		var err error
-		body, err = json.Marshal(evt)
-		if err != nil {
-			logger.WithError(err).Warn("Failed to marshal event to JSON")
-			return
+		if err := ps.topic.Send(evt.Context(), &pubsub.Message{
+			Metadata: ps.getMetadata(evt),
+			Body:     body,
+		}); err != nil {
+			logger.WithError(err).Warn("Failed to send event")
 		}
 	}
-	ps.topic.Send(evt.Context(), &pubsub.Message{
-		Metadata: ps.getMetadata(evt),
-		Body:     body,
-	})
 }

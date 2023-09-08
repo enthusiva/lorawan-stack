@@ -17,20 +17,20 @@ package commands
 import (
 	"os"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"google.golang.org/grpc"
 )
 
 var (
-	selectApplicationFlags = util.FieldMaskFlags(&ttnpb.Application{})
-	setApplicationFlags    = util.FieldFlags(&ttnpb.Application{})
+	selectApplicationFlags = util.NormalizedFlagSet()
 
 	selectAllApplicationFlags = util.SelectAllFlagSet("application")
 )
@@ -41,8 +41,10 @@ func applicationIDFlags() *pflag.FlagSet {
 	return flagSet
 }
 
-var errNoApplicationID = errors.DefineInvalidArgument("no_application_id", "no application ID set")
-var errNoConfirmation = errors.DefineInvalidArgument("no_confirmation", "action not confirmed")
+var (
+	errNoApplicationID = errors.DefineInvalidArgument("no_application_id", "no application ID set")
+	errNoConfirmation  = errors.DefineInvalidArgument("no_confirmation", "action not confirmed")
+)
 
 func getApplicationID(flagSet *pflag.FlagSet, args []string) *ttnpb.ApplicationIdentifiers {
 	var applicationID string
@@ -57,15 +59,8 @@ func getApplicationID(flagSet *pflag.FlagSet, args []string) *ttnpb.ApplicationI
 	if applicationID == "" {
 		return nil
 	}
-	return &ttnpb.ApplicationIdentifiers{ApplicationID: applicationID}
+	return &ttnpb.ApplicationIdentifiers{ApplicationId: applicationID}
 }
-
-var searchApplicationsFlags = func() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-	flagSet.AddFlagSet(searchFlags)
-	// NOTE: These flags need to be named with underscores, not dashes!
-	return flagSet
-}()
 
 var (
 	applicationsCommand = &cobra.Command{
@@ -78,22 +73,22 @@ var (
 		Aliases: []string{"ls"},
 		Short:   "List applications",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			req := &ttnpb.ListApplicationsRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ApplicationRegistry/List"].Allowed)
-
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			limit, page, opt, getTotal := withPagination(cmd.Flags())
-			res, err := ttnpb.NewApplicationRegistryClient(is).List(ctx, &ttnpb.ListApplicationsRequest{
-				Collaborator: getCollaborator(cmd.Flags()),
-				FieldMask:    types.FieldMask{Paths: paths},
-				Limit:        limit,
-				Page:         page,
-				Order:        getOrder(cmd.Flags()),
-				Deleted:      getDeleted(cmd.Flags()),
-			}, opt)
+			_, _, opt, getTotal := withPagination(cmd.Flags())
+			res, err := ttnpb.NewApplicationRegistryClient(is).List(ctx, req, opt)
 			if err != nil {
 				return err
 			}
@@ -110,16 +105,18 @@ var (
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.EntityRegistrySearch/SearchApplications"].Allowed)
 
 			req := &ttnpb.SearchApplicationsRequest{}
-			if err := util.SetFields(req, searchApplicationsFlags); err != nil {
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			var (
 				opt      grpc.CallOption
 				getTotal func() uint64
 			)
-			req.Limit, req.Page, opt, getTotal = withPagination(cmd.Flags())
-			req.FieldMask.Paths = paths
-			req.Deleted = getDeleted(cmd.Flags())
+			_, _, opt, getTotal = withPagination(cmd.Flags())
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -141,7 +138,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ApplicationRegistry/Get"].Allowed)
@@ -151,8 +148,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationRegistryClient(is).Get(ctx, &ttnpb.GetApplicationRequest{
-				ApplicationIdentifiers: *appID,
-				FieldMask:              types.FieldMask{Paths: paths},
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -166,27 +163,41 @@ var (
 		Aliases: []string{"add", "register"},
 		Short:   "Create an application",
 		RunE: asBulk(func(cmd *cobra.Command, args []string) (err error) {
-			appID := getApplicationID(cmd.Flags(), args)
-			collaborator := getCollaborator(cmd.Flags())
-			if collaborator == nil {
-				return errNoCollaborator
-			}
 			var application ttnpb.Application
 			if inputDecoder != nil {
-				_, err := inputDecoder.Decode(&application)
+				err := inputDecoder.Decode(&application)
 				if err != nil {
 					return err
 				}
 			}
-			if err := util.SetFields(&application, setApplicationFlags); err != nil {
+			_, err = application.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
-			application.Attributes = mergeAttributes(application.Attributes, cmd.Flags())
-			if appID != nil && appID.ApplicationID != "" {
-				application.ApplicationID = appID.ApplicationID
+			appID := getApplicationID(cmd.Flags(), args)
+			if appID.GetApplicationId() != "" {
+				application.Ids = appID
 			}
-			if application.ApplicationID == "" {
-				return errNoApplicationID
+			if application.GetIds() == nil {
+				return errNoApplicationID.New()
+			}
+			collaborator := &ttnpb.OrganizationOrUserIdentifiers{}
+			_, err = collaborator.SetFromFlags(cmd.Flags(), "collaborator")
+			if err != nil {
+				return err
+			}
+			if collaborator.GetIds() == nil {
+				return errNoCollaborator.New()
+			}
+
+			if application.NetworkServerAddress == "" {
+				application.NetworkServerAddress = getHost(config.NetworkServerGRPCAddress)
+			}
+			if application.ApplicationServerAddress == "" {
+				application.ApplicationServerAddress = getHost(config.ApplicationServerGRPCAddress)
+			}
+			if application.JoinServerAddress == "" {
+				application.JoinServerAddress = getHost(config.JoinServerGRPCAddress)
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -194,8 +205,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationRegistryClient(is).Create(ctx, &ttnpb.CreateApplicationRequest{
-				Application:  application,
-				Collaborator: *collaborator,
+				Application:  &application,
+				Collaborator: collaborator,
 			})
 			if err != nil {
 				return err
@@ -209,35 +220,36 @@ var (
 		Aliases: []string{"update"},
 		Short:   "Set properties of an application",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appID := getApplicationID(cmd.Flags(), args)
-			if appID == nil {
-				return errNoApplicationID
+			app := &ttnpb.Application{}
+			paths, err := app.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setApplicationFlags, attributesFlags())
-			if len(paths) == 0 {
+			rawUnsetPaths, _ := cmd.Flags().GetStringSlice("unset")
+			unsetPaths := util.NormalizePaths(rawUnsetPaths)
+			if len(paths)+len(unsetPaths) == 0 {
 				logger.Warn("No fields selected, won't update anything")
 				return nil
 			}
-			var application ttnpb.Application
-			if err := util.SetFields(&application, setApplicationFlags); err != nil {
-				return err
+			appID := getApplicationID(cmd.Flags(), args)
+			if appID.GetApplicationId() != "" {
+				app.Ids = appID
 			}
-			application.Attributes = mergeAttributes(application.Attributes, cmd.Flags())
-			application.ApplicationIdentifiers = *appID
-
+			if app.GetIds() == nil {
+				return errNoApplicationID.New()
+			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
 			res, err := ttnpb.NewApplicationRegistryClient(is).Update(ctx, &ttnpb.UpdateApplicationRequest{
-				Application: application,
-				FieldMask:   types.FieldMask{Paths: paths},
+				Application: app,
+				FieldMask:   ttnpb.FieldMask(append(paths, unsetPaths...)...),
 			})
 			if err != nil {
 				return err
 			}
-
-			res.SetFields(&application, "ids")
+			res.SetFields(app, "ids")
 			return io.Write(os.Stdout, config.OutputFormat, res)
 		},
 	}
@@ -248,7 +260,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -269,7 +281,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -287,9 +299,9 @@ var (
 	applicationsContactInfoCommand = contactInfoCommands("application", func(cmd *cobra.Command, args []string) (*ttnpb.EntityIdentifiers, error) {
 		appID := getApplicationID(cmd.Flags(), args)
 		if appID == nil {
-			return nil, errNoApplicationID
+			return nil, errNoApplicationID.New()
 		}
-		return appID.EntityIdentifiers(), nil
+		return appID.GetEntityIdentifiers(), nil
 	})
 	applicationsPurgeCommand = &cobra.Command{
 		Use:     "purge [application-id]",
@@ -298,7 +310,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			force, err := cmd.Flags().GetBool("force")
@@ -306,7 +318,7 @@ var (
 				return err
 			}
 			if !confirmChoice(applicationPurgeWarning, force) {
-				return errNoConfirmation
+				return errNoConfirmation.New()
 			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -320,18 +332,37 @@ var (
 			return nil
 		},
 	}
+	applicationsIssueNewDevEUICommand = &cobra.Command{
+		Use:     "issue-dev-eui [application-id]",
+		Aliases: []string{"dev-eui"},
+		Short:   "Issue DevEUI for application",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appID := getApplicationID(cmd.Flags(), args)
+			if appID == nil {
+				return errNoApplicationID.New()
+			}
+			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewApplicationRegistryClient(is).IssueDevEUI(ctx, appID)
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
 )
 
 func init() {
-	applicationsListCommand.Flags().AddFlagSet(collaboratorFlags())
-	applicationsListCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSelectFlagsForApplication(selectApplicationFlags, "", false)
+	ttnpb.AddSetFlagsForListApplicationsRequest(applicationsListCommand.Flags(), "", false)
+	AddCollaboratorFlagAlias(applicationsListCommand.Flags(), "collaborator")
 	applicationsListCommand.Flags().AddFlagSet(selectApplicationFlags)
-	applicationsListCommand.Flags().AddFlagSet(paginationFlags())
-	applicationsListCommand.Flags().AddFlagSet(orderFlags())
 	applicationsListCommand.Flags().AddFlagSet(selectAllApplicationFlags)
 	applicationsCommand.AddCommand(applicationsListCommand)
-	applicationsSearchCommand.Flags().AddFlagSet(searchApplicationsFlags)
-	applicationsSearchCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSetFlagsForSearchApplicationsRequest(applicationsSearchCommand.Flags(), "", false)
 	applicationsSearchCommand.Flags().AddFlagSet(selectApplicationFlags)
 	applicationsSearchCommand.Flags().AddFlagSet(selectAllApplicationFlags)
 	applicationsCommand.AddCommand(applicationsSearchCommand)
@@ -339,14 +370,14 @@ func init() {
 	applicationsGetCommand.Flags().AddFlagSet(selectApplicationFlags)
 	applicationsGetCommand.Flags().AddFlagSet(selectAllApplicationFlags)
 	applicationsCommand.AddCommand(applicationsGetCommand)
-	applicationsCreateCommand.Flags().AddFlagSet(applicationIDFlags())
-	applicationsCreateCommand.Flags().AddFlagSet(collaboratorFlags())
-	applicationsCreateCommand.Flags().AddFlagSet(setApplicationFlags)
-	applicationsCreateCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForApplication(applicationsCreateCommand.Flags(), "", false)
+	flagsplugin.AddAlias(applicationsCreateCommand.Flags(), "ids.application-id", "application-id", flagsplugin.WithHidden(false))
+	ttnpb.AddSetFlagsForOrganizationOrUserIdentifiers(applicationsCreateCommand.Flags(), "collaborator", true)
+	AddCollaboratorFlagAlias(applicationsCreateCommand.Flags(), "collaborator")
 	applicationsCommand.AddCommand(applicationsCreateCommand)
-	applicationsSetCommand.Flags().AddFlagSet(applicationIDFlags())
-	applicationsSetCommand.Flags().AddFlagSet(setApplicationFlags)
-	applicationsSetCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForApplication(applicationsSetCommand.Flags(), "", false)
+	flagsplugin.AddAlias(applicationsSetCommand.Flags(), "ids.application-id", "application-id", flagsplugin.WithHidden(false))
+	applicationsSetCommand.Flags().AddFlagSet(util.UnsetFlagSet())
 	applicationsCommand.AddCommand(applicationsSetCommand)
 	applicationsDeleteCommand.Flags().AddFlagSet(applicationIDFlags())
 	applicationsCommand.AddCommand(applicationsDeleteCommand)
@@ -357,5 +388,33 @@ func init() {
 	applicationsPurgeCommand.Flags().AddFlagSet(applicationIDFlags())
 	applicationsPurgeCommand.Flags().AddFlagSet(forceFlags())
 	applicationsCommand.AddCommand(applicationsPurgeCommand)
+	applicationsIssueNewDevEUICommand.Flags().AddFlagSet(applicationIDFlags())
+	applicationsCommand.AddCommand(applicationsIssueNewDevEUICommand)
 	Root.AddCommand(applicationsCommand)
+}
+
+func compareServerAddressesApplication(application *ttnpb.Application, config *Config) (nsMismatch, asMismatch, jsMismatch bool) {
+	nsHost, asHost, jsHost := getHost(config.NetworkServerGRPCAddress), getHost(config.ApplicationServerGRPCAddress), getHost(config.JoinServerGRPCAddress)
+	if host := getHost(application.NetworkServerAddress); config.NetworkServerEnabled && host != "" && host != nsHost {
+		nsMismatch = true
+		logger.WithFields(log.Fields(
+			"configured", nsHost,
+			"registered", host,
+		)).Warnf("Registered Network Server address of Application %q does not match CLI configuration", application.GetIds().GetApplicationId())
+	}
+	if host := getHost(application.ApplicationServerAddress); config.ApplicationServerEnabled && host != "" && host != asHost {
+		asMismatch = true
+		logger.WithFields(log.Fields(
+			"configured", asHost,
+			"registered", host,
+		)).Warnf("Registered Application Server address of Application %q does not match CLI configuration", application.GetIds().GetApplicationId())
+	}
+	if host := getHost(application.JoinServerAddress); config.JoinServerEnabled && host != "" && host != jsHost {
+		jsMismatch = true
+		logger.WithFields(log.Fields(
+			"configured", jsHost,
+			"registered", host,
+		)).Warnf("Registered Join Server address of Application %q does not match CLI configuration", application.GetIds().GetApplicationId())
+	}
+	return
 }

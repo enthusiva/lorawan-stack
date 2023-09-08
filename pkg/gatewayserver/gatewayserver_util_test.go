@@ -16,22 +16,18 @@ package gatewayserver_test
 
 import (
 	"context"
-	"fmt"
-	"net"
+	"crypto/rand"
 	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/encoding/lorawan"
-	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/random"
-	"go.thethings.network/lorawan-stack/v3/pkg/rpcserver"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
-	"go.thethings.network/lorawan-stack/v3/pkg/unique"
-	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
-	"google.golang.org/grpc/metadata"
 )
+
+var testRights = []ttnpb.Right{ttnpb.Right_RIGHT_GATEWAY_LINK, ttnpb.Right_RIGHT_GATEWAY_STATUS_READ}
 
 func mustHavePeer(ctx context.Context, c *component.Component, role ttnpb.ClusterRole) {
 	for i := 0; i < 20; i++ {
@@ -43,126 +39,28 @@ func mustHavePeer(ctx context.Context, c *component.Component, role ttnpb.Cluste
 	panic("could not connect to peer")
 }
 
-type mockIS struct {
-	ttnpb.GatewayRegistryServer
-	ttnpb.GatewayAccessServer
-	gateways     map[string]*ttnpb.Gateway
-	gatewayAuths map[string][]string
-}
-
-func startMockIS(ctx context.Context) (*mockIS, string) {
-	is := &mockIS{
-		gateways:     make(map[string]*ttnpb.Gateway),
-		gatewayAuths: make(map[string][]string),
-	}
-	srv := rpcserver.New(ctx)
-	ttnpb.RegisterGatewayRegistryServer(srv.Server, is)
-	ttnpb.RegisterGatewayAccessServer(srv.Server, is)
-	lis, err := net.Listen("tcp", ":0")
-	if err != nil {
-		panic(err)
-	}
-	go srv.Serve(lis)
-	return is, lis.Addr().String()
-}
-
-func (is *mockIS) add(ctx context.Context, ids ttnpb.GatewayIdentifiers, key string, locationPublic bool, updateLocationFromStatus bool) {
-	uid := unique.ID(ctx, ids)
-	is.gateways[uid] = &ttnpb.Gateway{
-		GatewayIdentifiers: ids,
-		FrequencyPlanID:    test.EUFrequencyPlanID,
-		FrequencyPlanIDs:   []string{test.EUFrequencyPlanID},
-		Antennas: []ttnpb.GatewayAntenna{
-			{
-				Location: ttnpb.Location{
-					Source: ttnpb.SOURCE_REGISTRY,
-				},
-			},
-		},
-		LocationPublic:           locationPublic,
-		UpdateLocationFromStatus: updateLocationFromStatus,
-	}
-	if key != "" {
-		is.gatewayAuths[uid] = []string{fmt.Sprintf("Bearer %v", key)}
-	}
-}
-
-var errNotFound = errors.DefineNotFound("not_found", "not found")
-
-func (is *mockIS) Get(ctx context.Context, req *ttnpb.GetGatewayRequest) (*ttnpb.Gateway, error) {
-	uid := unique.ID(ctx, req.GatewayIdentifiers)
-	gtw, ok := is.gateways[uid]
-	if !ok {
-		return nil, errNotFound.New()
-	}
-	return gtw, nil
-}
-
-func (is *mockIS) Update(ctx context.Context, req *ttnpb.UpdateGatewayRequest) (*ttnpb.Gateway, error) {
-	uid := unique.ID(ctx, req.Gateway.GatewayIdentifiers)
-	gtw, ok := is.gateways[uid]
-	if !ok {
-		return nil, errNotFound.New()
-	}
-	// Just update antennas
-	gtw.Antennas = req.Antennas
-	return gtw, nil
-}
-
-func (is *mockIS) GetIdentifiersForEUI(ctx context.Context, req *ttnpb.GetGatewayIdentifiersForEUIRequest) (*ttnpb.GatewayIdentifiers, error) {
-	if req.EUI == registeredGatewayEUI {
-		return &ttnpb.GatewayIdentifiers{
-			GatewayID: registeredGatewayID,
-			EUI:       &registeredGatewayEUI,
-		}, nil
-	}
-	return nil, errNotFound.New()
-}
-
-func (is *mockIS) ListRights(ctx context.Context, ids *ttnpb.GatewayIdentifiers) (res *ttnpb.Rights, err error) {
-	res = &ttnpb.Rights{}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return
-	}
-	authorization, ok := md["authorization"]
-	if !ok || len(authorization) == 0 {
-		return
-	}
-	auths, ok := is.gatewayAuths[unique.ID(ctx, *ids)]
-	if !ok {
-		return
-	}
-	for _, auth := range auths {
-		if auth == authorization[0] {
-			res.Rights = append(res.Rights, ttnpb.RIGHT_GATEWAY_LINK, ttnpb.RIGHT_GATEWAY_STATUS_READ)
-		}
-	}
-	return
-}
-
 func randomJoinRequestPayload(joinEUI, devEUI types.EUI64) []byte {
 	var nwkKey types.AES128Key
-	random.Read(nwkKey[:])
+	rand.Read(nwkKey[:])
 	var devNonce types.DevNonce
-	random.Read(devNonce[:])
+	rand.Read(devNonce[:])
 
 	msg := &ttnpb.UplinkMessage{
 		Payload: &ttnpb.Message{
-			MHDR: ttnpb.MHDR{
+			MHdr: &ttnpb.MHDR{
 				MType: ttnpb.MType_JOIN_REQUEST,
 				Major: ttnpb.Major_LORAWAN_R1,
 			},
 			Payload: &ttnpb.Message_JoinRequestPayload{
 				JoinRequestPayload: &ttnpb.JoinRequestPayload{
-					JoinEUI:  joinEUI,
-					DevEUI:   devEUI,
-					DevNonce: devNonce,
+					JoinEui:  joinEUI.Bytes(),
+					DevEui:   devEUI.Bytes(),
+					DevNonce: devNonce.Bytes(),
 				},
 			},
 		},
 	}
-	buf, err := lorawan.MarshalMessage(*msg.Payload)
+	buf, err := lorawan.MarshalMessage(msg.Payload)
 	if err != nil {
 		panic(err)
 	}
@@ -175,40 +73,40 @@ func randomJoinRequestPayload(joinEUI, devEUI types.EUI64) []byte {
 
 func randomUpDataPayload(devAddr types.DevAddr, fPort uint32, size int) []byte {
 	var fNwkSIntKey, sNwkSIntKey, appSKey types.AES128Key
-	random.Read(fNwkSIntKey[:])
-	random.Read(sNwkSIntKey[:])
-	random.Read(appSKey[:])
+	rand.Read(fNwkSIntKey[:])
+	rand.Read(sNwkSIntKey[:])
+	rand.Read(appSKey[:])
 
 	pld := &ttnpb.MACPayload{
-		FHDR: ttnpb.FHDR{
-			DevAddr: devAddr,
+		FHdr: &ttnpb.FHDR{
+			DevAddr: devAddr.Bytes(),
 			FCnt:    42,
 		},
 		FPort:      fPort,
-		FRMPayload: random.Bytes(size),
+		FrmPayload: random.Bytes(size),
 	}
-	buf, err := crypto.EncryptUplink(appSKey, devAddr, pld.FCnt, pld.FRMPayload, false)
+	buf, err := crypto.EncryptUplink(appSKey, devAddr, pld.FHdr.FCnt, pld.FrmPayload)
 	if err != nil {
 		panic(err)
 	}
-	pld.FRMPayload = buf
+	pld.FrmPayload = buf
 
 	msg := &ttnpb.UplinkMessage{
 		Payload: &ttnpb.Message{
-			MHDR: ttnpb.MHDR{
+			MHdr: &ttnpb.MHDR{
 				MType: ttnpb.MType_UNCONFIRMED_UP,
 				Major: ttnpb.Major_LORAWAN_R1,
 			},
-			Payload: &ttnpb.Message_MACPayload{
-				MACPayload: pld,
+			Payload: &ttnpb.Message_MacPayload{
+				MacPayload: pld,
 			},
 		},
 	}
-	buf, err = lorawan.MarshalMessage(*msg.Payload)
+	buf, err = lorawan.MarshalMessage(msg.Payload)
 	if err != nil {
 		panic(err)
 	}
-	mic, err := crypto.ComputeUplinkMIC(sNwkSIntKey, fNwkSIntKey, 0, 5, 0, devAddr, pld.FCnt, buf)
+	mic, err := crypto.ComputeUplinkMIC(sNwkSIntKey, fNwkSIntKey, 0, 5, 0, devAddr, pld.FHdr.FCnt, buf)
 	if err != nil {
 		panic(err)
 	}
@@ -217,37 +115,37 @@ func randomUpDataPayload(devAddr types.DevAddr, fPort uint32, size int) []byte {
 
 func randomDownDataPayload(devAddr types.DevAddr, fPort uint32, size int) []byte {
 	var sNwkSIntKey, appSKey types.AES128Key
-	random.Read(sNwkSIntKey[:])
-	random.Read(appSKey[:])
+	rand.Read(sNwkSIntKey[:])
+	rand.Read(appSKey[:])
 
 	pld := &ttnpb.MACPayload{
-		FHDR: ttnpb.FHDR{
-			DevAddr: devAddr,
+		FHdr: &ttnpb.FHDR{
+			DevAddr: devAddr.Bytes(),
 			FCnt:    42,
 		},
 		FPort:      fPort,
-		FRMPayload: random.Bytes(size),
+		FrmPayload: random.Bytes(size),
 	}
-	buf, err := crypto.EncryptDownlink(appSKey, devAddr, pld.FCnt, pld.FRMPayload, false)
+	buf, err := crypto.EncryptDownlink(appSKey, devAddr, pld.FHdr.FCnt, pld.FrmPayload)
 	if err != nil {
 		panic(err)
 	}
-	pld.FRMPayload = buf
+	pld.FrmPayload = buf
 
-	msg := ttnpb.Message{
-		MHDR: ttnpb.MHDR{
+	msg := &ttnpb.Message{
+		MHdr: &ttnpb.MHDR{
 			MType: ttnpb.MType_UNCONFIRMED_DOWN,
 			Major: ttnpb.Major_LORAWAN_R1,
 		},
-		Payload: &ttnpb.Message_MACPayload{
-			MACPayload: pld,
+		Payload: &ttnpb.Message_MacPayload{
+			MacPayload: pld,
 		},
 	}
 	buf, err = lorawan.MarshalMessage(msg)
 	if err != nil {
 		panic(err)
 	}
-	mic, err := crypto.ComputeDownlinkMIC(sNwkSIntKey, devAddr, 0, pld.FCnt, buf)
+	mic, err := crypto.ComputeDownlinkMIC(sNwkSIntKey, devAddr, 0, pld.FHdr.FCnt, buf)
 	if err != nil {
 		panic(err)
 	}

@@ -16,6 +16,7 @@
   margin-bottom: $ls.xxs
   display: flex
   flex-wrap: wrap
+  align-self: baseline
   width: 100%
 
   .title
@@ -33,13 +34,49 @@
       line-height: 1
       color: $c-error
 
-  &:not(.has-glossary-term)
+  &:not(.has-tooltip)
     &.required
       .label::after
         margin-left: 0.1rem
 
   &.grow
     flex-grow: 1
+
+  &.field-width-xxs
+    width: $ffw.xxs
+    flex-basis: $ffw.xxs
+
+  &.field-width-xs
+    width: $ffw.xs
+    flex-basis: $ffw.xs
+
+  &.field-width-s
+    width: $ffw.s
+    flex-basis: $ffw.s
+
+  &.field-width-m
+    width: $ffw.m
+    flex-basis: $ffw.m
+
+  &.field-width-l
+    width: $ffw.l
+    flex-basis: $ffw.l
+
+  &.field-width-full
+    width: $ffw.full
+    flex-basis: $ffw.full
+
+  &.field-width-half
+    width: $ffw.half
+    flex-basis: $ffw.half
+
+  &.field-width-third
+    width: $ffw.third
+    flex-basis: $ffw.third
+
+  &.field-width-quarter
+    width: $ffw.quarter
+    flex-basis: $ffw.quarter
 
 .field-container
   display: flex
@@ -53,30 +90,52 @@
     flex-direction: row
 
     .field
+      width: auto
       margin-bottom: 0
-
-      &.auto-width
-        width: auto
-        align-content: flex-start
+      align-content: flex-start
+      flex-grow: 0
+      flex-shrink: 0
 
       &:not(:last-child)
         margin-right: $ls.xxs
 
 .label
-  display: block
-  align-items: flex-start
+  display: flex
+  align-items: center
   width:  100%
   flex-shrink: 0
   user-select: none
   margin-bottom: $cs.xxs
+  white-space: nowrap
 
   .title
     display: inline-block
 
-  .glossary-link
-    nudge('down', 2px)
-    display: inline-block
-    text-decoration: none
+.tooltip
+  display: inline-block
+
+  &-icon
+    color: $tc-subtle-gray
+    padding: .1rem
+    height: 1rem
+    width: 1rem
+    font-size: 1rem
+    line-height: 1
+    cursor: help
+
+  &-content
+    .tooltip-title
+      margin: 0
+
+    .tooltip-description
+      margin: 0
+
+      &:not(:last-child)
+        margin: 0 0 $cs.s 0
+  
+    .tooltip-links
+      display: flex
+      justify-content: space-between
 
 .description
   font-weight: $fw.normal
@@ -128,4 +187,4 @@
   color: $tc-warning
 
 .disabled .info-area
-    opacity: .4
+    color: $tc-subtle-gray

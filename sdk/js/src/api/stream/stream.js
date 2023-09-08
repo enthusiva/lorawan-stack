@@ -38,9 +38,12 @@ import 'web-streams-polyfill/dist/polyfill'
  *      .on('start', () => console.log('conn opened'))
  *      .on('chunk', chunk => console.log('received chunk', chunk))
  *      .on('error', error => console.log(error))
- *      .on('close', () => console.log('conn closed'))
+ *      .on('close', wasClientRequest => console.log(wasClientRequest ? 'conn closed by client' : 'conn closed by server'))
  *
- *    // Close the stream after 20 s.
+ *    // Start the stream after attaching listerners.
+ *    stream.open()
+ *
+ *     // Close the stream after 20 s.
  *    setTimeout(() => stream.close(), 20000)
  * })()
  *
@@ -48,7 +51,12 @@ import 'web-streams-polyfill/dist/polyfill'
  * attaching listeners and the `close` function to close the stream.
  */
 export default async (payload, url) => {
-  let listeners = Object.values(EVENTS).reduce((acc, curr) => ({ ...acc, [curr]: null }), {})
+  const initialListeners = Object.values(EVENTS).reduce(
+    (acc, curr) => ({ ...acc, [curr]: null }),
+    {},
+  )
+  let listeners = initialListeners
+  let closeRequested = false
   const token = new Token().get()
 
   let Authorization = null
@@ -79,8 +87,8 @@ export default async (payload, url) => {
   const reader = response.body.getReader()
   const onChunk = ({ done, value }) => {
     if (done) {
-      notify(listeners[EVENTS.CLOSE])
-      listeners = {}
+      notify(listeners[EVENTS.CLOSE], closeRequested)
+      listeners = initialListeners
       return
     }
 
@@ -94,20 +102,22 @@ export default async (payload, url) => {
 
     return reader.read().then(onChunk)
   }
-  reader
-    .read()
-    .then(data => {
-      notify(listeners[EVENTS.START])
-
-      return data
-    })
-    .then(onChunk)
-    .catch(error => {
-      notify(listeners[EVENTS.ERROR], error)
-      listeners = {}
-    })
 
   return {
+    open: () => {
+      reader
+        .read()
+        .then(data => {
+          notify(listeners[EVENTS.START])
+
+          return data
+        })
+        .then(onChunk)
+        .catch(error => {
+          notify(listeners[EVENTS.ERROR], error)
+          listeners = initialListeners
+        })
+    },
     on(eventName, callback) {
       if (listeners[eventName] === undefined) {
         throw new Error(
@@ -120,6 +130,8 @@ export default async (payload, url) => {
       return this
     },
     close: () => {
+      closeRequested = true
+
       reader
         .cancel()
         .then(() => {

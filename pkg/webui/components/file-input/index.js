@@ -19,10 +19,14 @@ import classnames from 'classnames'
 
 import Icon from '@ttn-lw/components/icon'
 import Button from '@ttn-lw/components/button'
+import Notification from '@ttn-lw/components/notification'
 
 import Message from '@ttn-lw/lib/components/message'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
+import humanFileSize from '@ttn-lw/lib/human-file-size'
+
+import ButtonGroup from '../button/group'
 
 import style from './file-input.styl'
 
@@ -40,6 +44,7 @@ const defaultDataTransform = content => content.replace(/^.*;base64,/, '')
 export default class FileInput extends Component {
   static propTypes = {
     accept: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
+    center: PropTypes.bool,
     changeMessage: PropTypes.message,
     /** `dataTransform` is a marshaler used to transform the raw field value into
      * a value matching the field schema. */
@@ -48,6 +53,7 @@ export default class FileInput extends Component {
     id: PropTypes.string.isRequired,
     image: PropTypes.bool,
     imageClassName: PropTypes.string,
+    largeFileWarningMessage: PropTypes.message,
     maxSize: PropTypes.number,
     mayRemove: PropTypes.bool,
     message: PropTypes.message,
@@ -55,20 +61,24 @@ export default class FileInput extends Component {
     onChange: PropTypes.func.isRequired,
     providedMessage: PropTypes.message,
     value: PropTypes.oneOfType([PropTypes.string, PropTypes.shape({})]),
+    warningSize: PropTypes.number,
   }
 
   static defaultProps = {
     accept: undefined,
+    center: false,
     dataTransform: defaultDataTransform,
     disabled: false,
     image: false,
     imageClassName: undefined,
-    maxSize: 10 * 1024 * 1024, // 10 MB
+    largeFileWarningMessage: undefined,
+    maxSize: 16 * 1024 * 1024, // 16 MB
     mayRemove: true,
     message: m.selectAFile,
     changeMessage: m.changeFile,
     providedMessage: m.fileProvided,
     value: undefined,
+    warningSize: undefined,
   }
 
   constructor(props) {
@@ -81,6 +91,7 @@ export default class FileInput extends Component {
 
     this.state = {
       filename: '',
+      isLarger: false,
     }
   }
 
@@ -99,14 +110,20 @@ export default class FileInput extends Component {
 
   @bind
   handleChange(event) {
-    const { maxSize } = this.props
+    const { maxSize, warningSize } = this.props
     const { files } = event.target
 
-    if (files && files[0] && files[0].size <= maxSize) {
-      this.setState({ filename: files[0].name, error: undefined })
-      this.reader.readAsDataURL(files[0])
-    } else {
-      this.setState({ error: m.tooBig })
+    if (files && files[0]) {
+      if (files[0].size >= maxSize) {
+        this.setState({ error: m.tooBig })
+      } else {
+        this.reader.readAsDataURL(files[0])
+        this.setState({
+          filename: files[0].name,
+          error: undefined,
+          isLarger: files[0].size >= warningSize,
+        })
+      }
     }
   }
 
@@ -120,7 +137,7 @@ export default class FileInput extends Component {
     const { onChange, dataTransform } = this.props
 
     this.fileInputRef.current.value = null
-    this.setState({ filename: '', error: undefined })
+    this.setState({ filename: '', error: undefined, isLarger: false })
     onChange(dataTransform(''), true)
   }
 
@@ -147,7 +164,7 @@ export default class FileInput extends Component {
           {hasInitialValue ? <Message content={providedMessage} /> : filename}
           {mayRemove && (
             <Button
-              className={style.removeButton}
+              className="ml-cs-s"
               message={m.remove}
               onClick={this.handleRemoveClick}
               type="button"
@@ -160,7 +177,7 @@ export default class FileInput extends Component {
       )
     }
 
-    return <Message className={style.noFile} content={m.noFileSelected} />
+    return <Message className="tc-subtle-gray" content={m.noFileSelected} />
   }
 
   render() {
@@ -174,40 +191,60 @@ export default class FileInput extends Component {
       disabled,
       image,
       imageClassName,
+      largeFileWarningMessage,
+      warningSize,
+      center,
     } = this.props
+    const warningThreshold = humanFileSize(warningSize)
 
     return (
-      <div className={style.container}>
-        {image && Boolean(value) && (
-          <img
-            className={classnames(style.image, imageClassName)}
-            alt="Current image"
-            src={value}
-            onError={this.handleImageError}
-            ref={this.imageRef}
+      <div className={classnames(style.container, { [style.center]: center })}>
+        {this.state.isLarger && (
+          <Notification
+            className={style.notification}
+            content={largeFileWarningMessage}
+            messageValues={{ warningThreshold }}
+            small
+            warning
           />
         )}
-        <Button
-          type="button"
-          aria-controls="fileupload"
-          onClick={this.handleChooseClick}
-          disabled={disabled}
-          message={!value ? message : changeMessage}
-          icon="attachment"
-          secondary
-        />
-        <span className={style.status}>{this.statusMessage}</span>
-        <input
-          name={name}
-          id={id}
-          className={style.input}
-          type="file"
-          onChange={this.handleChange}
-          ref={this.fileInputRef}
-          accept={accept}
-          disabled={disabled}
-          tabIndex="-1"
-        />
+        <div>
+          {image && Boolean(value) && (
+            <img
+              className={classnames(style.image, imageClassName)}
+              alt="Current image"
+              src={value}
+              onError={this.handleImageError}
+              ref={this.imageRef}
+            />
+          )}
+          <ButtonGroup
+            align={center ? 'center' : 'start'}
+            className={classnames({ [style.buttonGroupCenter]: center })}
+          >
+            <Button
+              type="button"
+              aria-controls="fileupload"
+              onClick={this.handleChooseClick}
+              disabled={disabled}
+              message={!value ? message : changeMessage}
+              icon="attachment"
+              className="mr-cs-s"
+            />
+            {this.statusMessage}
+          </ButtonGroup>
+          <input
+            name={name}
+            id={id}
+            className={style.input}
+            type="file"
+            onChange={this.handleChange}
+            ref={this.fileInputRef}
+            accept={accept}
+            disabled={disabled}
+            tabIndex="-1"
+          />
+        </div>
       </div>
     )
   }

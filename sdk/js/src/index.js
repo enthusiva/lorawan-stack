@@ -23,10 +23,17 @@ import As from './service/application-server'
 import Organizations from './service/organizations'
 import Users from './service/users'
 import Auth from './service/auth'
+import Sessions from './service/sessions'
 import ContactInfo from './service/contact-info'
+import PacketBrokerAgent from './service/packet-broker-agent'
+import Clients from './service/clients'
+import Authorizations from './service/authorizations'
+import DeviceClaim from './service/claim'
 import EventHandler from './util/events'
 import StackConfiguration from './util/stack-configuration'
 import { STACK_COMPONENTS_MAP, AUTHORIZATION_MODES } from './util/constants'
+import QRCodeGenerator from './service/qr-code-generator'
+import SearchAccounts from './service/search-accounts'
 
 class TTS {
   constructor({ authorization, stackConfig, connectionType, defaultUserId, axiosConfig }) {
@@ -47,11 +54,22 @@ class TTS {
     this.Js = new Js(this.api.Js)
     this.Ns = new Ns(this.api.Ns)
     this.Is = new Is(this.api.Is)
-    this.As = new As(this.api.AppAs)
+    this.As = new As(this.api)
     this.Organizations = new Organizations(this.api)
     this.Users = new Users(this.api)
     this.Auth = new Auth(this.api.EntityAccess)
+    this.Sessions = new Sessions(this.api)
     this.ContactInfo = new ContactInfo(this.api.ContactInfoRegistry)
+    this.PacketBrokerAgent = new PacketBrokerAgent(this.api.Pba)
+    this.Clients = new Clients(this.api)
+    this.Authorizations = new Authorizations(this.api)
+    this.DeviceClaim = new DeviceClaim(this.api, {
+      stackConfig: stackConfiguration,
+    })
+    this.QRCodeGenerator = new QRCodeGenerator(this.api, {
+      stackConfig: stackConfiguration,
+    })
+    this.SearchAccounts = new SearchAccounts(this.api)
 
     this.subscribe = EventHandler.subscribe
     this.unsubscribe = EventHandler.unsubscribe

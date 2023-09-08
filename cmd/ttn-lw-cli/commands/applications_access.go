@@ -15,27 +15,15 @@
 package commands
 
 import (
-	"context"
 	"os"
 	"strings"
 
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/spf13/cobra"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
-
-func createApplicationAPIKey(ctx context.Context, ids ttnpb.ApplicationIdentifiers, name string, rights ...ttnpb.Right) (*ttnpb.APIKey, error) {
-	is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
-	if err != nil {
-		return nil, err
-	}
-	return ttnpb.NewApplicationAccessClient(is).CreateAPIKey(ctx, &ttnpb.CreateApplicationAPIKeyRequest{
-		ApplicationIdentifiers: ids,
-		Name:                   name,
-		Rights:                 rights,
-	})
-}
 
 var (
 	applicationRights = &cobra.Command{
@@ -44,7 +32,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -71,7 +59,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -79,9 +67,11 @@ var (
 				return err
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
-			res, err := ttnpb.NewApplicationAccessClient(is).ListCollaborators(ctx, &ttnpb.ListApplicationCollaboratorsRequest{
-				ApplicationIdentifiers: *appID, Limit: limit, Page: page,
-			}, opt)
+			order := getOrder(cmd.Flags())
+			res, err := ttnpb.NewApplicationAccessClient(is).ListCollaborators(
+				ctx, &ttnpb.ListApplicationCollaboratorsRequest{
+					ApplicationIds: appID, Limit: limit, Page: page, Order: order,
+				}, opt)
 			if err != nil {
 				return err
 			}
@@ -94,14 +84,14 @@ var (
 		Use:     "get",
 		Aliases: []string{"info"},
 		Short:   "Get an application collaborator",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			appID := getApplicationID(cmd.Flags(), nil)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			collaborator := getCollaborator(cmd.Flags())
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -109,8 +99,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationAccessClient(is).GetCollaborator(ctx, &ttnpb.GetApplicationCollaboratorRequest{
-				ApplicationIdentifiers:        *appID,
-				OrganizationOrUserIdentifiers: *collaborator,
+				ApplicationIds: appID,
+				Collaborator:   collaborator,
 			})
 			if err != nil {
 				return err
@@ -123,18 +113,18 @@ var (
 		Use:     "set",
 		Aliases: []string{"update"},
 		Short:   "Set properties of an application collaborator",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			appID := getApplicationID(cmd.Flags(), nil)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			collaborator := getCollaborator(cmd.Flags())
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 			rights := getRights(cmd.Flags())
 			if len(rights) == 0 {
-				return errNoCollaboratorRights
+				return errNoCollaboratorRights.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -142,10 +132,10 @@ var (
 				return err
 			}
 			_, err = ttnpb.NewApplicationAccessClient(is).SetCollaborator(ctx, &ttnpb.SetApplicationCollaboratorRequest{
-				ApplicationIdentifiers: *appID,
-				Collaborator: ttnpb.Collaborator{
-					OrganizationOrUserIdentifiers: *collaborator,
-					Rights:                        rights,
+				ApplicationIds: appID,
+				Collaborator: &ttnpb.Collaborator{
+					Ids:    collaborator,
+					Rights: rights,
 				},
 			})
 			if err != nil {
@@ -159,27 +149,26 @@ var (
 		Use:     "delete",
 		Aliases: []string{"del", "remove", "rm"},
 		Short:   "Delete an application collaborator",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			appID := getApplicationID(cmd.Flags(), nil)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			collaborator := getCollaborator(cmd.Flags())
 			if collaborator == nil {
-				return errNoCollaborator
+				return errNoCollaborator.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			_, err = ttnpb.NewApplicationAccessClient(is).SetCollaborator(ctx, &ttnpb.SetApplicationCollaboratorRequest{
-				ApplicationIdentifiers: *appID,
-				Collaborator: ttnpb.Collaborator{
-					OrganizationOrUserIdentifiers: *collaborator,
-					Rights:                        nil,
+			_, err = ttnpb.NewApplicationAccessClient(is).DeleteCollaborator(
+				ctx, &ttnpb.DeleteApplicationCollaboratorRequest{
+					ApplicationIds:  appID,
+					CollaboratorIds: collaborator,
 				},
-			})
+			)
 			if err != nil {
 				return err
 			}
@@ -197,25 +186,30 @@ var (
 		Aliases: []string{"ls"},
 		Short:   "List application API keys",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appID := getApplicationID(cmd.Flags(), args)
-			if appID == nil {
-				return errNoApplicationID
+			req := &ttnpb.ListApplicationAPIKeysRequest{Limit: 50, Page: 1}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+			if len(args) > 0 && req.GetApplicationIds().GetApplicationId() == "" {
+				if len(args) > 1 {
+					logger.Warn("Multiple IDs found in arguments, considering only the first")
+				}
+				req.ApplicationIds = &ttnpb.ApplicationIdentifiers{ApplicationId: args[0]}
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			limit, page, opt, getTotal := withPagination(cmd.Flags())
-			res, err := ttnpb.NewApplicationAccessClient(is).ListAPIKeys(ctx, &ttnpb.ListApplicationAPIKeysRequest{
-				ApplicationIdentifiers: *appID, Limit: limit, Page: page,
-			}, opt)
+			_, _, opt, getTotal := withPagination(cmd.Flags())
+			res, err := ttnpb.NewApplicationAccessClient(is).ListAPIKeys(ctx, req, opt)
 			if err != nil {
 				return err
 			}
 			getTotal()
 
-			return io.Write(os.Stdout, config.OutputFormat, res.APIKeys)
+			return io.Write(os.Stdout, config.OutputFormat, res.ApiKeys)
 		},
 	}
 	applicationAPIKeysGet = &cobra.Command{
@@ -225,11 +219,11 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), firstArgs(1, args...))
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			id := getAPIKeyID(cmd.Flags(), args, 1)
 			if id == "" {
-				return errNoAPIKeyID
+				return errNoAPIKeyID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -237,8 +231,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationAccessClient(is).GetAPIKey(ctx, &ttnpb.GetApplicationAPIKeyRequest{
-				ApplicationIdentifiers: *appID,
-				KeyID:                  id,
+				ApplicationIds: appID,
+				KeyId:          id,
 			})
 			if err != nil {
 				return err
@@ -254,21 +248,34 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			name, _ := cmd.Flags().GetString("name")
 
 			rights := getRights(cmd.Flags())
 			if len(rights) == 0 {
-				return errNoAPIKeyRights
+				return errNoAPIKeyRights.New()
 			}
 
-			res, err := createApplicationAPIKey(ctx, *appID, name, rights...)
+			expiryDate, err := getAPIKeyExpiry(cmd.Flags())
 			if err != nil {
 				return err
 			}
 
-			logger.Infof("API key ID: %s", res.ID)
+			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewApplicationAccessClient(is).CreateAPIKey(ctx, &ttnpb.CreateApplicationAPIKeyRequest{
+				ApplicationIds: appID,
+				Name:           name,
+				Rights:         rights,
+				ExpiresAt:      ttnpb.ProtoTime(expiryDate),
+			})
+			if err != nil {
+				return err
+			}
+			logger.Infof("API key ID: %s", res.Id)
 			logger.Infof("API key value: %s", res.Key)
 			logger.Warn("The API key value will never be shown again")
 			logger.Warn("Make sure to copy it to a safe place")
@@ -283,17 +290,21 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), firstArgs(1, args...))
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			id := getAPIKeyID(cmd.Flags(), args, 1)
 			if id == "" {
-				return errNoAPIKeyID
+				return errNoAPIKeyID.New()
 			}
 			name, _ := cmd.Flags().GetString("name")
 
-			rights := getRights(cmd.Flags())
-			if len(rights) == 0 {
-				return errNoAPIKeyRights
+			rights, expiryDate, paths, err := getAPIKeyFields(cmd.Flags())
+			if err != nil {
+				return err
+			}
+			if len(paths) == 0 {
+				logger.Warn("No fields selected, won't update anything")
+				return nil
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -301,12 +312,14 @@ var (
 				return err
 			}
 			_, err = ttnpb.NewApplicationAccessClient(is).UpdateAPIKey(ctx, &ttnpb.UpdateApplicationAPIKeyRequest{
-				ApplicationIdentifiers: *appID,
-				APIKey: ttnpb.APIKey{
-					ID:     id,
-					Name:   name,
-					Rights: rights,
+				ApplicationIds: appID,
+				ApiKey: &ttnpb.APIKey{
+					Id:        id,
+					Name:      name,
+					Rights:    rights,
+					ExpiresAt: ttnpb.ProtoTime(expiryDate),
 				},
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -322,23 +335,20 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), firstArgs(1, args...))
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			id := getAPIKeyID(cmd.Flags(), args, 1)
 			if id == "" {
-				return errNoAPIKeyID
+				return errNoAPIKeyID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			_, err = ttnpb.NewApplicationAccessClient(is).UpdateAPIKey(ctx, &ttnpb.UpdateApplicationAPIKeyRequest{
-				ApplicationIdentifiers: *appID,
-				APIKey: ttnpb.APIKey{
-					ID:     id,
-					Rights: nil,
-				},
+			_, err = ttnpb.NewApplicationAccessClient(is).DeleteAPIKey(ctx, &ttnpb.DeleteApplicationAPIKeyRequest{
+				ApplicationIds: appID,
+				KeyId:          id,
 			})
 			if err != nil {
 				return err
@@ -358,6 +368,7 @@ func init() {
 	applicationsCommand.AddCommand(applicationRights)
 
 	applicationCollaboratorsList.Flags().AddFlagSet(paginationFlags())
+	applicationCollaboratorsList.Flags().AddFlagSet(orderFlags())
 	applicationCollaborators.AddCommand(applicationCollaboratorsList)
 	applicationCollaboratorsGet.Flags().AddFlagSet(collaboratorFlags())
 	applicationCollaborators.AddCommand(applicationCollaboratorsGet)
@@ -369,16 +380,21 @@ func init() {
 	applicationCollaborators.PersistentFlags().AddFlagSet(applicationIDFlags())
 	applicationsCommand.AddCommand(applicationCollaborators)
 
-	applicationAPIKeysList.Flags().AddFlagSet(paginationFlags())
+	ttnpb.AddSetFlagsForListApplicationAPIKeysRequest(applicationAPIKeysList.Flags(), "", false)
+	applicationAPIKeysList.Flags().Lookup("limit").DefValue = "50"
+	applicationAPIKeysList.Flags().Lookup("page").DefValue = "1"
+	flagsplugin.AddAlias(applicationAPIKeysList.Flags(), "application-ids.application-id", "application-id")
 	applicationAPIKeys.AddCommand(applicationAPIKeysList)
 	applicationAPIKeysGet.Flags().String("api-key-id", "", "")
 	applicationAPIKeys.AddCommand(applicationAPIKeysGet)
 	applicationAPIKeysCreate.Flags().String("name", "", "")
 	applicationAPIKeysCreate.Flags().AddFlagSet(applicationRightsFlags)
+	applicationAPIKeysCreate.Flags().AddFlagSet(apiKeyExpiryFlag)
 	applicationAPIKeys.AddCommand(applicationAPIKeysCreate)
 	applicationAPIKeysUpdate.Flags().String("api-key-id", "", "")
 	applicationAPIKeysUpdate.Flags().String("name", "", "")
 	applicationAPIKeysUpdate.Flags().AddFlagSet(applicationRightsFlags)
+	applicationAPIKeysUpdate.Flags().AddFlagSet(apiKeyExpiryFlag)
 	applicationAPIKeys.AddCommand(applicationAPIKeysUpdate)
 	applicationAPIKeysDelete.Flags().String("api-key-id", "", "")
 	applicationAPIKeys.AddCommand(applicationAPIKeysDelete)

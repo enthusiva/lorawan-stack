@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,11 +13,9 @@
 // limitations under the License.
 
 import React, { useState, useCallback } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
+import { useSelector } from 'react-redux'
 import { defineMessages } from 'react-intl'
-import { Redirect } from 'react-router-dom'
-import { push } from 'connected-react-router'
-import queryString from 'query-string'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
 import tts from '@account/api/tts'
 
@@ -26,6 +24,7 @@ import Input from '@ttn-lw/components/input'
 import Form from '@ttn-lw/components/form'
 import SubmitButton from '@ttn-lw/components/submit-button'
 import Spinner from '@ttn-lw/components/spinner'
+import ButtonGroup from '@ttn-lw/components/button/group'
 
 import Message from '@ttn-lw/lib/components/message'
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
@@ -34,9 +33,8 @@ import style from '@account/views/front/front.styl'
 
 import Yup from '@ttn-lw/lib/yup'
 import { selectApplicationSiteName, selectEnableUserRegistration } from '@ttn-lw/lib/selectors/env'
-import { id as userRegexp } from '@ttn-lw/lib/regexp'
+import { userId as userIdRegexp } from '@ttn-lw/lib/regexp'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 import createPasswordValidationSchema from '@ttn-lw/lib/create-password-validation-schema'
 import useRequest from '@ttn-lw/lib/hooks/use-request'
 
@@ -54,9 +52,9 @@ const m = defineMessages({
 
 const baseValidationSchema = Yup.object().shape({
   user_id: Yup.string()
-    .min(3, Yup.passValues(sharedMessages.validateTooShort))
+    .min(2, Yup.passValues(sharedMessages.validateTooShort))
     .max(36, Yup.passValues(sharedMessages.validateTooLong))
-    .matches(userRegexp, Yup.passValues(sharedMessages.validateIdFormat))
+    .matches(userIdRegexp, Yup.passValues(sharedMessages.validateIdFormat))
     .required(sharedMessages.validateRequired),
   name: Yup.string()
     .min(3, Yup.passValues(sharedMessages.validateTooShort))
@@ -89,7 +87,9 @@ const getSuccessMessage = state => {
   }
 }
 
-const CreateAccount = ({ location }) => {
+const CreateAccount = () => {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [fetching, isConfigError] = useRequest(getIsConfiguration())
   if (Boolean(isConfigError)) {
     throw isConfigError
@@ -97,31 +97,30 @@ const CreateAccount = ({ location }) => {
 
   const [error, setError] = useState(undefined)
   const passwordRequirements = useSelector(selectPasswordRequirements)
-  const dispatch = useDispatch()
 
   const handleSubmit = useCallback(
     async (values, { setSubmitting }) => {
       try {
         setError(undefined)
         const { user_id, ...rest } = values
-        const { invitation_token = '' } = queryString.parse(location.search)
+        const invitation_token = searchParams.get('invitation_token') || ''
         const result = await tts.Users.create({ ids: { user_id }, ...rest }, invitation_token)
 
-        dispatch(
-          push(`/login${location.search}`, {
+        navigate(`/login?${searchParams.toString()}`, {
+          state: {
             info: getSuccessMessage(result.state),
-          }),
-        )
+          },
+        })
       } catch (error) {
         setSubmitting(false)
         setError(error)
       }
     },
-    [dispatch, location.search],
+    [navigate, searchParams],
   )
 
   if (!enableUserRegistration) {
-    return <Redirect to={`/login${location.search}`} />
+    return <Navigate to={`/login?${searchParams.toString()}`} />
   }
 
   if (fetching) {
@@ -190,27 +189,22 @@ const CreateAccount = ({ location }) => {
             autoComplete="new-password"
             component={Input}
           />
-          <div className={style.buttons}>
+          <ButtonGroup>
             <Form.Submit
               component={SubmitButton}
               message={m.createAccount}
               className={style.submitButton}
             />
             <Button.Link
-              to={`/login${location.search}`}
+              to={`/login?${searchParams.toString()}`}
               naked
-              secondary
               message={sharedMessages.login}
             />
-          </div>
+          </ButtonGroup>
         </Form>
       </div>
     </>
   )
-}
-
-CreateAccount.propTypes = {
-  location: PropTypes.location.isRequired,
 }
 
 export default CreateAccount

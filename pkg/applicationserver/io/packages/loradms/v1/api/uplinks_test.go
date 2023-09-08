@@ -18,12 +18,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/packages/loradms/v1/api"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/packages/loradms/v1/api/objects"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -83,7 +83,7 @@ func TestUplinks(t *testing.T) {
 						a.So(req.Method, should.Equal, "POST")
 						a.So(req.URL, should.Resemble, &url.URL{
 							Scheme: "https",
-							Host:   "das.loracloud.com",
+							Host:   "mgs.loracloud.com",
 							Path:   "/api/v1/uplink/send",
 						})
 					},
@@ -93,7 +93,7 @@ func TestUplinks(t *testing.T) {
 					a := assertions.New(t)
 
 					respChan <- &http.Response{
-						Body:       ioutil.NopCloser(bytes.NewBufferString(tc.body)),
+						Body:       io.NopCloser(bytes.NewBufferString(tc.body)),
 						StatusCode: http.StatusOK,
 					}
 					errChan <- tc.err

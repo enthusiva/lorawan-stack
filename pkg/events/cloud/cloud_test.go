@@ -18,11 +18,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"go.thethings.network/lorawan-stack/v3/pkg/component"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/events/cloud"
 	"go.thethings.network/lorawan-stack/v3/pkg/events/internal/eventstest"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	_ "gocloud.dev/pubsub/mempubsub"
@@ -30,14 +30,14 @@ import (
 
 func Example() {
 	// The task starter is used for automatic re-subscription on failure.
-	taskStarter := component.StartTaskFunc(component.DefaultStartTask)
+	taskStarter := task.StartTaskFunc(task.DefaultStartTask)
 
 	// Import the desired cloud pub-sub drivers (see godoc.org/gocloud.dev).
 	// In this example we use "gocloud.dev/pubsub/mempubsub".
 
 	cloudPubSub, err := cloud.NewPubSub(context.TODO(), taskStarter, "mem://events", "mem://events")
 	if err != nil {
-		// Handle error.
+		panic(err)
 	}
 
 	// Replace the default pubsub so that we will now publish to a Go Cloud pub sub.
@@ -46,15 +46,16 @@ func Example() {
 
 var timeout = (1 << 10) * test.Delay
 
-func TestCloudPubSub(t *testing.T) {
+func TestCloudPubSub(t *testing.T) { //nolint:paralleltest
 	events.IncludeCaller = true
 
-	taskStarter := component.StartTaskFunc(component.DefaultStartTask)
+	taskStarter := task.StartTaskFunc(task.DefaultStartTask)
 
 	test.RunSubtest(t, test.SubtestConfig{
 		Name:    "json",
 		Timeout: 10 * timeout,
 		Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
+			t.Helper()
 			pubsub, err := cloud.NewPubSub(ctx, taskStarter, "mem://json_events_test", "mem://json_events_test")
 			a.So(err, should.BeNil)
 			defer pubsub.Close(ctx)
@@ -67,6 +68,7 @@ func TestCloudPubSub(t *testing.T) {
 		Name:    "protobuf",
 		Timeout: 10 * timeout,
 		Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
+			t.Helper()
 			pubsub, err := cloud.NewPubSub(ctx, taskStarter, "mem://protobuf_events_test", "mem://protobuf_events_test")
 			a.So(err, should.BeNil)
 			defer pubsub.Close(ctx)

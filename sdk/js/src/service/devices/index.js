@@ -14,6 +14,7 @@
 
 /* eslint-disable no-invalid-this, no-await-in-loop */
 
+import autoBind from 'auto-bind'
 import traverse from 'traverse'
 
 import { notify, EVENTS } from '../../api/stream/shared'
@@ -22,6 +23,7 @@ import combineStreams from '../../util/combine-streams'
 import deviceEntityMap from '../../../generated/device-entity-map.json'
 import DownlinkQueue from '../downlink-queue'
 import { STACK_COMPONENTS_MAP } from '../../util/constants'
+import DeviceClaim from '../claim'
 
 import Repository from './repository'
 import { splitSetPaths, splitGetPaths, makeRequests } from './split'
@@ -44,6 +46,17 @@ class Devices {
 
     this.DownlinkQueue = new DownlinkQueue(api.AppAs, { stackConfig })
     this.Repository = new Repository(api.DeviceRepository)
+    this.DeviceClaim = new DeviceClaim(api.DeviceClaim, { stackConfig })
+
+    this.deviceCreationAllowedFieldMaskPaths = [
+      ...this._api.EndDeviceRegistry.UpdateAllowedFieldMaskPaths,
+      ...this._api.NsEndDeviceRegistry.SetAllowedFieldMaskPaths,
+      ...this._api.AsEndDeviceRegistry.SetAllowedFieldMaskPaths,
+      ...this._api.JsEndDeviceRegistry.SetAllowedFieldMaskPaths,
+      // Store unique entries only.
+    ].filter((path, index, paths) => paths.indexOf(path) === index)
+
+    autoBind(this)
   }
 
   _emitDefaults(paths, device) {
@@ -76,6 +89,32 @@ class Devices {
       device.formatters = null
     }
 
+    if (paths.includes('session') && !Boolean(device.session)) {
+      device.session = null
+    }
+
+    if (paths.includes('pending_session') && !Boolean(device.pending_session)) {
+      device.pending_session = null
+    }
+
+    if (paths.includes('formatters.up_formatter')) {
+      if (!Boolean(device.formatters)) {
+        device.formatters = { up_formatter: 'FORMATTER_NONE' }
+      }
+      if (!Boolean(device.formatters.up_formatter)) {
+        device.formatters.up_formatter = 'FORMATTER_NONE'
+      }
+    }
+
+    if (paths.includes('formatters.down_formatter')) {
+      if (!Boolean(device.formatters)) {
+        device.formatters = { down_formatter: 'FORMATTER_NONE' }
+      }
+      if (!Boolean(device.formatters.down_formatter)) {
+        device.formatters.down_formatter = 'FORMATTER_NONE'
+      }
+    }
+
     if (paths.includes('mac_settings')) {
       const { mac_settings = {} } = device
 
@@ -92,12 +131,26 @@ class Devices {
       ) {
         mac_settings.rx2_data_rate_index = 0
       }
+
+      if (mac_settings.adr && 'static' in mac_settings.adr) {
+        if (typeof mac_settings.adr.static.data_rate_index === 'undefined') {
+          mac_settings.adr.static.data_rate_index = 0
+        }
+
+        if (typeof mac_settings.adr.static.nb_trans === 'undefined') {
+          mac_settings.adr.static.nb_trans = 0
+        }
+
+        if (typeof mac_settings.adr.static.tx_power_index === 'undefined') {
+          mac_settings.adr.static.tx_power_index = 0
+        }
+      }
     }
 
     return device
   }
 
-  async _getDevice(applicationId, deviceId, paths, ignoreNotFound, mergeResult = true) {
+  async _getDevice(applicationId, deviceId, paths, ignoreNotFound, mergeResult = true, components) {
     if (!applicationId) {
       throw new Error('Missing application_id for device.')
     }
@@ -106,7 +159,7 @@ class Devices {
       throw new Error('Missing device_id for device.')
     }
 
-    const requestTree = splitGetPaths(paths)
+    const requestTree = splitGetPaths(paths, undefined, components)
 
     const params = {
       routeParams: {
@@ -228,15 +281,18 @@ class Devices {
    * @param {string} applicationId - The Application ID.
    * @param {string} deviceId - The Device ID.
    * @param {Array} selector - The list of end device fields to fetch.
+   * @param {Array} components - A whitelist of components to source the
+   * data from. Selects all by default.
    * @returns {object} - End device on successful requests, an error otherwise.
    */
-  async getById(applicationId, deviceId, selector = [['ids']]) {
+  async getById(applicationId, deviceId, selector = [['ids']], components) {
     const deviceParts = await this._getDevice(
       applicationId,
       deviceId,
       Marshaler.selectorToPaths(selector),
       false,
       false,
+      components,
     )
 
     const errors = deviceParts.filter(part => {
@@ -280,7 +336,12 @@ class Devices {
     }
 
     const deviceMap = traverse(deviceEntityMap)
-    const paths = traverse(patch).reduce(function(acc) {
+    const allowedPaths = this.deviceCreationAllowedFieldMaskPaths
+    const paths = traverse(patch).reduce(function (acc) {
+      // Disregard illegal paths.
+      if (!allowedPaths.some(p => this.path.join('.').startsWith(p))) {
+        return acc
+      }
       // Only add the top level path for arrays, otherwise paths are generated
       // for each item in the array.
       if (Array.isArray(this.node)) {
@@ -340,7 +401,7 @@ class Devices {
     }
 
     if (
-      !assembledValues.supports_join ||
+      (this._stackConfig.isComponentAvailable(NS) && !assembledValues.supports_join) ||
       assembledValues.join_server_address !== this._stackConfig.jsHost
     ) {
       delete requestTree.js
@@ -394,6 +455,17 @@ class Devices {
     )
   }
 
+  async resetById(applicationId, deviceId) {
+    const result = await this._api.NsEndDeviceRegistry.ResetFactoryDefaults({
+      routeParams: {
+        'end_device_ids.application_ids.application_id': applicationId,
+        'end_device_ids.device_id': deviceId,
+      },
+    })
+
+    return Marshaler.payloadSingleResponse(result)
+  }
+
   /**
    * Creates an end device under the `applicationId` application.
    * This method will cause creating the end device in all available stack
@@ -407,19 +479,68 @@ class Devices {
    * @returns {object} - Created end device on successful creation, an error
    * otherwise.
    */
-  async create(applicationId, device, mask = Marshaler.fieldMaskFromPatch(device)) {
+  async create(
+    applicationId,
+    device,
+    mask = Marshaler.fieldMaskFromPatch(device, this.deviceCreationAllowedFieldMaskPaths),
+  ) {
     if (!Boolean(applicationId)) {
       throw new Error('Missing application ID for device')
     }
 
-    const { supports_join = false, ids = {} } = device
+    const { authenticated_identifiers, target_device_id, ...submitValues } = device
+    const { supports_join = false, ids = {} } = submitValues
 
-    const deviceId = ids.device_id
+    // Initiate claiming, if the device is claimable.
+    const hasAuthenticatedIdentifiers = Boolean(authenticated_identifiers)
+    const claimInfoResponse = await this._api.EndDeviceClaimingServer.GetInfoByJoinEUI(undefined, {
+      join_eui: ids.join_eui,
+    })
+    const claim = Marshaler.payloadSingleResponse(claimInfoResponse)
+    const supportsClaiming = claim?.supports_claiming ?? false
+    let claimDeviceIds
+    if (supportsClaiming) {
+      // Since this device is claimable, the creation on the join server needs to be skipped.
+      submitValues.join_server_address = undefined
+      const claimPayload = hasAuthenticatedIdentifiers
+        ? {
+            authenticated_identifiers,
+            target_device_id,
+            target_application_ids: {
+              application_id: applicationId,
+            },
+          }
+        : {
+            authenticated_identifiers: {
+              dev_eui: ids.dev_eui,
+              authentication_code: device.claim_authentication_code?.value,
+              join_eui: ids.join_eui,
+            },
+            target_device_id: ids.device_id,
+            target_application_ids: {
+              application_id: applicationId,
+            },
+          }
+      const claimResponse = await this._api.EndDeviceClaimingServer.Claim(undefined, claimPayload)
+      claimDeviceIds = Marshaler.payloadSingleResponse(claimResponse)
+    }
+
+    let newFieldmasks = mask
+    // Apply the resulting IDs to the end_device.
+    if (claimDeviceIds) {
+      submitValues.ids = { ...ids, ...claimDeviceIds }
+      newFieldmasks = Marshaler.fieldMaskFromPatch(
+        submitValues,
+        this.deviceCreationAllowedFieldMaskPaths,
+      )
+    }
+
+    const deviceId = submitValues.ids.device_id
     if (!Boolean(deviceId)) {
       throw new Error('Missing end device ID')
     }
 
-    const requestTree = splitSetPaths(Marshaler.selectorToPaths(mask))
+    const requestTree = splitSetPaths(Marshaler.selectorToPaths(newFieldmasks))
 
     if (!supports_join || device.join_server_address !== this._stackConfig.jsHost) {
       delete requestTree.js
@@ -433,12 +554,13 @@ class Devices {
       delete requestTree.as
     }
 
-    const devicePayload = Marshaler.payload(device, 'end_device')
+    const devicePayload = Marshaler.payload(submitValues, 'end_device')
     const routeParams = {
       routeParams: {
         'end_device.ids.application_ids.application_id': applicationId,
       },
     }
+
     const setParts = await makeRequests(
       this._api,
       this._stackConfig,
@@ -507,7 +629,7 @@ class Devices {
     let finishedCount = 0
     let stopRequested = false
 
-    const runTasks = async function() {
+    const runTasks = async function () {
       for (const device of devices) {
         if (stopRequested) {
           notify(listeners[EVENTS.CLOSE])
@@ -525,21 +647,20 @@ class Devices {
 
           notify(listeners[EVENTS.CHUNK], result)
           finishedCount++
+        } catch (error) {
+          notify(listeners[EVENTS.ERROR], error)
+          finishedCount++
+        } finally {
           if (finishedCount === devices.length) {
             notify(listeners[EVENTS.CLOSE])
             listeners = null
           }
-        } catch (error) {
-          notify(listeners[EVENTS.ERROR], error)
-          listeners = null
-          break
         }
       }
     }
 
-    runTasks.bind(this)()
-
     return {
+      start: runTasks.bind(this),
       on(eventName, callback) {
         if (listeners[eventName] === undefined) {
           throw new Error(
@@ -551,7 +672,7 @@ class Devices {
 
         return this
       },
-      abort() {
+      abort: () => {
         stopRequested = true
       },
     }
@@ -559,11 +680,12 @@ class Devices {
 
   // Events Stream
 
-  async openStream(identifiers, tail, after) {
+  async openStream(identifiers, names, tail, after) {
     const payload = {
       identifiers: identifiers.map(ids => ({
         device_ids: ids,
       })),
+      names,
       tail,
       after,
     }

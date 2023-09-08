@@ -30,7 +30,7 @@
 
   :global(.select__control)
     width: 100%
-    min-height: 2.2rem
+    min-height: $default-input-height
     border-radius: $br.s
   :global(.select__menu)
     z-index: $zi.dropdown
@@ -38,6 +38,12 @@
     padding: 4px
   :global(.select__value-container)
     padding: 0 8px
+    white-space: nowrap
+  :global(.select__clear-indicator)
+    cursor: pointer
+
+    div:last-child
+      padding:0 !important
 
   &.error
     :global(.select__control)
@@ -56,4 +62,10 @@
 
     :global(.select__control--is-focused)
       box-shadow: 0 0 0 3px alpha($c-warning, .3)
+
+  &.selected-options-container
+    display: inline-block
+
+    .remove-option-button
+      float: right
   // @stylint on

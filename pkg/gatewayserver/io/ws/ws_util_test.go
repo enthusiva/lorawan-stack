@@ -17,24 +17,61 @@ package ws_test
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
-	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mock"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws/lbslns"
+	mockis "go.thethings.network/lorawan-stack/v3/pkg/identityserver/mock"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
-	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 )
+
+// mockClock is a mock gateway clock.
+// It rolls over every 32 bits, approximately every 72 minutes.
+type mockClock struct {
+	sessionID      uint16
+	startTimeStamp uint32
+	startTime      time.Time
+}
+
+// Start starts the gateway clock.
+func (c *mockClock) Start(ctx context.Context, now time.Time) {
+	// Set the clock to a random value on every start.
+	c.startTimeStamp = rand.Uint32()
+	c.sessionID = uint16(rand.Uint32())
+	c.startTime = now
+}
+
+// GetTimestamp returns the current timestamp.
+func (c *mockClock) GetTimestamp() uint32 {
+	return uint32(int64(c.startTimeStamp) + time.Since(c.startTime).Microseconds())
+}
+
+// GetXTime returns the timestamp in the LoRa Basics Station `xtime` format for the given time.
+func (c *mockClock) GetXTimeForTime(t time.Time) int64 {
+	ts := uint32(int64(c.startTimeStamp) + t.Sub(c.startTime).Microseconds())
+	return int64(c.sessionID)<<48 | int64(ts)&ws.XTime48BitLSBMask
+}
+
+// GetXTime returns the timestamp in the LoRa Basics Station `xtime` format for the given timestamp.
+func (c *mockClock) GetXTimeForTimestamp(ts uint32) int64 {
+	return int64(c.sessionID)<<48 | int64(ts)&ws.XTime48BitLSBMask
+}
+
+var testRights = []ttnpb.Right{ttnpb.Right_RIGHT_GATEWAY_INFO, ttnpb.Right_RIGHT_GATEWAY_LINK}
 
 func mustHavePeer(ctx context.Context, c *component.Component, role ttnpb.ClusterRole) {
 	for i := 0; i < 20; i++ {
@@ -46,12 +83,14 @@ func mustHavePeer(ctx context.Context, c *component.Component, role ttnpb.Cluste
 	panic("could not connect to peer")
 }
 
-func withServer(t *testing.T, wsConfig ws.Config, rateLimitConf ratelimit.Config, f func(t *testing.T, is *mock.IdentityServer, serverAddress string)) {
+func withServer(t *testing.T, wsConfig ws.Config, rateLimitConf config.RateLimiting, f func(t *testing.T, is *mockis.MockDefinition, serverAddress string)) {
 	ctx := log.NewContext(test.Context(), test.GetLogger(t))
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	is, isAddr := mock.NewIS(ctx)
+	is, isAddr, closeIS := mockis.New(ctx)
+	defer closeIS()
+
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
 			GRPC: config.GRPC{
@@ -61,25 +100,68 @@ func withServer(t *testing.T, wsConfig ws.Config, rateLimitConf ratelimit.Config
 			Cluster: cluster.Config{
 				IdentityServer: isAddr,
 			},
+			FrequencyPlans: config.FrequencyPlansConfig{
+				ConfigSource: "static",
+				Static:       test.StaticFrequencyPlans,
+			},
 			RateLimiting: rateLimitConf,
 		},
 	})
-	c.FrequencyPlans = frequencyplans.NewStore(test.FrequencyPlansFetcher)
 	componenttest.StartComponent(t, c)
 	defer c.Close()
 	mustHavePeer(ctx, c, ttnpb.ClusterRole_ENTITY_REGISTRY)
-	gs := mock.NewServer(c)
+	gs := mock.NewServer(c, is)
 
-	bsWebServer := ws.New(ctx, gs, lbslns.NewFormatter(maxValidRoundTripDelay), wsConfig)
+	web, err := ws.New(ctx, gs, lbslns.NewFormatter(maxValidRoundTripDelay), wsConfig)
+	if err != nil {
+		t.FailNow()
+	}
 	lis, err := net.Listen("tcp", serverAddress)
 	if err != nil {
 		t.FailNow()
 	}
 	defer lis.Close()
-	go func() error {
-		return http.Serve(lis, bsWebServer)
-	}()
+	go http.Serve(lis, web) // nolint:errcheck,gosec
 	servAddr := fmt.Sprintf("ws://%s", lis.Addr().String())
 
 	f(t, is, servAddr)
+}
+
+// PingPongHandler handles WS Ping Pong.
+type PingPongHandler struct {
+	errCh         chan error
+	wsConn        *websocket.Conn
+	wsConnMu      sync.RWMutex
+	disablePong   bool
+	numberOfPongs int
+}
+
+// New returns a new PingPongHandler.
+func NewPingPongHandler(wsConn *websocket.Conn, disablePong bool, numberOfPongs int) *PingPongHandler {
+	if !disablePong && numberOfPongs == 0 {
+		numberOfPongs = math.MaxInt // allow unlimited
+	}
+	return &PingPongHandler{
+		wsConn:        wsConn,
+		errCh:         make(chan error),
+		disablePong:   disablePong,
+		numberOfPongs: numberOfPongs,
+	}
+}
+
+func (h *PingPongHandler) HandlePing(data string) error {
+	if h.disablePong || h.numberOfPongs == 0 {
+		return nil
+	}
+	h.wsConnMu.Lock()
+	defer h.wsConnMu.Unlock()
+	if err := h.wsConn.WriteControl(websocket.PongMessage, []byte(data), time.Time{}); err != nil {
+		h.errCh <- err
+	}
+	h.numberOfPongs--
+	return nil
+}
+
+func (h *PingPongHandler) ErrCh() <-chan error {
+	return h.errCh
 }

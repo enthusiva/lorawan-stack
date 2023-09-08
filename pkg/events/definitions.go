@@ -19,17 +19,18 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/gogo/protobuf/proto"
 	"go.thethings.network/lorawan-stack/v3/pkg/i18n"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const i18nPrefix = "event"
 
 type definition struct {
-	name        string
-	description string
-	dataType    proto.Message
+	name              string
+	description       string
+	dataType          proto.Message
+	propagateToParent bool
 }
 
 // Definition describes an event definition.
@@ -37,6 +38,7 @@ type Definition interface {
 	Name() string
 	Description() string
 	DataType() proto.Message
+	PropagateToParent() bool
 }
 
 func (d *definition) Definition() Definition { return d }
@@ -44,6 +46,7 @@ func (d *definition) Definition() Definition { return d }
 func (d definition) Name() string            { return d.name }
 func (d definition) Description() string     { return d.description }
 func (d definition) DataType() proto.Message { return d.dataType }
+func (d definition) PropagateToParent() bool { return d.propagateToParent }
 
 func (d *definition) With(options ...Option) Builder {
 	extended := &builder{
@@ -54,22 +57,23 @@ func (d *definition) With(options ...Option) Builder {
 }
 
 var defaultOptions = []Option{
-	WithVisibility(ttnpb.RIGHT_ALL),
+	WithVisibility(ttnpb.Right_RIGHT_ALL),
 }
 
 func (d *definition) New(ctx context.Context, opts ...Option) Event {
 	return d.With(defaultOptions...).New(ctx, opts...)
 }
 
-type CombinedIdentifiers interface {
-	CombinedIdentifiers() *ttnpb.CombinedIdentifiers
+// EntityIdentifiers interface is for everything from which we can get entity identifiers.
+type EntityIdentifiers interface {
+	GetEntityIdentifiers() *ttnpb.EntityIdentifiers
 }
 
-func (d *definition) NewWithIdentifiersAndData(ctx context.Context, ids CombinedIdentifiers, data interface{}) Event {
+func (d *definition) NewWithIdentifiersAndData(ctx context.Context, ids EntityIdentifiers, data any) Event {
 	return d.With(defaultOptions...).NewWithIdentifiersAndData(ctx, ids, data)
 }
 
-func (d *definition) BindData(data interface{}) Builder {
+func (d *definition) BindData(data any) Builder {
 	return d.With(defaultOptions...).BindData(data)
 }
 
@@ -134,4 +138,12 @@ func DefineFunc(name, description string, opts ...Option) func() Builder {
 	return func() Builder {
 		return defineSkip(name, description, 1, opts...)
 	}
+}
+
+// GetDefinition gets the definition for an event.
+func GetDefinition(evt Event) Definition {
+	if def, ok := definitions[evt.Name()]; ok {
+		return def
+	}
+	return nil
 }

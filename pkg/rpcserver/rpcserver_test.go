@@ -20,37 +20,38 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/log/handler/memory"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcclient"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcserver"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
 	deviceID = ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-			ApplicationID: "bar",
+		ApplicationIds: &ttnpb.ApplicationIdentifiers{
+			ApplicationId: "bar",
 		},
-		DeviceID: "foo",
+		DeviceId: "foo",
 	}
 	downlinkQueueReq = &ttnpb.DownlinkQueueRequest{
-		EndDeviceIdentifiers: deviceID,
+		EndDeviceIds: &deviceID,
 	}
 	applicationUp = &ttnpb.ApplicationUp{
-		EndDeviceIdentifiers: deviceID,
+		EndDeviceIds: &deviceID,
 		Up: &ttnpb.ApplicationUp_UplinkMessage{
 			UplinkMessage: &ttnpb.ApplicationUplink{
-				SessionKeyID: []byte{0x11},
+				SessionKeyId: []byte{0x11},
 				FPort:        42,
 				FCnt:         42,
-				FRMPayload:   []byte{0x1, 0x2, 0x3},
+				FrmPayload:   []byte{0x1, 0x2, 0x3},
 			},
 		},
 	}
@@ -61,8 +62,8 @@ func TestNewRPCServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(test.Context())
 	defer cancel()
 
-	logHandler := &mockHandler{}
-	logger := log.NewLogger(log.WithHandler(logHandler))
+	logHandler := memory.New()
+	logger := log.NewLogger(logHandler)
 	ctx = log.NewContext(ctx, logger)
 
 	server := rpcserver.New(ctx,
@@ -95,7 +96,7 @@ func TestNewRPCServer(t *testing.T) {
 
 		a.So(mock.pushCtx, should.NotBeNil)
 		a.So(mock.pushCtx.Value(&mockKey{}), should.Resemble, "foo")
-		a.So(grpc_ctxtags.Extract(mock.pushCtx).Values(), should.Resemble, map[string]interface{}{
+		a.So(grpc_ctxtags.Extract(mock.pushCtx).Values(), should.Resemble, map[string]any{
 			"peer.address":                "pipe",
 			"grpc.request.device_id":      "foo",
 			"grpc.request.application_id": "bar",
@@ -105,14 +106,14 @@ func TestNewRPCServer(t *testing.T) {
 		runtime.Gosched()
 		time.Sleep(test.Delay)
 
-		a.So(logHandler.entries, should.HaveLength, 1)
+		a.So(logHandler.Entries, should.HaveLength, 1)
 	})
 
 	t.Run("Stream", func(t *testing.T) {
 		a := assertions.New(t)
 
 		sub, err := cli.Subscribe(ctx, &ttnpb.ApplicationIdentifiers{
-			ApplicationID: "bar",
+			ApplicationId: "bar",
 		})
 		a.So(sub, should.NotBeNil)
 		a.So(err, should.BeNil)
@@ -123,7 +124,7 @@ func TestNewRPCServer(t *testing.T) {
 		a.So(msg, should.Resemble, applicationUp)
 
 		a.So(mock.subCtx.Value(&mockKey{}), should.Resemble, "foo")
-		a.So(grpc_ctxtags.Extract(mock.subCtx).Values(), should.Resemble, map[string]interface{}{
+		a.So(grpc_ctxtags.Extract(mock.subCtx).Values(), should.Resemble, map[string]any{
 			"peer.address":                "pipe",
 			"grpc.request.application_id": "bar",
 		})
@@ -132,15 +133,17 @@ func TestNewRPCServer(t *testing.T) {
 		runtime.Gosched()
 		time.Sleep(test.Delay)
 
-		a.So(logHandler.entries, should.HaveLength, 2)
+		a.So(logHandler.Entries, should.HaveLength, 2)
 	})
 }
 
-type mockKey struct{}
-type mockKey2 struct{}
+type (
+	mockKey  struct{}
+	mockKey2 struct{}
+)
 
 type mockServer struct {
-	ttnpb.AppAsServer
+	ttnpb.UnimplementedAppAsServer
 
 	pushCtx context.Context
 	pushReq *ttnpb.DownlinkQueueRequest
@@ -149,21 +152,12 @@ type mockServer struct {
 	subIDs *ttnpb.ApplicationIdentifiers
 }
 
-type mockHandler struct {
-	entries []log.Entry
-}
-
-func (h *mockHandler) HandleLog(entry log.Entry) error {
-	h.entries = append(h.entries, entry)
-	return nil
-}
-
-func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func UnaryServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	ctx = context.WithValue(ctx, &mockKey2{}, "bar")
 	return handler(ctx, req)
 }
 
-func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func StreamServerInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	wrapped := grpc_middleware.WrapServerStream(ss)
 	wrapped.WrappedContext = context.WithValue(ss.Context(), &mockKey2{}, "foo")
 	return handler(srv, wrapped)
@@ -175,7 +169,7 @@ func (s *mockServer) Subscribe(ids *ttnpb.ApplicationIdentifiers, srv ttnpb.AppA
 	return nil
 }
 
-func (s *mockServer) DownlinkQueuePush(ctx context.Context, req *ttnpb.DownlinkQueueRequest) (*types.Empty, error) {
+func (s *mockServer) DownlinkQueuePush(ctx context.Context, req *ttnpb.DownlinkQueueRequest) (*emptypb.Empty, error) {
 	s.pushCtx, s.pushReq = ctx, req
-	return &types.Empty{}, nil
+	return ttnpb.Empty, nil
 }

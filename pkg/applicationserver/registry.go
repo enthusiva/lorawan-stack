@@ -17,22 +17,26 @@ package applicationserver
 import (
 	"context"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/internal/registry"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
-)
-
-var (
-	errDuplicateIdentifiers = errors.DefineAlreadyExists("duplicate_identifiers", "identifiers already exists")
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // DeviceRegistry is a store for end devices.
 type DeviceRegistry interface {
 	// Get returns the end device by its identifiers.
-	Get(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, paths []string) (*ttnpb.EndDevice, error)
+	Get(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string) (*ttnpb.EndDevice, error)
 	// Set creates, updates or deletes the end device by its identifiers.
-	Set(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, paths []string, f func(*ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, error)
+	Set(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string, f func(*ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, error)
+	// Range ranges over the end devices and calls the callback function, until false is returned.
+	Range(ctx context.Context, paths []string, f func(context.Context, *ttnpb.EndDeviceIdentifiers, *ttnpb.EndDevice) bool) error
+	// BatchDelete deletes a batch of end devices.
+	BatchDelete(
+		ctx context.Context,
+		appIDs *ttnpb.ApplicationIdentifiers,
+		deviceIDs []string,
+	) ([]*ttnpb.EndDeviceIdentifiers, error)
 }
 
 type replacedEndDeviceFieldRegistryWrapper struct {
@@ -40,7 +44,7 @@ type replacedEndDeviceFieldRegistryWrapper struct {
 	registry DeviceRegistry
 }
 
-func (w replacedEndDeviceFieldRegistryWrapper) Get(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, paths []string) (*ttnpb.EndDevice, error) {
+func (w replacedEndDeviceFieldRegistryWrapper) Get(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string) (*ttnpb.EndDevice, error) {
 	paths, replaced := registry.MatchReplacedEndDeviceFields(paths, w.fields)
 	dev, err := w.registry.Get(ctx, ids, paths)
 	if err != nil || dev == nil {
@@ -52,7 +56,7 @@ func (w replacedEndDeviceFieldRegistryWrapper) Get(ctx context.Context, ids ttnp
 	return dev, nil
 }
 
-func (w replacedEndDeviceFieldRegistryWrapper) Set(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, paths []string, f func(*ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, error) {
+func (w replacedEndDeviceFieldRegistryWrapper) Set(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string, f func(*ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, error) {
 	paths, replaced := registry.MatchReplacedEndDeviceFields(paths, w.fields)
 	dev, err := w.registry.Set(ctx, ids, paths, func(dev *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error) {
 		if dev != nil {
@@ -81,6 +85,26 @@ func (w replacedEndDeviceFieldRegistryWrapper) Set(ctx context.Context, ids ttnp
 	return dev, nil
 }
 
+func (w replacedEndDeviceFieldRegistryWrapper) BatchDelete(
+	ctx context.Context,
+	appIDs *ttnpb.ApplicationIdentifiers,
+	deviceIDs []string,
+) ([]*ttnpb.EndDeviceIdentifiers, error) {
+	return w.registry.BatchDelete(ctx, appIDs, deviceIDs)
+}
+
+func (w replacedEndDeviceFieldRegistryWrapper) Range(ctx context.Context, paths []string, f func(context.Context, *ttnpb.EndDeviceIdentifiers, *ttnpb.EndDevice) bool) error {
+	paths, replaced := registry.MatchReplacedEndDeviceFields(paths, w.fields)
+	return w.registry.Range(ctx, paths, func(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, dev *ttnpb.EndDevice) bool {
+		if dev != nil {
+			for _, d := range replaced {
+				d.GetTransform(dev)
+			}
+		}
+		return f(ctx, ids, dev)
+	})
+}
+
 func wrapEndDeviceRegistryWithReplacedFields(r DeviceRegistry, fields ...registry.ReplacedEndDeviceField) DeviceRegistry {
 	return replacedEndDeviceFieldRegistryWrapper{
 		fields:   fields,
@@ -96,7 +120,7 @@ var replacedEndDeviceFields = []registry.ReplacedEndDeviceField{
 		New: "skip_payload_crypto_override",
 		GetTransform: func(dev *ttnpb.EndDevice) {
 			if dev.SkipPayloadCryptoOverride == nil && dev.SkipPayloadCrypto {
-				dev.SkipPayloadCryptoOverride = &pbtypes.BoolValue{Value: true}
+				dev.SkipPayloadCryptoOverride = &wrapperspb.BoolValue{Value: true}
 			} else {
 				dev.SkipPayloadCrypto = dev.SkipPayloadCryptoOverride.GetValue()
 			}
@@ -108,7 +132,7 @@ var replacedEndDeviceFields = []registry.ReplacedEndDeviceField{
 						return errInvalidFieldValue.WithAttributes("field", "skip_payload_crypto")
 					}
 				} else {
-					dev.SkipPayloadCryptoOverride = &pbtypes.BoolValue{Value: dev.SkipPayloadCrypto}
+					dev.SkipPayloadCryptoOverride = &wrapperspb.BoolValue{Value: dev.SkipPayloadCrypto}
 				}
 			}
 			dev.SkipPayloadCrypto = false
@@ -120,9 +144,21 @@ var replacedEndDeviceFields = []registry.ReplacedEndDeviceField{
 // LinkRegistry is a store for application links.
 type LinkRegistry interface {
 	// Get returns the link by the application identifiers.
-	Get(ctx context.Context, ids ttnpb.ApplicationIdentifiers, paths []string) (*ttnpb.ApplicationLink, error)
+	Get(ctx context.Context, ids *ttnpb.ApplicationIdentifiers, paths []string) (*ttnpb.ApplicationLink, error)
 	// Range ranges the links and calls the callback function, until false is returned.
-	Range(ctx context.Context, paths []string, f func(context.Context, ttnpb.ApplicationIdentifiers, *ttnpb.ApplicationLink) bool) error
+	Range(ctx context.Context, paths []string, f func(context.Context, *ttnpb.ApplicationIdentifiers, *ttnpb.ApplicationLink) bool) error
 	// Set creates, updates or deletes the link by the application identifiers.
-	Set(ctx context.Context, ids ttnpb.ApplicationIdentifiers, paths []string, f func(*ttnpb.ApplicationLink) (*ttnpb.ApplicationLink, []string, error)) (*ttnpb.ApplicationLink, error)
+	Set(ctx context.Context, ids *ttnpb.ApplicationIdentifiers, paths []string, f func(*ttnpb.ApplicationLink) (*ttnpb.ApplicationLink, []string, error)) (*ttnpb.ApplicationLink, error)
+}
+
+// ApplicationUplinkRegistry is a store for uplink messages.
+type ApplicationUplinkRegistry interface {
+	// Range ranges the uplink messagess and calls the callback function, until false is returned.
+	Range(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, paths []string, f func(context.Context, *ttnpb.ApplicationUplink) bool) error
+	// Push pushes the provided uplink message to the storage.
+	Push(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, up *ttnpb.ApplicationUplink) error
+	// Clear empties the uplink messages storage by the end device identifiers.
+	Clear(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers) error
+	// BatchClear empties the uplink messages storage of multiple end devices.
+	BatchClear(ctx context.Context, devIDs []*ttnpb.EndDeviceIdentifiers) error
 }

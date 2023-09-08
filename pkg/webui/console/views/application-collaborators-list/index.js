@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,67 +12,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useCallback } from 'react'
 import { Container, Row, Col } from 'react-grid-system'
-import bind from 'autobind-decorator'
-
-import PAGE_SIZES from '@ttn-lw/constants/page-sizes'
+import { useParams } from 'react-router-dom'
+import { createSelector } from 'reselect'
 
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
 
 import CollaboratorsTable from '@console/containers/collaborators-table'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
-
-import { getCollaboratorsList } from '@console/store/actions/collaborators'
-
 import {
   selectCollaborators,
   selectCollaboratorsTotalCount,
-  selectCollaboratorsFetching,
-  selectCollaboratorsError,
-} from '@console/store/selectors/collaborators'
+} from '@ttn-lw/lib/store/selectors/collaborators'
+import { getCollaboratorsList } from '@ttn-lw/lib/store/actions/collaborators'
 
-export default class ApplicationCollaborators extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+const ApplicationCollaboratorsList = () => {
+  const { appId } = useParams()
 
-  constructor(props) {
-    super(props)
+  const getItemsAction = useCallback(
+    filters => getCollaboratorsList('application', appId, filters),
+    [appId],
+  )
 
-    const { appId } = props.match.params
-    this.getCollaboratorsList = filters => getCollaboratorsList('application', appId, filters)
-  }
+  const baseDataSelectors = createSelector(
+    [selectCollaborators, selectCollaboratorsTotalCount],
+    (collaborators, totalCount) => ({
+      collaborators,
+      totalCount,
+    }),
+  )
 
-  @bind
-  baseDataSelector(state) {
-    const { appId } = this.props.match.params
-    const id = { id: appId }
+  const baseDataSelector = useCallback(
+    state => baseDataSelectors(state, appId),
+    [baseDataSelectors, appId],
+  )
 
-    return {
-      collaborators: selectCollaborators(state, id),
-      fetching: selectCollaboratorsFetching(state),
-      totalCount: selectCollaboratorsTotalCount(state, id),
-      error: selectCollaboratorsError(state),
-    }
-  }
-
-  render() {
-    return (
-      <Container>
-        <Row>
-          <IntlHelmet title={sharedMessages.collaborators} />
-          <Col>
-            <CollaboratorsTable
-              pageSize={PAGE_SIZES.REGULAR}
-              baseDataSelector={this.baseDataSelector}
-              getItemsAction={this.getCollaboratorsList}
-            />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Container>
+      <Row>
+        <IntlHelmet title={sharedMessages.collaborators} />
+        <Col>
+          <CollaboratorsTable baseDataSelector={baseDataSelector} getItemsAction={getItemsAction} />
+        </Col>
+      </Row>
+    </Container>
+  )
 }
+
+export default ApplicationCollaboratorsList

@@ -26,7 +26,7 @@ import (
 
 // DefaultIdentityServerConfig is the default configuration for the Identity Server.
 var DefaultIdentityServerConfig = identityserver.Config{
-	DatabaseURI: "postgresql://root@localhost:26257/ttn_lorawan_dev?sslmode=disable",
+	DatabaseURI: "postgresql://root:root@localhost:5432/ttn_lorawan_dev?sslmode=disable",
 	OAuth: oauth.Config{
 		Mount: "/oauth",
 		UI: oauth.UIConfig{
@@ -38,9 +38,10 @@ var DefaultIdentityServerConfig = identityserver.Config{
 				AssetsBaseURL: shared.DefaultAssetsBaseURL,
 				IconPrefix:    "oauth-",
 				CSSFiles:      []string{"account.css"},
-				JSFiles:       []string{"account.js"},
+				JSFiles:       []string{"libs.bundle.js", "account.js"},
 			},
 			FrontendConfig: oauth.FrontendConfig{
+				DocumentationBaseURL: "https://thethingsindustries.com/docs",
 				StackConfig: oauth.StackConfig{
 					IS: webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
 				},
@@ -63,6 +64,7 @@ func init() {
 	DefaultIdentityServerConfig.Email.Network.Name = DefaultIdentityServerConfig.OAuth.UI.SiteName
 	DefaultIdentityServerConfig.Email.Network.IdentityServerURL = shared.DefaultOAuthPublicURL
 	DefaultIdentityServerConfig.Email.Network.ConsoleURL = shared.DefaultConsolePublicURL
+	DefaultIdentityServerConfig.Email.Network.AssetsBaseURL = shared.DefaultPublicURL + shared.DefaultHTTPConfig.Static.Mount
 	DefaultIdentityServerConfig.ProfilePicture.Bucket = "profile_pictures"
 	DefaultIdentityServerConfig.ProfilePicture.BucketURL = path.Join(shared.DefaultAssetsBaseURL, "blob", "profile_pictures")
 	DefaultIdentityServerConfig.ProfilePicture.UseGravatar = true
@@ -72,6 +74,7 @@ func init() {
 	DefaultIdentityServerConfig.UserRights.CreateClients = true
 	DefaultIdentityServerConfig.UserRights.CreateGateways = true
 	DefaultIdentityServerConfig.UserRights.CreateOrganizations = true
+	DefaultIdentityServerConfig.CollaboratorRights.SetOthersAsContacts = true
 	DefaultIdentityServerConfig.LoginTokens.TokenTTL = time.Hour
 	DefaultIdentityServerConfig.Delete.Restore = 24 * time.Hour
 }

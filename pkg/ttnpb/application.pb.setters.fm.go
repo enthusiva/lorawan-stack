@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *Application) SetFields(src *Application, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -15,19 +10,26 @@ func (dst *Application) SetFields(src *Application, paths ...string) error {
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "created_at":
@@ -37,8 +39,7 @@ func (dst *Application) SetFields(src *Application, paths ...string) error {
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -47,8 +48,7 @@ func (dst *Application) SetFields(src *Application, paths ...string) error {
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "deleted_at":
 			if len(subs) > 0 {
@@ -97,6 +97,96 @@ func (dst *Application) SetFields(src *Application, paths ...string) error {
 			} else {
 				dst.ContactInfo = nil
 			}
+		case "administrative_contact":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationOrUserIdentifiers
+				if (src == nil || src.AdministrativeContact == nil) && dst.AdministrativeContact == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.AdministrativeContact
+				}
+				if dst.AdministrativeContact != nil {
+					newDst = dst.AdministrativeContact
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.AdministrativeContact = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.AdministrativeContact = src.AdministrativeContact
+				} else {
+					dst.AdministrativeContact = nil
+				}
+			}
+		case "technical_contact":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationOrUserIdentifiers
+				if (src == nil || src.TechnicalContact == nil) && dst.TechnicalContact == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.TechnicalContact
+				}
+				if dst.TechnicalContact != nil {
+					newDst = dst.TechnicalContact
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.TechnicalContact = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.TechnicalContact = src.TechnicalContact
+				} else {
+					dst.TechnicalContact = nil
+				}
+			}
+		case "network_server_address":
+			if len(subs) > 0 {
+				return fmt.Errorf("'network_server_address' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.NetworkServerAddress = src.NetworkServerAddress
+			} else {
+				var zero string
+				dst.NetworkServerAddress = zero
+			}
+		case "application_server_address":
+			if len(subs) > 0 {
+				return fmt.Errorf("'application_server_address' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.ApplicationServerAddress = src.ApplicationServerAddress
+			} else {
+				var zero string
+				dst.ApplicationServerAddress = zero
+			}
+		case "join_server_address":
+			if len(subs) > 0 {
+				return fmt.Errorf("'join_server_address' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.JoinServerAddress = src.JoinServerAddress
+			} else {
+				var zero string
+				dst.JoinServerAddress = zero
+			}
+		case "dev_eui_counter":
+			if len(subs) > 0 {
+				return fmt.Errorf("'dev_eui_counter' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.DevEuiCounter = src.DevEuiCounter
+			} else {
+				var zero uint32
+				dst.DevEuiCounter = zero
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -125,25 +215,52 @@ func (dst *Applications) SetFields(src *Applications, paths ...string) error {
 	return nil
 }
 
+func (dst *IssueDevEUIResponse) SetFields(src *IssueDevEUIResponse, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "dev_eui":
+			if len(subs) > 0 {
+				return fmt.Errorf("'dev_eui' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.DevEui = src.DevEui
+			} else {
+				dst.DevEui = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
 func (dst *GetApplicationRequest) SetFields(src *GetApplicationRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "field_mask":
@@ -153,8 +270,7 @@ func (dst *GetApplicationRequest) SetFields(src *GetApplicationRequest, paths ..
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -199,8 +315,7 @@ func (dst *ListApplicationsRequest) SetFields(src *ListApplicationsRequest, path
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -256,10 +371,18 @@ func (dst *CreateApplicationRequest) SetFields(src *CreateApplicationRequest, pa
 		case "application":
 			if len(subs) > 0 {
 				var newDst, newSrc *Application
-				if src != nil {
-					newSrc = &src.Application
+				if (src == nil || src.Application == nil) && dst.Application == nil {
+					continue
 				}
-				newDst = &dst.Application
+				if src != nil {
+					newSrc = src.Application
+				}
+				if dst.Application != nil {
+					newDst = dst.Application
+				} else {
+					newDst = &Application{}
+					dst.Application = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -267,17 +390,24 @@ func (dst *CreateApplicationRequest) SetFields(src *CreateApplicationRequest, pa
 				if src != nil {
 					dst.Application = src.Application
 				} else {
-					var zero Application
-					dst.Application = zero
+					dst.Application = nil
 				}
 			}
 		case "collaborator":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationOrUserIdentifiers
-				if src != nil {
-					newSrc = &src.Collaborator
+				if (src == nil || src.Collaborator == nil) && dst.Collaborator == nil {
+					continue
 				}
-				newDst = &dst.Collaborator
+				if src != nil {
+					newSrc = src.Collaborator
+				}
+				if dst.Collaborator != nil {
+					newDst = dst.Collaborator
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.Collaborator = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -285,8 +415,7 @@ func (dst *CreateApplicationRequest) SetFields(src *CreateApplicationRequest, pa
 				if src != nil {
 					dst.Collaborator = src.Collaborator
 				} else {
-					var zero OrganizationOrUserIdentifiers
-					dst.Collaborator = zero
+					dst.Collaborator = nil
 				}
 			}
 
@@ -303,10 +432,18 @@ func (dst *UpdateApplicationRequest) SetFields(src *UpdateApplicationRequest, pa
 		case "application":
 			if len(subs) > 0 {
 				var newDst, newSrc *Application
-				if src != nil {
-					newSrc = &src.Application
+				if (src == nil || src.Application == nil) && dst.Application == nil {
+					continue
 				}
-				newDst = &dst.Application
+				if src != nil {
+					newSrc = src.Application
+				}
+				if dst.Application != nil {
+					newDst = dst.Application
+				} else {
+					newDst = &Application{}
+					dst.Application = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -314,8 +451,7 @@ func (dst *UpdateApplicationRequest) SetFields(src *UpdateApplicationRequest, pa
 				if src != nil {
 					dst.Application = src.Application
 				} else {
-					var zero Application
-					dst.Application = zero
+					dst.Application = nil
 				}
 			}
 		case "field_mask":
@@ -325,8 +461,7 @@ func (dst *UpdateApplicationRequest) SetFields(src *UpdateApplicationRequest, pa
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -342,20 +477,37 @@ func (dst *ListApplicationAPIKeysRequest) SetFields(src *ListApplicationAPIKeysR
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
+			}
+		case "order":
+			if len(subs) > 0 {
+				return fmt.Errorf("'order' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Order = src.Order
+			} else {
+				var zero string
+				dst.Order = zero
 			}
 		case "limit":
 			if len(subs) > 0 {
@@ -391,19 +543,26 @@ func (dst *GetApplicationAPIKeyRequest) SetFields(src *GetApplicationAPIKeyReque
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "key_id":
@@ -411,10 +570,10 @@ func (dst *GetApplicationAPIKeyRequest) SetFields(src *GetApplicationAPIKeyReque
 				return fmt.Errorf("'key_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.KeyID = src.KeyID
+				dst.KeyId = src.KeyId
 			} else {
 				var zero string
-				dst.KeyID = zero
+				dst.KeyId = zero
 			}
 
 		default:
@@ -430,19 +589,26 @@ func (dst *CreateApplicationAPIKeyRequest) SetFields(src *CreateApplicationAPIKe
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "name":
@@ -464,6 +630,15 @@ func (dst *CreateApplicationAPIKeyRequest) SetFields(src *CreateApplicationAPIKe
 			} else {
 				dst.Rights = nil
 			}
+		case "expires_at":
+			if len(subs) > 0 {
+				return fmt.Errorf("'expires_at' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.ExpiresAt = src.ExpiresAt
+			} else {
+				dst.ExpiresAt = nil
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -478,38 +653,107 @@ func (dst *UpdateApplicationAPIKeyRequest) SetFields(src *UpdateApplicationAPIKe
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "api_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *APIKey
-				if src != nil {
-					newSrc = &src.APIKey
+				if (src == nil || src.ApiKey == nil) && dst.ApiKey == nil {
+					continue
 				}
-				newDst = &dst.APIKey
+				if src != nil {
+					newSrc = src.ApiKey
+				}
+				if dst.ApiKey != nil {
+					newDst = dst.ApiKey
+				} else {
+					newDst = &APIKey{}
+					dst.ApiKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.APIKey = src.APIKey
+					dst.ApiKey = src.ApiKey
 				} else {
-					var zero APIKey
-					dst.APIKey = zero
+					dst.ApiKey = nil
 				}
+			}
+		case "field_mask":
+			if len(subs) > 0 {
+				return fmt.Errorf("'field_mask' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FieldMask = src.FieldMask
+			} else {
+				dst.FieldMask = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *DeleteApplicationAPIKeyRequest) SetFields(src *DeleteApplicationAPIKeyRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "application_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.ApplicationIds = src.ApplicationIds
+				} else {
+					dst.ApplicationIds = nil
+				}
+			}
+		case "key_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'key_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.KeyId = src.KeyId
+			} else {
+				var zero string
+				dst.KeyId = zero
 			}
 
 		default:
@@ -525,19 +769,26 @@ func (dst *ListApplicationCollaboratorsRequest) SetFields(src *ListApplicationCo
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "limit":
@@ -560,6 +811,16 @@ func (dst *ListApplicationCollaboratorsRequest) SetFields(src *ListApplicationCo
 				var zero uint32
 				dst.Page = zero
 			}
+		case "order":
+			if len(subs) > 0 {
+				return fmt.Errorf("'order' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Order = src.Order
+			} else {
+				var zero string
+				dst.Order = zero
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -574,37 +835,51 @@ func (dst *GetApplicationCollaboratorRequest) SetFields(src *GetApplicationColla
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "collaborator":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationOrUserIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationOrUserIdentifiers
+				if (src == nil || src.Collaborator == nil) && dst.Collaborator == nil {
+					continue
 				}
-				newDst = &dst.OrganizationOrUserIdentifiers
+				if src != nil {
+					newSrc = src.Collaborator
+				}
+				if dst.Collaborator != nil {
+					newDst = dst.Collaborator
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.Collaborator = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationOrUserIdentifiers = src.OrganizationOrUserIdentifiers
+					dst.Collaborator = src.Collaborator
 				} else {
-					var zero OrganizationOrUserIdentifiers
-					dst.OrganizationOrUserIdentifiers = zero
+					dst.Collaborator = nil
 				}
 			}
 
@@ -621,28 +896,43 @@ func (dst *SetApplicationCollaboratorRequest) SetFields(src *SetApplicationColla
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "collaborator":
 			if len(subs) > 0 {
 				var newDst, newSrc *Collaborator
-				if src != nil {
-					newSrc = &src.Collaborator
+				if (src == nil || src.Collaborator == nil) && dst.Collaborator == nil {
+					continue
 				}
-				newDst = &dst.Collaborator
+				if src != nil {
+					newSrc = src.Collaborator
+				}
+				if dst.Collaborator != nil {
+					newDst = dst.Collaborator
+				} else {
+					newDst = &Collaborator{}
+					dst.Collaborator = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -650,8 +940,68 @@ func (dst *SetApplicationCollaboratorRequest) SetFields(src *SetApplicationColla
 				if src != nil {
 					dst.Collaborator = src.Collaborator
 				} else {
-					var zero Collaborator
-					dst.Collaborator = zero
+					dst.Collaborator = nil
+				}
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *DeleteApplicationCollaboratorRequest) SetFields(src *DeleteApplicationCollaboratorRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "application_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.ApplicationIds = src.ApplicationIds
+				} else {
+					dst.ApplicationIds = nil
+				}
+			}
+		case "collaborator_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationOrUserIdentifiers
+				if (src == nil || src.CollaboratorIds == nil) && dst.CollaboratorIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.CollaboratorIds
+				}
+				if dst.CollaboratorIds != nil {
+					newDst = dst.CollaboratorIds
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.CollaboratorIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.CollaboratorIds = src.CollaboratorIds
+				} else {
+					dst.CollaboratorIds = nil
 				}
 			}
 

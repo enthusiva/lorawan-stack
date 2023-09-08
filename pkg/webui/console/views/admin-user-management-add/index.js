@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,89 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
-import { connect } from 'react-redux'
-import { Container, Col, Row } from 'react-grid-system'
-import bind from 'autobind-decorator'
-import { push } from 'connected-react-router'
+import React from 'react'
 
-import PageTitle from '@ttn-lw/components/page-title'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
-import withRequest from '@ttn-lw/lib/components/with-request'
+import RequireRequest from '@ttn-lw/lib/components/require-request'
 
-import UserDataForm from '@console/components/user-data-form'
+import UserDataFormAdd from '@console/containers/user-data-form/add'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import attachPromise from '@ttn-lw/lib/store/actions/attach-promise'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
-import { createUser } from '@console/store/actions/users'
 import { getIsConfiguration } from '@console/store/actions/identity-server'
 
-import {
-  selectPasswordRequirements,
-  selectIsConfigurationFetching,
-} from '@console/store/selectors/identity-server'
+const UserManagementAdd = () => {
+  useBreadcrumbs(
+    'admin-panel.user-management.add',
+    <Breadcrumb path={`/admin-panel/user-management/add`} content={sharedMessages.add} />,
+  )
 
-@connect(
-  state => ({
-    passwordRequirements: selectPasswordRequirements(state),
-    fetching: selectIsConfigurationFetching(state),
-  }),
-  {
-    createUser: attachPromise(createUser),
-    navigateToList: () => push(`/admin/user-management`),
-    getConfiguration: () => getIsConfiguration(),
-  },
-)
-@withRequest(({ getConfiguration }) => getConfiguration(), ({ fetching }) => fetching)
-@withBreadcrumb('admin.user-management.add', () => {
-  return <Breadcrumb path={`/admin/user-management/add`} content={sharedMessages.add} />
-})
-export default class UserManagementAdd extends Component {
-  static propTypes = {
-    createUser: PropTypes.func.isRequired,
-    navigateToList: PropTypes.func.isRequired,
-    passwordRequirements: PropTypes.passwordRequirements,
-  }
-
-  static defaultProps = {
-    passwordRequirements: undefined,
-  }
-
-  @bind
-  async onSubmit(values) {
-    const { createUser } = this.props
-
-    return createUser(values)
-  }
-
-  @bind
-  onSubmitSuccess(response) {
-    const { navigateToList } = this.props
-
-    navigateToList()
-  }
-
-  render() {
-    const { passwordRequirements } = this.props
-
-    return (
-      <Container>
-        <PageTitle title={sharedMessages.userAdd} />
-        <Row>
-          <Col lg={8} md={12}>
-            <UserDataForm
-              passwordRequirements={passwordRequirements}
-              onSubmit={this.onSubmit}
-              onSubmitSuccess={this.onSubmitSuccess}
-              onSubmitFailure={this.onSubmitFailure}
-            />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <RequireRequest requestAction={getIsConfiguration()}>
+      <UserDataFormAdd />
+    </RequireRequest>
+  )
 }
+
+export default UserManagementAdd

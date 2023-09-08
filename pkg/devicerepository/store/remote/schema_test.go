@@ -15,52 +15,22 @@
 package remote
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/devicerepository/store"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v2"
 )
 
 func durationPtr(t time.Duration) *time.Duration { return &t }
 
-func TestDutyCycleFromFloat(t *testing.T) {
-	for _, tc := range []struct {
-		Float float64
-		Enum  ttnpb.AggregatedDutyCycle
-	}{
-		{
-			Float: 1.0,
-			Enum:  ttnpb.DUTY_CYCLE_1,
-		},
-		{
-			Float: 0.5,
-			Enum:  ttnpb.DUTY_CYCLE_2,
-		},
-		{
-			Float: 0.25,
-			Enum:  ttnpb.DUTY_CYCLE_4,
-		},
-		{
-			Float: 0.14,
-			Enum:  ttnpb.DUTY_CYCLE_8,
-		},
-		{
-			Float: 1 / (2 << 20),
-			Enum:  ttnpb.DUTY_CYCLE_32768,
-		},
-	} {
-		a := assertions.New(t)
-		a.So(dutyCycleFromFloat(tc.Float), should.Equal, tc.Enum)
-	}
-}
-
-func TestSchema(t *testing.T) {
+func TestProfile(t *testing.T) {
 	for _, tc := range []struct {
 		profile  string
 		codec    string
@@ -69,152 +39,138 @@ func TestSchema(t *testing.T) {
 		{
 			profile: "example-1",
 			template: &ttnpb.EndDeviceTemplate{
-				EndDevice: ttnpb.EndDevice{
-					LoRaWANVersion:    ttnpb.MAC_V1_0_2,
-					LoRaWANPHYVersion: ttnpb.PHY_V1_0_2_REV_B,
+				EndDevice: &ttnpb.EndDevice{
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_2,
+					LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_0_2_REV_B,
 					SupportsJoin:      true,
-					MACSettings: &ttnpb.MACSettings{
-						Supports32BitFCnt: &ttnpb.BoolValue{Value: true},
-					},
-					MACState: &ttnpb.MACState{
-						DesiredParameters: ttnpb.MACParameters{
-							MaxEIRP: 14,
-						},
+					MacSettings: &ttnpb.MACSettings{
+						Supports_32BitFCnt: &ttnpb.BoolValue{Value: true},
 					},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"version_ids",
-						"supports_join",
-						"supports_class_b",
-						"supports_class_c",
-						"lorawan_version",
-						"lorawan_phy_version",
-						"mac_settings.supports_32_bit_f_cnt",
-						"mac_state.desired_parameters.max_eirp",
-					},
-				},
+				FieldMask: ttnpb.FieldMask(
+					"version_ids",
+					"supports_join",
+					"supports_class_b",
+					"supports_class_c",
+					"lorawan_version",
+					"lorawan_phy_version",
+					"mac_settings.supports_32_bit_f_cnt",
+				),
 			},
 		},
 		{
 			profile: "example-2",
 			codec:   "codec",
 			template: &ttnpb.EndDeviceTemplate{
-				EndDevice: ttnpb.EndDevice{
-					LoRaWANVersion:    ttnpb.MAC_V1_1,
-					LoRaWANPHYVersion: ttnpb.PHY_V1_1_REV_B,
+				EndDevice: &ttnpb.EndDevice{
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_1,
+					LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_1_REV_B,
 					Formatters: &ttnpb.MessagePayloadFormatters{
 						UpFormatter:   ttnpb.PayloadFormatter_FORMATTER_REPOSITORY,
 						DownFormatter: ttnpb.PayloadFormatter_FORMATTER_REPOSITORY,
 					},
-					MACSettings: &ttnpb.MACSettings{
-						Rx1Delay:          &ttnpb.RxDelayValue{Value: ttnpb.RX_DELAY_1},
+					MacSettings: &ttnpb.MACSettings{
+						Rx1Delay:          &ttnpb.RxDelayValue{Value: ttnpb.RxDelay_RX_DELAY_1},
 						Rx1DataRateOffset: &ttnpb.DataRateOffsetValue{Value: ttnpb.DataRateOffset_DATA_RATE_OFFSET_0},
-						Rx2DataRateIndex:  &ttnpb.DataRateIndexValue{Value: ttnpb.DATA_RATE_3},
-						Rx2Frequency:      &ttnpb.FrequencyValue{Value: 86952500},
+						Rx2DataRateIndex:  &ttnpb.DataRateIndexValue{Value: ttnpb.DataRateIndex_DATA_RATE_3},
+						Rx2Frequency:      &ttnpb.FrequencyValue{Value: 869525000},
 						FactoryPresetFrequencies: []uint64{
-							86810000,
-							86830000,
-							86850000,
-							86710000,
-							86730000,
-							86750000,
-							86770000,
-							86790000,
+							868100000,
+							868300000,
+							868500000,
+							867100000,
+							867300000,
+							867500000,
+							867700000,
+							867900000,
 						},
-						Supports32BitFCnt: &ttnpb.BoolValue{Value: true},
+						Supports_32BitFCnt: &ttnpb.BoolValue{Value: true},
 					},
-					MACState: &ttnpb.MACState{
-						DesiredParameters: ttnpb.MACParameters{
-							MaxEIRP: 14,
+					MacState: &ttnpb.MACState{
+						DesiredParameters: &ttnpb.MACParameters{
+							MaxEirp: 14,
 						},
 					},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"version_ids",
-						"supports_join",
-						"supports_class_b",
-						"supports_class_c",
-						"lorawan_version",
-						"lorawan_phy_version",
-						"formatters",
-						"mac_settings.rx1_delay",
-						"mac_settings.rx1_data_rate_offset",
-						"mac_settings.rx2_data_rate_index",
-						"mac_settings.rx2_frequency",
-						"mac_settings.supports_32_bit_f_cnt",
-						"mac_settings.factory_preset_frequencies",
-						"mac_state.desired_parameters.max_eirp",
-					},
-				},
+				FieldMask: ttnpb.FieldMask(
+					"version_ids",
+					"supports_join",
+					"supports_class_b",
+					"supports_class_c",
+					"lorawan_version",
+					"lorawan_phy_version",
+					"formatters",
+					"mac_settings.rx1_delay",
+					"mac_settings.rx1_data_rate_offset",
+					"mac_settings.rx2_data_rate_index",
+					"mac_settings.rx2_frequency",
+					"mac_settings.supports_32_bit_f_cnt",
+					"mac_settings.factory_preset_frequencies",
+					"mac_state.desired_parameters.max_eirp",
+				),
 			},
 		},
 		{
 			profile: "class-b-profile",
 			template: &ttnpb.EndDeviceTemplate{
-				EndDevice: ttnpb.EndDevice{
-					LoRaWANVersion:    ttnpb.MAC_V1_0_2,
-					LoRaWANPHYVersion: ttnpb.PHY_V1_0_2_REV_B,
+				EndDevice: &ttnpb.EndDevice{
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_2,
+					LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_0_2_REV_B,
 					SupportsClassB:    true,
 					SupportsJoin:      true,
-					MACSettings: &ttnpb.MACSettings{
-						ClassBTimeout:         durationPtr(8 * time.Second),
-						PingSlotPeriodicity:   &ttnpb.PingSlotPeriodValue{Value: ttnpb.PING_EVERY_16S},
-						PingSlotDataRateIndex: &ttnpb.DataRateIndexValue{Value: ttnpb.DATA_RATE_3},
-						PingSlotFrequency:     &ttnpb.FrequencyValue{Value: 86830000},
+					MacSettings: &ttnpb.MACSettings{
+						ClassBTimeout:         durationpb.New(8 * time.Second),
+						PingSlotPeriodicity:   &ttnpb.PingSlotPeriodValue{Value: ttnpb.PingSlotPeriod_PING_EVERY_16S},
+						PingSlotDataRateIndex: &ttnpb.DataRateIndexValue{Value: ttnpb.DataRateIndex_DATA_RATE_3},
+						PingSlotFrequency:     &ttnpb.ZeroableFrequencyValue{Value: 868300000},
 					},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"version_ids",
-						"supports_join",
-						"supports_class_b",
-						"supports_class_c",
-						"lorawan_version",
-						"lorawan_phy_version",
-						"mac_settings.class_b_timeout",
-						"mac_settings.ping_slot_data_rate_index",
-						"mac_settings.ping_slot_frequency",
-						"mac_settings.ping_slot_periodicity",
-					},
-				},
+				FieldMask: ttnpb.FieldMask(
+					"version_ids",
+					"supports_join",
+					"supports_class_b",
+					"supports_class_c",
+					"lorawan_version",
+					"lorawan_phy_version",
+					"mac_settings.class_b_timeout",
+					"mac_settings.ping_slot_data_rate_index",
+					"mac_settings.ping_slot_frequency",
+					"mac_settings.ping_slot_periodicity",
+				),
 			},
 		},
 		{
 			profile: "class-c-profile",
 			template: &ttnpb.EndDeviceTemplate{
-				EndDevice: ttnpb.EndDevice{
-					LoRaWANVersion:    ttnpb.MAC_V1_0_2,
-					LoRaWANPHYVersion: ttnpb.PHY_V1_0_2_REV_B,
+				EndDevice: &ttnpb.EndDevice{
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_2,
+					LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_0_2_REV_B,
 					SupportsClassC:    true,
 					SupportsJoin:      true,
-					MACSettings: &ttnpb.MACSettings{
-						ClassCTimeout: durationPtr(64 * time.Second),
+					MacSettings: &ttnpb.MACSettings{
+						ClassCTimeout: durationpb.New(64 * time.Second),
 					},
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"version_ids",
-						"supports_join",
-						"supports_class_b",
-						"supports_class_c",
-						"lorawan_version",
-						"lorawan_phy_version",
-						"mac_settings.class_c_timeout",
-					},
-				},
+				FieldMask: ttnpb.FieldMask(
+					"version_ids",
+					"supports_join",
+					"supports_class_b",
+					"supports_class_c",
+					"lorawan_version",
+					"lorawan_phy_version",
+					"mac_settings.class_c_timeout",
+				),
 			},
 		},
 	} {
 		t.Run(tc.profile, func(t *testing.T) {
 			a := assertions.New(t)
-			b, err := ioutil.ReadFile(filepath.Join("testdata", "vendor", "full-vendor", tc.profile+".yaml"))
+			b, err := os.ReadFile(filepath.Join("testdata", "vendor", "full-vendor", tc.profile+".yaml"))
 			if !a.So(err, should.BeNil) {
 				t.FailNow()
 			}
 
-			profile := &EndDeviceProfile{}
+			profile := &store.EndDeviceProfile{}
 			err = yaml.UnmarshalStrict(b, profile)
 			if !a.So(err, should.BeNil) {
 				t.FailNow()
@@ -222,10 +178,10 @@ func TestSchema(t *testing.T) {
 
 			ids := &ttnpb.EndDeviceVersionIdentifiers{}
 			fwProfile := &ttnpb.EndDeviceModel_FirmwareVersion_Profile{
-				CodecID: tc.codec,
+				CodecId: tc.codec,
 			}
 
-			tc.template.EndDevice.VersionIDs = ids
+			tc.template.EndDevice.VersionIds = ids
 			template, err := profile.ToTemplatePB(ids, fwProfile)
 			a.So(err, should.BeNil)
 			a.So(template, should.Resemble, tc.template)

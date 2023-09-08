@@ -33,9 +33,6 @@ $xs = $cs.m
     justify-content: flex-start
     align-items: center
 
-    .spinner
-      margin-right: $cs.xs
-
 .spinner
   width: $l
   height: $l
@@ -70,15 +67,19 @@ $xs = $cs.m
 
 .message
   color: $tc-subtle-gray
+  margin-left: $cs.xs
 
 .center
-  position: absolute
-  top: ($l * -1) // To achieve visual centering.
-  left: 0
-  right: 0
-  bottom: 0
-  margin: auto
-  height: $l
+  &:not(.inline)
+    position: absolute
+    top: ($l * -1) // To achieve visual centering.
+    left: 0
+    right: 0
+    bottom: 0
+    margin: auto
+    height: $l
+  &.inline
+    justify-content: center
 
   &.small
     height: $s
@@ -98,4 +99,4 @@ $xs = $cs.m
 
   .bar,
   .circle
-    stroke-width: 3.5
+    stroke-width: 3

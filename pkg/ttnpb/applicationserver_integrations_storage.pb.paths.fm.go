@@ -2,7 +2,62 @@
 
 package ttnpb
 
+var ContinuationTokenPayloadFieldPathsNested = []string{
+	"after",
+	"before",
+	"f_port",
+	"field_mask",
+	"last",
+	"last_received_id",
+	"limit",
+	"order",
+}
+
+var ContinuationTokenPayloadFieldPathsTopLevel = []string{
+	"after",
+	"before",
+	"f_port",
+	"field_mask",
+	"last",
+	"last_received_id",
+	"limit",
+	"order",
+}
 var GetStoredApplicationUpRequestFieldPathsNested = []string{
+	"after",
+	"application_ids",
+	"application_ids.application_id",
+	"before",
+	"continuation_token",
+	"end_device_ids",
+	"end_device_ids.application_ids",
+	"end_device_ids.application_ids.application_id",
+	"end_device_ids.dev_addr",
+	"end_device_ids.dev_eui",
+	"end_device_ids.device_id",
+	"end_device_ids.join_eui",
+	"f_port",
+	"field_mask",
+	"last",
+	"limit",
+	"order",
+	"type",
+}
+
+var GetStoredApplicationUpRequestFieldPathsTopLevel = []string{
+	"after",
+	"application_ids",
+	"before",
+	"continuation_token",
+	"end_device_ids",
+	"f_port",
+	"field_mask",
+	"last",
+	"limit",
+	"order",
+	"type",
+}
+var GetStoredApplicationUpCountRequestFieldPathsNested = []string{
 	"after",
 	"application_ids",
 	"application_ids.application_id",
@@ -15,20 +70,23 @@ var GetStoredApplicationUpRequestFieldPathsNested = []string{
 	"end_device_ids.device_id",
 	"end_device_ids.join_eui",
 	"f_port",
-	"field_mask",
-	"limit",
-	"order",
+	"last",
 	"type",
 }
 
-var GetStoredApplicationUpRequestFieldPathsTopLevel = []string{
+var GetStoredApplicationUpCountRequestFieldPathsTopLevel = []string{
 	"after",
 	"application_ids",
 	"before",
 	"end_device_ids",
 	"f_port",
-	"field_mask",
-	"limit",
-	"order",
+	"last",
 	"type",
+}
+var GetStoredApplicationUpCountResponseFieldPathsNested = []string{
+	"count",
+}
+
+var GetStoredApplicationUpCountResponseFieldPathsTopLevel = []string{
+	"count",
 }

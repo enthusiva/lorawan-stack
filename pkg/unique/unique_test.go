@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
@@ -29,34 +29,34 @@ import (
 
 func TestValidity(t *testing.T) {
 	eui := types.EUI64{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01}
-	for _, tc := range []ttnpb.Identifiers{
+	for _, tc := range []ttnpb.IDStringer{
 		nil,
 		(*ttnpb.ApplicationIdentifiers)(nil),
-		ttnpb.ApplicationIdentifiers{},
+		&ttnpb.ApplicationIdentifiers{},
 		(*ttnpb.ClientIdentifiers)(nil),
-		ttnpb.ClientIdentifiers{},
+		&ttnpb.ClientIdentifiers{},
 		(*ttnpb.EndDeviceIdentifiers)(nil),
-		ttnpb.EndDeviceIdentifiers{},
+		&ttnpb.EndDeviceIdentifiers{},
 		&ttnpb.EndDeviceIdentifiers{
-			ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "foo"},
-			DevEUI:                 &eui,
+			ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "foo"},
+			DevEui:         eui.Bytes(),
 		},
-		ttnpb.EndDeviceIdentifiers{
-			ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: "foo"},
-			DevEUI:                 &eui,
+		&ttnpb.EndDeviceIdentifiers{
+			ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: "foo"},
+			DevEui:         eui.Bytes(),
 		},
 		(*ttnpb.GatewayIdentifiers)(nil),
-		ttnpb.GatewayIdentifiers{},
+		&ttnpb.GatewayIdentifiers{},
 		&ttnpb.GatewayIdentifiers{
-			EUI: &eui,
+			Eui: eui.Bytes(),
 		},
-		ttnpb.GatewayIdentifiers{
-			EUI: &eui,
+		&ttnpb.GatewayIdentifiers{
+			Eui: eui.Bytes(),
 		},
 		(*ttnpb.OrganizationIdentifiers)(nil),
-		ttnpb.OrganizationIdentifiers{},
+		&ttnpb.OrganizationIdentifiers{},
 		(*ttnpb.UserIdentifiers)(nil),
-		ttnpb.UserIdentifiers{},
+		&ttnpb.UserIdentifiers{},
 	} {
 		t.Run(fmt.Sprintf("%T", tc), func(t *testing.T) {
 			a := assertions.New(t)
@@ -67,96 +67,61 @@ func TestValidity(t *testing.T) {
 
 func TestRoundtrip(t *testing.T) {
 	for _, tc := range []struct {
-		ID       ttnpb.Identifiers
+		ID       ttnpb.IDStringer
 		Expected string
-		Parser   func(string) (ttnpb.Identifiers, error)
+		Parser   func(string) (ttnpb.IDStringer, error)
 	}{
 		{
-			ttnpb.ApplicationIdentifiers{ApplicationID: "foo"},
+			&ttnpb.ApplicationIdentifiers{ApplicationId: "foo"},
 			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToApplicationID(uid) },
+			func(uid string) (ttnpb.IDStringer, error) { return ToApplicationID(uid) },
 		},
 		{
-			&ttnpb.ApplicationIdentifiers{ApplicationID: "foo"},
+			&ttnpb.ClientIdentifiers{ClientId: "foo"},
 			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToApplicationID(uid) },
-		},
-		{
-			ttnpb.ClientIdentifiers{ClientID: "foo"},
-			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToClientID(uid) },
-		},
-		{
-			&ttnpb.ClientIdentifiers{ClientID: "foo"},
-			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToClientID(uid) },
-		},
-		{
-			ttnpb.EndDeviceIdentifiers{
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-					ApplicationID: "foo-app",
-				},
-				DeviceID: "foo-device",
-			},
-			"foo-app.foo-device",
-			func(uid string) (ttnpb.Identifiers, error) { return ToDeviceID(uid) },
+			func(uid string) (ttnpb.IDStringer, error) { return ToClientID(uid) },
 		},
 		{
 			&ttnpb.EndDeviceIdentifiers{
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-					ApplicationID: "foo-app",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{
+					ApplicationId: "foo-app",
 				},
-				DeviceID: "foo-device",
+				DeviceId: "foo-device",
 			},
 			"foo-app.foo-device",
-			func(uid string) (ttnpb.Identifiers, error) { return ToDeviceID(uid) },
+			func(uid string) (ttnpb.IDStringer, error) { return ToDeviceID(uid) },
 		},
 		{
-			ttnpb.GatewayIdentifiers{GatewayID: "foo"},
+			&ttnpb.GatewayIdentifiers{GatewayId: "foo"},
 			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToGatewayID(uid) },
+			func(uid string) (ttnpb.IDStringer, error) { return ToGatewayID(uid) },
 		},
 		{
-			&ttnpb.GatewayIdentifiers{GatewayID: "foo"},
+			&ttnpb.OrganizationIdentifiers{OrganizationId: "foo"},
 			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToGatewayID(uid) },
+			func(uid string) (ttnpb.IDStringer, error) { return ToOrganizationID(uid) },
 		},
 		{
-			ttnpb.OrganizationIdentifiers{OrganizationID: "foo"},
+			&ttnpb.UserIdentifiers{UserId: "foo"},
 			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToOrganizationID(uid) },
-		},
-		{
-			&ttnpb.OrganizationIdentifiers{OrganizationID: "foo"},
-			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToOrganizationID(uid) },
-		},
-		{
-			ttnpb.UserIdentifiers{UserID: "foo"},
-			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToUserID(uid) },
-		},
-		{
-			&ttnpb.UserIdentifiers{UserID: "foo"},
-			"foo",
-			func(uid string) (ttnpb.Identifiers, error) { return ToUserID(uid) },
+			func(uid string) (ttnpb.IDStringer, error) { return ToUserID(uid) },
 		},
 	} {
 		t.Run(fmt.Sprintf("%T", tc.ID), func(t *testing.T) {
 			a := assertions.New(t)
 			a.So(ID(test.Context(), tc.ID), should.Equal, tc.Expected)
 			if id, ok := tc.ID.(interface {
-				EntityIdentifiers() *ttnpb.EntityIdentifiers
+				GetEntityIdentifiers() *ttnpb.EntityIdentifiers
 			}); ok {
-				wrapped := id.EntityIdentifiers()
+				wrapped := id.GetEntityIdentifiers()
 				a.So(ID(test.Context(), wrapped), should.Equal, tc.Expected)
-				a.So(ID(test.Context(), *wrapped), should.Equal, tc.Expected)
 			}
 			a.So(ID(test.Context(), tc.ID), should.Equal, tc.Expected)
 			if tc.Parser != nil {
 				parsed, err := tc.Parser(tc.Expected)
 				if a.So(err, should.BeNil) {
-					a.So(parsed.EntityIdentifiers(), should.Resemble, tc.ID.EntityIdentifiers())
+					a.So(parsed.EntityType(), should.Resemble, tc.ID.EntityType())
+					a.So(parsed.IDString(), should.Resemble, tc.ID.IDString())
 				}
 			}
 		})
@@ -167,33 +132,33 @@ func TestValidatorForIdentifiers(t *testing.T) {
 	a := assertions.New(t)
 	for _, run := range []struct {
 		Name   string
-		ID     func(string) ttnpb.Identifiers
-		Parser func(string) (ttnpb.Identifiers, error)
+		ID     func(string) ttnpb.IDStringer
+		Parser func(string) (ttnpb.IDStringer, error)
 	}{
 		{
 			"ApplicationID",
-			func(uid string) ttnpb.Identifiers { return ttnpb.ApplicationIdentifiers{ApplicationID: uid} },
-			func(uid string) (ttnpb.Identifiers, error) { return ToApplicationID(uid) },
+			func(uid string) ttnpb.IDStringer { return &ttnpb.ApplicationIdentifiers{ApplicationId: uid} },
+			func(uid string) (ttnpb.IDStringer, error) { return ToApplicationID(uid) },
 		},
 		{
-			"ClientID",
-			func(uid string) ttnpb.Identifiers { return ttnpb.ClientIdentifiers{ClientID: uid} },
-			func(uid string) (ttnpb.Identifiers, error) { return ToClientID(uid) },
+			"ClientId",
+			func(uid string) ttnpb.IDStringer { return &ttnpb.ClientIdentifiers{ClientId: uid} },
+			func(uid string) (ttnpb.IDStringer, error) { return ToClientID(uid) },
 		},
 		{
 			"GatewayID",
-			func(uid string) ttnpb.Identifiers { return ttnpb.GatewayIdentifiers{GatewayID: uid} },
-			func(uid string) (ttnpb.Identifiers, error) { return ToGatewayID(uid) },
+			func(uid string) ttnpb.IDStringer { return &ttnpb.GatewayIdentifiers{GatewayId: uid} },
+			func(uid string) (ttnpb.IDStringer, error) { return ToGatewayID(uid) },
 		},
 		{
 			"OrganizationID",
-			func(uid string) ttnpb.Identifiers { return ttnpb.OrganizationIdentifiers{OrganizationID: uid} },
-			func(uid string) (ttnpb.Identifiers, error) { return ToOrganizationID(uid) },
+			func(uid string) ttnpb.IDStringer { return &ttnpb.OrganizationIdentifiers{OrganizationId: uid} },
+			func(uid string) (ttnpb.IDStringer, error) { return ToOrganizationID(uid) },
 		},
 		{
 			"UserID",
-			func(uid string) ttnpb.Identifiers { return ttnpb.UserIdentifiers{UserID: uid} },
-			func(uid string) (ttnpb.Identifiers, error) { return ToUserID(uid) },
+			func(uid string) ttnpb.IDStringer { return &ttnpb.UserIdentifiers{UserId: uid} },
+			func(uid string) (ttnpb.IDStringer, error) { return ToUserID(uid) },
 		},
 	} {
 		for _, tc := range []struct {
@@ -249,7 +214,12 @@ func TestValidatorForIdentifiers(t *testing.T) {
 			{
 				"InvalidMinLength",
 				"id",
-				errors.IsInvalidArgument,
+				func(err error) bool {
+					if run.Name == "UserID" {
+						return err == nil
+					}
+					return errors.IsInvalidArgument(err)
+				},
 			},
 			{
 				"InvalidMaxLength",
@@ -275,7 +245,6 @@ func TestValidatorForIdentifiers(t *testing.T) {
 			})
 		}
 	}
-
 }
 
 func TestValidatorForDeviceIDs(t *testing.T) {
@@ -290,10 +259,10 @@ func TestValidatorForDeviceIDs(t *testing.T) {
 			"ValidID",
 			"foo-app.foo-device",
 			ttnpb.EndDeviceIdentifiers{
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-					ApplicationID: "foo-app",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{
+					ApplicationId: "foo-app",
 				},
-				DeviceID: "foo-device",
+				DeviceId: "foo-device",
 			},
 			nil,
 		},
@@ -301,10 +270,10 @@ func TestValidatorForDeviceIDs(t *testing.T) {
 			"ValidAppIDValidMinLength",
 			"foo-app.foo",
 			ttnpb.EndDeviceIdentifiers{
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-					ApplicationID: "foo-app",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{
+					ApplicationId: "foo-app",
 				},
-				DeviceID: "foo",
+				DeviceId: "foo",
 			},
 			nil,
 		},
@@ -312,10 +281,10 @@ func TestValidatorForDeviceIDs(t *testing.T) {
 			"ValidAppIDValidMaxLength",
 			"foo-app.ozaj8qs0sait7oudxqbfyx6b14yuahcfrdlb",
 			ttnpb.EndDeviceIdentifiers{
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-					ApplicationID: "foo-app",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{
+					ApplicationId: "foo-app",
 				},
-				DeviceID: "ozaj8qs0sait7oudxqbfyx6b14yuahcfrdlb",
+				DeviceId: "ozaj8qs0sait7oudxqbfyx6b14yuahcfrdlb",
 			},
 			nil,
 		},
@@ -323,10 +292,10 @@ func TestValidatorForDeviceIDs(t *testing.T) {
 			"ValidAppIDValidNumerics",
 			"foo-app.1d1",
 			ttnpb.EndDeviceIdentifiers{
-				ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-					ApplicationID: "foo-app",
+				ApplicationIds: &ttnpb.ApplicationIdentifiers{
+					ApplicationId: "foo-app",
 				},
-				DeviceID: "1d1",
+				DeviceId: "1d1",
 			},
 			nil,
 		},

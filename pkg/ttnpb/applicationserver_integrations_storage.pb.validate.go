@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,166 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
 
-// define the regex for a UUID once up-front
-var _applicationserver_integrations_storage_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+// ValidateFields checks the field values on ContinuationTokenPayload with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *ContinuationTokenPayload) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = ContinuationTokenPayloadFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "limit":
+
+			if v, ok := interface{}(m.GetLimit()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ContinuationTokenPayloadValidationError{
+						field:  "limit",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "after":
+
+			if v, ok := interface{}(m.GetAfter()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ContinuationTokenPayloadValidationError{
+						field:  "after",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "before":
+
+			if v, ok := interface{}(m.GetBefore()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ContinuationTokenPayloadValidationError{
+						field:  "before",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "f_port":
+
+			if v, ok := interface{}(m.GetFPort()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ContinuationTokenPayloadValidationError{
+						field:  "f_port",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "order":
+			// no validation rules for Order
+		case "field_mask":
+
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ContinuationTokenPayloadValidationError{
+						field:  "field_mask",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "last":
+
+			if v, ok := interface{}(m.GetLast()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ContinuationTokenPayloadValidationError{
+						field:  "last",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "last_received_id":
+			// no validation rules for LastReceivedId
+		default:
+			return ContinuationTokenPayloadValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// ContinuationTokenPayloadValidationError is the validation error returned by
+// ContinuationTokenPayload.ValidateFields if the designated constraints
+// aren't met.
+type ContinuationTokenPayloadValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e ContinuationTokenPayloadValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e ContinuationTokenPayloadValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e ContinuationTokenPayloadValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e ContinuationTokenPayloadValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e ContinuationTokenPayloadValidationError) ErrorName() string {
+	return "ContinuationTokenPayloadValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e ContinuationTokenPayloadValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sContinuationTokenPayload.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = ContinuationTokenPayloadValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = ContinuationTokenPayloadValidationError{}
 
 // ValidateFields checks the field values on GetStoredApplicationUpRequest with
 // the rules defined in the proto definition for this message. If any rules
@@ -52,7 +207,7 @@ func (m *GetStoredApplicationUpRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(m.GetApplicationIDs()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetStoredApplicationUpRequestValidationError{
 						field:  "application_ids",
@@ -64,7 +219,7 @@ func (m *GetStoredApplicationUpRequest) ValidateFields(paths ...string) error {
 
 		case "end_device_ids":
 
-			if v, ok := interface{}(m.GetEndDeviceIDs()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetEndDeviceIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetStoredApplicationUpRequestValidationError{
 						field:  "end_device_ids",
@@ -79,7 +234,7 @@ func (m *GetStoredApplicationUpRequest) ValidateFields(paths ...string) error {
 			if _, ok := _GetStoredApplicationUpRequest_Type_InLookup[m.GetType()]; !ok {
 				return GetStoredApplicationUpRequestValidationError{
 					field:  "type",
-					reason: "value must be in list [ uplink_message join_accept downlink_ack downlink_nack downlink_sent downlink_failed downlink_queued downlink_queue_invalidated location_solved service_data]",
+					reason: "value must be in list [ uplink_message uplink_normalized join_accept downlink_ack downlink_nack downlink_sent downlink_failed downlink_queued downlink_queue_invalidated location_solved service_data]",
 				}
 			}
 
@@ -142,13 +297,34 @@ func (m *GetStoredApplicationUpRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetStoredApplicationUpRequestValidationError{
 						field:  "field_mask",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
+				}
+			}
+
+		case "last":
+
+			if v, ok := interface{}(m.GetLast()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpRequestValidationError{
+						field:  "last",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "continuation_token":
+
+			if utf8.RuneCountInString(m.GetContinuationToken()) > 16000 {
+				return GetStoredApplicationUpRequestValidationError{
+					field:  "continuation_token",
+					reason: "value length must be at most 16000 runes",
 				}
 			}
 
@@ -222,6 +398,7 @@ var _ interface {
 var _GetStoredApplicationUpRequest_Type_InLookup = map[string]struct{}{
 	"":                           {},
 	"uplink_message":             {},
+	"uplink_normalized":          {},
 	"join_accept":                {},
 	"downlink_ack":               {},
 	"downlink_nack":              {},
@@ -238,3 +415,264 @@ var _GetStoredApplicationUpRequest_Order_InLookup = map[string]struct{}{
 	"-received_at": {},
 	"received_at":  {},
 }
+
+// ValidateFields checks the field values on GetStoredApplicationUpCountRequest
+// with the rules defined in the proto definition for this message. If any
+// rules are violated, an error is returned.
+func (m *GetStoredApplicationUpCountRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = GetStoredApplicationUpCountRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "application_ids":
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpCountRequestValidationError{
+						field:  "application_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "end_device_ids":
+
+			if v, ok := interface{}(m.GetEndDeviceIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpCountRequestValidationError{
+						field:  "end_device_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "type":
+
+			if _, ok := _GetStoredApplicationUpCountRequest_Type_InLookup[m.GetType()]; !ok {
+				return GetStoredApplicationUpCountRequestValidationError{
+					field:  "type",
+					reason: "value must be in list [ uplink_message join_accept downlink_ack downlink_nack downlink_sent downlink_failed downlink_queued downlink_queue_invalidated location_solved service_data]",
+				}
+			}
+
+		case "after":
+
+			if v, ok := interface{}(m.GetAfter()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpCountRequestValidationError{
+						field:  "after",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "before":
+
+			if v, ok := interface{}(m.GetBefore()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpCountRequestValidationError{
+						field:  "before",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "f_port":
+
+			if v, ok := interface{}(m.GetFPort()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpCountRequestValidationError{
+						field:  "f_port",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "last":
+
+			if v, ok := interface{}(m.GetLast()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetStoredApplicationUpCountRequestValidationError{
+						field:  "last",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return GetStoredApplicationUpCountRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// GetStoredApplicationUpCountRequestValidationError is the validation error
+// returned by GetStoredApplicationUpCountRequest.ValidateFields if the
+// designated constraints aren't met.
+type GetStoredApplicationUpCountRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GetStoredApplicationUpCountRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GetStoredApplicationUpCountRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GetStoredApplicationUpCountRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GetStoredApplicationUpCountRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GetStoredApplicationUpCountRequestValidationError) ErrorName() string {
+	return "GetStoredApplicationUpCountRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e GetStoredApplicationUpCountRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGetStoredApplicationUpCountRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GetStoredApplicationUpCountRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GetStoredApplicationUpCountRequestValidationError{}
+
+var _GetStoredApplicationUpCountRequest_Type_InLookup = map[string]struct{}{
+	"":                           {},
+	"uplink_message":             {},
+	"join_accept":                {},
+	"downlink_ack":               {},
+	"downlink_nack":              {},
+	"downlink_sent":              {},
+	"downlink_failed":            {},
+	"downlink_queued":            {},
+	"downlink_queue_invalidated": {},
+	"location_solved":            {},
+	"service_data":               {},
+}
+
+// ValidateFields checks the field values on
+// GetStoredApplicationUpCountResponse with the rules defined in the proto
+// definition for this message. If any rules are violated, an error is returned.
+func (m *GetStoredApplicationUpCountResponse) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = GetStoredApplicationUpCountResponseFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "count":
+			// no validation rules for Count
+		default:
+			return GetStoredApplicationUpCountResponseValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// GetStoredApplicationUpCountResponseValidationError is the validation error
+// returned by GetStoredApplicationUpCountResponse.ValidateFields if the
+// designated constraints aren't met.
+type GetStoredApplicationUpCountResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GetStoredApplicationUpCountResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GetStoredApplicationUpCountResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GetStoredApplicationUpCountResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GetStoredApplicationUpCountResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GetStoredApplicationUpCountResponseValidationError) ErrorName() string {
+	return "GetStoredApplicationUpCountResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e GetStoredApplicationUpCountResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGetStoredApplicationUpCountResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GetStoredApplicationUpCountResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GetStoredApplicationUpCountResponseValidationError{}

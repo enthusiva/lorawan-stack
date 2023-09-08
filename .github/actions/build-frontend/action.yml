@@ -1,0 +1,30 @@
+name: Build Frontend
+description: Build Frontend
+inputs:
+  production-sourcemaps:
+    description: Generate production sourcemaps
+    required: true
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Initialize public folder cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          public
+          .cache/babel
+        key: ${{ runner.os }}-build-frontend-${{ hashFiles('pkg/webui/**', 'sdk/js/**/*.js', 'sdk/js/generated/*.json', 'config/babel.config.json', 'config/webpack.config.babel.js', 'package.json', 'yarn.lock', 'sdk/js/yarn.lock')}}
+    - name: Build DLLs
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: tools/bin/mage js:buildDll
+      env:
+        WEBPACK_GENERATE_PRODUCTION_SOURCEMAPS: ${{ inputs.production-sourcemaps }}
+    - name: Build Frontend
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: tools/bin/mage js:build
+      env:
+        WEBPACK_GENERATE_PRODUCTION_SOURCEMAPS: ${{ inputs.production-sourcemaps }}

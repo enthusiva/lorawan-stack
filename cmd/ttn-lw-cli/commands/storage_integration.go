@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
@@ -75,13 +76,53 @@ var (
 			if err != nil {
 				return err
 			}
-			req = req.WithEndDeviceIDs(ids)
+			req = req.WithEndDeviceIds(ids)
 			client, err := ttnpb.NewApplicationUpStorageClient(as).GetStoredApplicationUp(ctx, req)
 			if err != nil {
 				return err
 			}
+			if err := getStoredUp(cmd, args, client, os.Stdout); err != nil {
+				return err
+			}
 
-			return getStoredUp(cmd, args, client, os.Stdout)
+			md, err := client.Header()
+			if err != nil {
+				return err
+			}
+
+			token, err := newContinuationTokenFromMD(md)
+			if errors.IsUnavailable(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, token)
+		},
+	}
+	endDeviceStorageCountCommand = &cobra.Command{
+		Use:   "count [application-id] [device-id]",
+		Short: "Count stored upstream messages",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			req, err := countStoredUpRequest(cmd.Flags())
+			if err != nil {
+				return err
+			}
+			ids, err := getEndDeviceID(cmd.Flags(), args, true)
+			if err != nil {
+				return err
+			}
+			req = req.WithEndDeviceIds(ids)
+			resp, err := ttnpb.NewApplicationUpStorageClient(as).GetStoredApplicationUpCount(ctx, req)
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, resp)
 		},
 	}
 
@@ -105,13 +146,54 @@ var (
 			if ids == nil {
 				return err
 			}
-			req = req.WithApplicationIDs(ids)
+			req = req.WithApplicationIds(ids)
 			client, err := ttnpb.NewApplicationUpStorageClient(as).GetStoredApplicationUp(ctx, req)
 			if err != nil {
 				return err
 			}
 
-			return getStoredUp(cmd, args, client, os.Stdout)
+			if err := getStoredUp(cmd, args, client, os.Stdout); err != nil {
+				return err
+			}
+
+			md, err := client.Header()
+			if err != nil {
+				return err
+			}
+
+			token, err := newContinuationTokenFromMD(md)
+			if errors.IsUnavailable(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, token)
+		},
+	}
+	applicationsStorageCountCommand = &cobra.Command{
+		Use:   "count [application-id]",
+		Short: "Count stored upstream messages",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			req, err := countStoredUpRequest(cmd.Flags())
+			if err != nil {
+				return err
+			}
+			ids := getApplicationID(cmd.Flags(), args)
+			if ids == nil {
+				return err
+			}
+			req = req.WithApplicationIds(ids)
+			resp, err := ttnpb.NewApplicationUpStorageClient(as).GetStoredApplicationUpCount(ctx, req)
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, resp)
 		},
 	}
 )
@@ -120,9 +202,15 @@ func init() {
 	endDeviceStorageGetCommand.Flags().AddFlagSet(endDeviceIDFlags())
 	endDeviceStorageGetCommand.Flags().AddFlagSet(getStoredUpFlags())
 	endDevicesStorageCommand.AddCommand(endDeviceStorageGetCommand)
+	endDeviceStorageCountCommand.Flags().AddFlagSet(endDeviceIDFlags())
+	endDeviceStorageCountCommand.Flags().AddFlagSet(countStoredUpFlags())
+	endDevicesStorageCommand.AddCommand(endDeviceStorageCountCommand)
 	endDevicesCommand.AddCommand(endDevicesStorageCommand)
 	applicationsStorageGetCommand.Flags().AddFlagSet(applicationIDFlags())
 	applicationsStorageGetCommand.Flags().AddFlagSet(getStoredUpFlags())
 	applicationsStorageCommand.AddCommand(applicationsStorageGetCommand)
+	applicationsStorageCountCommand.Flags().AddFlagSet(applicationIDFlags())
+	applicationsStorageCountCommand.Flags().AddFlagSet(countStoredUpFlags())
+	applicationsStorageCommand.AddCommand(applicationsStorageCountCommand)
 	applicationsCommand.AddCommand(applicationsStorageCommand)
 }

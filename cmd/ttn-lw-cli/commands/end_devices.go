@@ -15,18 +15,14 @@
 package commands
 
 import (
-	"bufio"
+	"bytes"
 	"context"
-	"encoding/hex"
-	"io/ioutil"
-	"mime"
+	"crypto/rand"
+	"fmt"
+	stdio "io"
 	"os"
-	"path"
 	"strings"
 
-	stdio "io"
-
-	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -34,21 +30,35 @@ import (
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
-	"go.thethings.network/lorawan-stack/v3/pkg/random"
+	"go.thethings.network/lorawan-stack/v3/pkg/specification/macspec"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"google.golang.org/grpc"
 )
 
 var (
-	selectEndDeviceListFlags = &pflag.FlagSet{}
-	selectEndDeviceFlags     = &pflag.FlagSet{}
-	setEndDeviceFlags        = &pflag.FlagSet{}
-	endDeviceFlattenPaths    = []string{"provisioning_data"}
-	endDevicePictureFlags    = &pflag.FlagSet{}
-	endDeviceLocationFlags   = util.FieldFlags(&ttnpb.Location{}, "location")
+	selectEndDeviceListFlags   = util.NormalizedFlagSet()
+	selectEndDeviceFlags       = util.NormalizedFlagSet()
+	setEndDeviceFlags          = util.NormalizedFlagSet()
+	endDevicePictureFlags      = util.NormalizedFlagSet()
+	endDeviceLocationFlags     = util.NormalizedFlagSet()
+	getDefaultMACSettingsFlags = util.NormalizedFlagSet()
+	allEndDeviceSetFlags       = util.NormalizedFlagSet()
+	allEndDeviceSelectFlags    = util.NormalizedFlagSet()
+	listBandsFlags             = util.NormalizedFlagSet()
+	listPhyVersionFlags        = util.NormalizedFlagSet()
+	getNetIDFlags              = util.NormalizedFlagSet()
+	getDevAddrPrefixesFlags    = util.NormalizedFlagSet()
 
 	selectAllEndDeviceFlags = util.SelectAllFlagSet("end devices")
+	toUnderscore            = strings.NewReplacer("-", "_")
+
+	claimAuthenticationCodePaths = []string{
+		"claim_authentication_code",
+		"claim_authentication_code.value",
+		"claim_authentication_code.valid_from",
+		"claim_authentication_code.valid_to",
+	}
 )
 
 func selectEndDeviceIDFlags() *pflag.FlagSet {
@@ -77,6 +87,9 @@ func addDeprecatedDeviceFlags(flagSet *pflag.FlagSet) {
 	util.DeprecateFlag(flagSet, "pending_session.keys.nwk_s_key", "pending_session.keys.f_nwk_s_int_key")
 	util.DeprecateFlag(flagSet, "session.keys.nwk_s_key.key", "session.keys.f_nwk_s_int_key.key")
 	util.DeprecateFlag(flagSet, "pending_session.keys.nwk_s_key.key", "pending_session.keys.f_nwk_s_int_key.key")
+
+	util.HideFlag(flagSet, "mac_settings.use_adr")
+	util.HideFlag(flagSet, "mac_settings.adr_margin")
 }
 
 func forwardDeprecatedDeviceFlags(flagSet *pflag.FlagSet) {
@@ -88,18 +101,17 @@ func forwardDeprecatedDeviceFlags(flagSet *pflag.FlagSet) {
 }
 
 var (
-	errActivationMode               = errors.DefineInvalidArgument("activation_mode", "invalid activation mode")
 	errConflictingPaths             = errors.DefineInvalidArgument("conflicting_paths", "conflicting set and unset field mask paths")
 	errEndDeviceEUIUpdate           = errors.DefineInvalidArgument("end_device_eui_update", "end device EUIs can not be updated")
 	errEndDeviceKeysWithProvisioner = errors.DefineInvalidArgument("end_device_keys_provisioner", "end device ABP or OTAA keys cannot be set when there is a provisioner")
 	errInconsistentEndDeviceEUI     = errors.DefineInvalidArgument("inconsistent_end_device_eui", "given end device EUIs do not match registered EUIs")
-	errInvalidDataRateIndex         = errors.DefineInvalidArgument("data_rate_index", "Data rate index is invalid")
-	errInvalidMACVerson             = errors.DefineInvalidArgument("mac_version", "LoRaWAN MAC version is invalid")
-	errInvalidPHYVerson             = errors.DefineInvalidArgument("phy_version", "LoRaWAN PHY version is invalid")
+	errInvalidMACVersion            = errors.DefineInvalidArgument("mac_version", "LoRaWAN MAC version is invalid")
+	errInvalidPHYVersion            = errors.DefineInvalidArgument("phy_version", "LoRaWAN PHY version is invalid")
 	errNoEndDeviceEUI               = errors.DefineInvalidArgument("no_end_device_eui", "no end device EUIs set")
+	errInvalidJoinEUI               = errors.DefineInvalidArgument("invalid_join_eui", "invalid JoinEUI")
+	errInvalidDevEUI                = errors.DefineInvalidArgument("invalid_dev_eui", "invalid DevEUI")
+	errInvalidNetID                 = errors.DefineInvalidArgument("invalid_net_id", "invalid NetID")
 	errNoEndDeviceID                = errors.DefineInvalidArgument("no_end_device_id", "no end device ID set")
-	errQRCodeFormat                 = errors.DefineInvalidArgument("qr_code_format", "invalid QR code format")
-	errNoQRCodeTarget               = errors.DefineInvalidArgument("no_qr_code_target", "no QR code target specified")
 )
 
 func getEndDeviceID(flagSet *pflag.FlagSet, args []string, requireID bool) (*ttnpb.EndDeviceIdentifiers, error) {
@@ -119,70 +131,64 @@ func getEndDeviceID(flagSet *pflag.FlagSet, args []string, requireID bool) (*ttn
 		deviceID = args[1]
 	}
 	if applicationID == "" && requireID {
-		return nil, errNoApplicationID
+		return nil, errNoApplicationID.New()
 	}
 	if deviceID == "" && requireID {
-		return nil, errNoEndDeviceID
+		return nil, errNoEndDeviceID.New()
 	}
 	ids := &ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: applicationID},
-		DeviceID:               deviceID,
+		ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: applicationID},
+		DeviceId:       deviceID,
 	}
 	if joinEUIHex, _ := flagSet.GetString("join-eui"); joinEUIHex != "" {
 		var joinEUI types.EUI64
 		if err := joinEUI.UnmarshalText([]byte(joinEUIHex)); err != nil {
-			return nil, err
+			return nil, errInvalidJoinEUI.WithCause(err)
 		}
-		ids.JoinEUI = &joinEUI
+		ids.JoinEui = joinEUI.Bytes()
 	}
 	if devEUIHex, _ := flagSet.GetString("dev-eui"); devEUIHex != "" {
 		var devEUI types.EUI64
 		if err := devEUI.UnmarshalText([]byte(devEUIHex)); err != nil {
-			return nil, err
+			return nil, errInvalidDevEUI.WithCause(err)
 		}
-		ids.DevEUI = &devEUI
+		ids.DevEui = devEUI.Bytes()
 	}
 	return ids, nil
 }
 
-func generateBytes(length int) []byte {
-	b := make([]byte, length)
-	random.Read(b)
-	return b
-}
-
 func generateKey() *types.AES128Key {
 	var key types.AES128Key
-	random.Read(key[:])
+	rand.Read(key[:])
 	return &key
 }
 
-func generateDevAddr(netID types.NetID) (types.DevAddr, error) {
-	nwkAddr := make([]byte, types.NwkAddrLength(netID))
-	random.Read(nwkAddr)
-	nwkAddr[0] &= 0xff >> (8 - types.NwkAddrBits(netID)%8)
-	devAddr, err := types.NewDevAddr(netID, nwkAddr)
-	if err != nil {
-		return types.DevAddr{}, err
-	}
-	return devAddr, nil
-}
-
 var (
-	errJoinServerDisabled    = errors.DefineFailedPrecondition("join_server_disabled", "Join Server is disabled")
-	errNetworkServerDisabled = errors.DefineFailedPrecondition("network_server_disabled", "Network Server is disabled")
+	errJoinServerDisabled = errors.DefineFailedPrecondition(
+		"join_server_disabled",
+		"Join Server is disabled",
+	)
+	errNetworkServerDisabled = errors.DefineFailedPrecondition(
+		"network_server_disabled",
+		"Network Server is disabled",
+	)
+	errEndDeviceClaimInfo = errors.DefineFailedPrecondition(
+		"end_device_claim_info",
+		"get end device claim info from DCS",
+	)
+	errEndDeviceClaim = errors.DefineFailedPrecondition(
+		"end_device_claim",
+		"claim end device",
+	)
+	errEndDeviceClaimGeneratedEUI = errors.DefineInvalidArgument(
+		"claim_generated_eui",
+		"cannot claim end device with a randomly generated DevEUI. Use a valid DevEUI registered with a Join Server",
+	)
+	errClaimingNotSupported = errors.DefineInvalidArgument(
+		"claiming_not_supported",
+		"claiming not supported for JoinEUI `{join_eui}`",
+	)
 )
-
-var searchEndDevicesFlags = func() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-	flagSet.AddFlagSet(searchFlags)
-	// NOTE: These flags need to be named with underscores, not dashes!
-	flagSet.String("dev_eui_contains", "", "")
-	flagSet.String("join_eui_contains", "", "")
-	flagSet.String("dev_addr_contains", "", "")
-	flagSet.Lookup("dev_addr_contains").Hidden = true // Part of the API but not actually supported.
-	return flagSet
-}()
 
 var (
 	endDevicesCommand = &cobra.Command{
@@ -197,7 +203,7 @@ var (
 		PersistentPreRunE: preRun(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !config.NetworkServerEnabled {
-				return errNetworkServerDisabled
+				return errNetworkServerDisabled.New()
 			}
 
 			baseFrequency, _ := cmd.Flags().GetUint32("base-frequency")
@@ -223,7 +229,7 @@ var (
 
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectEndDeviceListFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.EndDeviceRegistry/List"].Allowed)
@@ -234,11 +240,11 @@ var (
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
 			res, err := ttnpb.NewEndDeviceRegistryClient(is).List(ctx, &ttnpb.ListEndDevicesRequest{
-				ApplicationIdentifiers: *appID,
-				FieldMask:              pbtypes.FieldMask{Paths: paths},
-				Limit:                  limit,
-				Page:                   page,
-				Order:                  getOrder(cmd.Flags()),
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask(paths...),
+				Limit:          limit,
+				Page:           page,
+				Order:          getOrder(cmd.Flags()),
 			}, opt)
 			if err != nil {
 				return err
@@ -256,12 +262,13 @@ var (
 
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectEndDeviceListFlags)
 
 			req := &ttnpb.SearchEndDevicesRequest{}
-			if err := util.SetFields(req, searchEndDevicesFlags); err != nil {
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			var (
@@ -269,8 +276,8 @@ var (
 				getTotal func() uint64
 			)
 			req.Limit, req.Page, opt, getTotal = withPagination(cmd.Flags())
-			req.ApplicationIdentifiers = *appID
-			req.FieldMask.Paths = paths
+			req.ApplicationIds = appID
+			req.FieldMask = ttnpb.FieldMask(paths...)
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -316,15 +323,15 @@ var (
 			}
 			logger.WithField("paths", isPaths).Debug("Get end device from Identity Server")
 			device, err := ttnpb.NewEndDeviceRegistryClient(is).Get(ctx, &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: *devID,
-				FieldMask:            pbtypes.FieldMask{Paths: isPaths},
+				EndDeviceIds: devID,
+				FieldMask:    ttnpb.FieldMask(isPaths...),
 			})
 			if err != nil {
 				return err
 			}
 
 			if len(jsPaths) > 0 && device.JoinServerAddress == "" {
-				logger.WithField("paths", jsPaths).Debug("No registered Join Server address, deselecting Join Server paths")
+				logger.WithField("paths", jsPaths).Debug("End Device uses external Join Server, deselecting Join Server paths")
 				jsPaths = nil
 			}
 
@@ -342,20 +349,28 @@ var (
 				jsPaths = nil
 			}
 
-			res, err := getEndDevice(device.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths, true)
+			if len(jsPaths) > 0 && device.ClaimAuthenticationCode.GetValue() != "" {
+				// ClaimAuthenticationCode is already retrieved from the IS. We can unset the related JS paths.
+				jsPaths = ttnpb.ExcludeFields(jsPaths, claimAuthenticationCodePaths...)
+			}
+
+			res, err := getEndDevice(device.Ids, nsPaths, asPaths, jsPaths, true)
 			if err != nil {
 				return err
 			}
 
-			device.SetFields(res, "ids.dev_addr")
-			device.SetFields(res, append(append(nsPaths, asPaths...), jsPaths...)...)
-			if device.CreatedAt.IsZero() || (!res.CreatedAt.IsZero() && res.CreatedAt.Before(res.CreatedAt)) {
+			if err := device.SetFields(res, "ids.dev_addr"); err != nil {
+				return err
+			}
+			if err := device.SetFields(res, append(append(nsPaths, asPaths...), jsPaths...)...); err != nil {
+				return err
+			}
+			if device.CreatedAt == nil || (res.CreatedAt != nil && ttnpb.StdTime(res.CreatedAt).Before(*ttnpb.StdTime(device.CreatedAt))) {
 				device.CreatedAt = res.CreatedAt
 			}
-			if res.UpdatedAt.After(device.UpdatedAt) {
+			if res.UpdatedAt != nil && ttnpb.StdTime(res.UpdatedAt).After(*ttnpb.StdTime(device.UpdatedAt)) {
 				device.UpdatedAt = res.UpdatedAt
 			}
-
 			return io.Write(os.Stdout, config.OutputFormat, device)
 		},
 	}
@@ -370,18 +385,22 @@ var (
 			if err != nil {
 				return err
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setEndDeviceFlags, attributesFlags())
+			paths := util.UpdateFieldMask(cmd.Flags(), setEndDeviceFlags)
 
 			abp, _ := cmd.Flags().GetBool("abp")
 			multicast, _ := cmd.Flags().GetBool("multicast")
 			abp = abp || multicast
-			var device ttnpb.EndDevice
+			device := &ttnpb.EndDevice{
+				Ids: &ttnpb.EndDeviceIdentifiers{},
+			}
 			if inputDecoder != nil {
-				decodedPaths, err := inputDecoder.Decode(&device)
+				err := inputDecoder.Decode(device)
 				if err != nil {
 					return err
 				}
-				paths = append(paths, ttnpb.FlattenPaths(decodedPaths, endDeviceFlattenPaths)...)
+				decodedPaths := ttnpb.NonZeroFields(device, ttnpb.EndDeviceFieldPathsNestedWithoutWrappers...)
+				decodedPaths = ttnpb.BottomLevelFields(decodedPaths)
+				paths = ttnpb.AddFields(paths, decodedPaths...)
 
 				if abp && device.SupportsJoin {
 					logger.Warn("Reading from standard input, ignoring --abp and --multicast flags")
@@ -414,20 +433,23 @@ var (
 					paths = append(paths, "supports_join")
 				}
 				if withSession, _ := cmd.Flags().GetBool("with-session"); withSession {
-					if device.ProvisionerID != "" {
-						return errEndDeviceKeysWithProvisioner
+					if device.ProvisionerId != "" {
+						return errEndDeviceKeysWithProvisioner.New()
 					}
-					// TODO: Generate DevAddr in cluster NetID (https://github.com/TheThingsNetwork/lorawan-stack/issues/47).
-					devAddr, err := generateDevAddr(types.NetID{})
+					ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
 					if err != nil {
 						return err
 					}
-					device.DevAddr = &devAddr
+					devAddrRes, err := ttnpb.NewNsClient(ns).GenerateDevAddr(ctx, ttnpb.Empty)
+					if err != nil {
+						return err
+					}
+					device.Ids.DevAddr = devAddrRes.DevAddr
 					device.Session = &ttnpb.Session{
-						DevAddr: devAddr,
-						SessionKeys: ttnpb.SessionKeys{
-							FNwkSIntKey: &ttnpb.KeyEnvelope{Key: generateKey()},
-							AppSKey:     &ttnpb.KeyEnvelope{Key: generateKey()},
+						DevAddr: devAddrRes.DevAddr,
+						Keys: &ttnpb.SessionKeys{
+							FNwkSIntKey: &ttnpb.KeyEnvelope{Key: generateKey().Bytes()},
+							AppSKey:     &ttnpb.KeyEnvelope{Key: generateKey().Bytes()},
 						},
 					}
 					paths = append(paths,
@@ -442,14 +464,14 @@ var (
 						return err
 					}
 					if err := macVersion.UnmarshalText([]byte(s)); err != nil {
-						return err
+						return errInvalidMACVersion.WithCause(err)
 					}
 					if err := macVersion.Validate(); err != nil {
-						return errInvalidMACVerson
+						return errInvalidMACVersion.WithCause(err)
 					}
-					if macVersion.Compare(ttnpb.MAC_V1_1) >= 0 {
-						device.Session.SessionKeys.SNwkSIntKey = &ttnpb.KeyEnvelope{Key: generateKey()}
-						device.Session.SessionKeys.NwkSEncKey = &ttnpb.KeyEnvelope{Key: generateKey()}
+					if macspec.UseNwkKey(macVersion) {
+						device.Session.Keys.SNwkSIntKey = &ttnpb.KeyEnvelope{Key: generateKey().Bytes()}
+						device.Session.Keys.NwkSEncKey = &ttnpb.KeyEnvelope{Key: generateKey().Bytes()}
 						paths = append(paths,
 							"session.keys.s_nwk_s_int_key.key",
 							"session.keys.nwk_s_enc_key.key",
@@ -467,17 +489,42 @@ var (
 						paths = append(paths,
 							"join_server_address",
 						)
+						if device.Ids.JoinEui == nil && (devID == nil || devID.JoinEui == nil) {
+							// Get the default JoinEUI for Join Server.
+							logger.WithField("join_server_address", config.JoinServerGRPCAddress).Info("JoinEUI empty but defaults flag is set, fetch default JoinEUI of the Join Server")
+							js, err := api.Dial(ctx, config.JoinServerGRPCAddress)
+							if err != nil {
+								return err
+							}
+							res, err := ttnpb.NewJsClient(js).GetDefaultJoinEUI(ctx, ttnpb.Empty)
+							if err != nil {
+								return err
+							}
+							joinEUI := types.MustEUI64(res.JoinEui)
+							logger.WithField("default_join_eui", joinEUI).Info("Successfully obtained Join Server's default JoinEUI")
+							device.Ids.JoinEui = joinEUI.Bytes()
+						}
 					}
 				}
 				if withKeys, _ := cmd.Flags().GetBool("with-root-keys"); withKeys {
-					if device.ProvisionerID != "" {
-						return errEndDeviceKeysWithProvisioner
+					if device.ProvisionerId != "" {
+						return errEndDeviceKeysWithProvisioner.New()
 					}
-					// TODO: Set JoinEUI and DevEUI (https://github.com/TheThingsNetwork/lorawan-stack/issues/47).
 					device.RootKeys = &ttnpb.RootKeys{
-						RootKeyID: "ttn-lw-cli-generated",
-						AppKey:    &ttnpb.KeyEnvelope{Key: generateKey()},
-						NwkKey:    &ttnpb.KeyEnvelope{Key: generateKey()},
+						RootKeyId: "ttn-lw-cli-generated",
+						AppKey:    &ttnpb.KeyEnvelope{Key: generateKey().Bytes()},
+					}
+					if s, err := setEndDeviceFlags.GetString("lorawan_version"); err == nil && s != "" {
+						var macVersion ttnpb.MACVersion
+						if err := macVersion.UnmarshalText([]byte(s)); err != nil {
+							return errInvalidMACVersion.WithCause(err)
+						}
+						if err := macVersion.Validate(); err != nil {
+							return errInvalidMACVersion.WithCause(err)
+						}
+						if macspec.UseNwkKey(macVersion) {
+							device.RootKeys.NwkKey = &ttnpb.KeyEnvelope{Key: generateKey().Bytes()}
+						}
 					}
 					paths = append(paths,
 						"root_keys.root_key_id",
@@ -486,35 +533,67 @@ var (
 					)
 				}
 			}
-			if withClaimAuthenticationCode, _ := cmd.Flags().GetBool("with-claim-authentication-code"); withClaimAuthenticationCode {
-				device.ClaimAuthenticationCode = &ttnpb.EndDeviceAuthenticationCode{
-					Value: strings.ToUpper(hex.EncodeToString(random.Bytes(4))),
-				}
-				paths = append(paths, "claim_authentication_code")
-			}
-			if hasUpdateDeviceLocationFlags(cmd.Flags()) {
-				updateDeviceLocation(&device, cmd.Flags())
-				paths = append(paths, "locations")
+
+			_, err = device.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
 			}
 
-			if err = util.SetFields(&device, setEndDeviceFlags); err != nil {
-				return err
+			claimOnExternalJS := len(device.ClaimAuthenticationCode.GetValue()) > 0
+
+			if hasUpdateDeviceLocationFlags(cmd.Flags()) {
+				updateDeviceLocation(device, cmd.Flags())
+				paths = append(paths, "locations")
 			}
 
 			device.Attributes = mergeAttributes(device.Attributes, cmd.Flags())
 			if devID != nil {
-				if devID.DeviceID != "" {
-					device.DeviceID = devID.DeviceID
+				if devID.DeviceId != "" {
+					device.Ids.DeviceId = devID.DeviceId
 				}
-				if devID.ApplicationID != "" {
-					device.ApplicationID = devID.ApplicationID
+				if devID.ApplicationIds != nil {
+					device.Ids.ApplicationIds = devID.ApplicationIds
 				}
-				if device.SupportsJoin && devID.JoinEUI != nil {
-					device.JoinEUI = devID.JoinEUI
+				if device.SupportsJoin && devID.JoinEui != nil {
+					device.Ids.JoinEui = devID.JoinEui
 				}
-				if devID.DevEUI != nil {
-					device.DevEUI = devID.DevEUI
+				if devID.DevEui != nil {
+					device.Ids.DevEui = devID.DevEui
 				}
+			}
+			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+
+			application, err := ttnpb.NewApplicationRegistryClient(is).Get(ctx, &ttnpb.GetApplicationRequest{
+				ApplicationIds: devID.ApplicationIds,
+				FieldMask: ttnpb.FieldMask(
+					"network_server_address",
+					"application_server_address",
+					"join_server_address",
+				),
+			})
+			if err != nil {
+				return err
+			}
+
+			compareServerAddressesApplication(application, config)
+
+			requestDevEUI, _ := cmd.Flags().GetBool("request-dev-eui")
+			if requestDevEUI {
+				if claimOnExternalJS {
+					return errEndDeviceClaimGeneratedEUI.New()
+				}
+				logger.Debug("request-dev-eui flag set, requesting a DevEUI")
+				devEUIResponse, err := ttnpb.NewApplicationRegistryClient(is).IssueDevEUI(ctx, devID.ApplicationIds)
+				if err != nil {
+					return err
+				}
+				devEUI := types.MustEUI64(devEUIResponse.DevEui).OrZero()
+				logger.WithField("dev_eui", devEUI.String()).
+					Info("Successfully obtained DevEUI")
+				device.Ids.DevEui = devEUI.Bytes()
 			}
 			newPaths, err := parsePayloadFormatterParameterFlags("formatters", device.Formatters, cmd.Flags())
 			if err != nil {
@@ -522,27 +601,59 @@ var (
 			}
 			paths = append(paths, newPaths...)
 
-			if device.ApplicationID == "" {
-				return errNoApplicationID
+			if device.GetIds().GetApplicationIds().GetApplicationId() == "" {
+				return errNoApplicationID.New()
 			}
-			if device.DeviceID == "" {
-				return errNoEndDeviceID
+			if device.Ids.DeviceId == "" {
+				return errNoEndDeviceID.New()
 			}
 
 			isPaths, nsPaths, asPaths, jsPaths := splitEndDeviceSetPaths(device.SupportsJoin, paths...)
 
-			// Require EUIs for devices that need to be added to the Join Server.
-			if len(jsPaths) > 0 && (device.JoinEUI == nil || device.DevEUI == nil) {
-				return errNoEndDeviceEUI
+			// If CAC is set, attempt to claim the End Device via the DCS instead of registering on the Join Server.
+			if claimOnExternalJS {
+				dcs, err := api.Dial(ctx, config.DeviceClaimingServerGRPCAddress)
+				if err != nil {
+					return err
+				}
+				claimInfoResp, err := ttnpb.NewEndDeviceClaimingServerClient(dcs).GetInfoByJoinEUI(ctx, &ttnpb.GetInfoByJoinEUIRequest{
+					JoinEui: device.Ids.JoinEui,
+				})
+				if err != nil {
+					return errEndDeviceClaimInfo.WithCause(err)
+				}
+				if !claimInfoResp.SupportsClaiming {
+					return errClaimingNotSupported.WithAttributes("join_eui", types.MustEUI64(device.Ids.JoinEui).String())
+				}
+				_, err = ttnpb.NewEndDeviceClaimingServerClient(dcs).Claim(ctx, &ttnpb.ClaimEndDeviceRequest{
+					TargetApplicationIds: device.Ids.ApplicationIds,
+					TargetDeviceId:       device.Ids.DeviceId,
+					SourceDevice: &ttnpb.ClaimEndDeviceRequest_AuthenticatedIdentifiers_{
+						AuthenticatedIdentifiers: &ttnpb.ClaimEndDeviceRequest_AuthenticatedIdentifiers{
+							JoinEui:            device.Ids.JoinEui,
+							DevEui:             device.Ids.DevEui,
+							AuthenticationCode: device.ClaimAuthenticationCode.Value,
+						},
+					},
+				})
+				if err != nil {
+					return errEndDeviceClaim.WithCause(err)
+				}
+				logger.Info("Device successfully claimed on an external Join Server")
+				// Remove Cluster Join Server related paths.
+				jsPaths = []string{}
+				isPaths = ttnpb.ExcludeFields(isPaths, "join_server_address")
+				device.JoinServerAddress = ""
 			}
-
-			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
-			if err != nil {
+			// Require EUIs for devices that need to be added to the Join Server.
+			if len(jsPaths) > 0 && (device.Ids.JoinEui == nil || device.Ids.DevEui == nil) {
+				return errNoEndDeviceEUI.New()
+			}
+			isDevice := &ttnpb.EndDevice{}
+			logger.WithField("paths", isPaths).Debug("Create end device on Identity Server")
+			if err := isDevice.SetFields(device, append(isPaths, "ids")...); err != nil {
 				return err
 			}
-			var isDevice ttnpb.EndDevice
-			logger.WithField("paths", isPaths).Debug("Create end device on Identity Server")
-			isDevice.SetFields(&device, append(isPaths, "ids")...)
 			isRes, err := ttnpb.NewEndDeviceRegistryClient(is).Create(ctx, &ttnpb.CreateEndDeviceRequest{
 				EndDevice: isDevice,
 			})
@@ -550,26 +661,30 @@ var (
 				return err
 			}
 
-			device.SetFields(isRes, append(isPaths, "created_at", "updated_at")...)
+			if err := device.SetFields(isRes, append(isPaths, "created_at", "updated_at")...); err != nil {
+				return err
+			}
 
-			res, err := setEndDevice(&device, nil, nsPaths, asPaths, jsPaths, nil, true, false)
+			res, err := setEndDevice(device, nil, nsPaths, asPaths, jsPaths, nil, true, false)
 			if err != nil {
 				logger.WithError(err).Error("Could not create end device, rolling back...")
-				if err := deleteEndDevice(context.Background(), &device.EndDeviceIdentifiers); err != nil {
+				if err := deleteEndDevice(context.Background(), device.Ids, claimOnExternalJS); err != nil {
 					logger.WithError(err).Error("Could not roll back end device creation")
 				}
 				return err
 			}
 
-			device.SetFields(res, append(append(nsPaths, asPaths...), jsPaths...)...)
-			if device.CreatedAt.IsZero() || (!res.CreatedAt.IsZero() && res.CreatedAt.Before(device.CreatedAt)) {
+			if err := device.SetFields(res, append(append(nsPaths, asPaths...), jsPaths...)...); err != nil {
+				return err
+			}
+			if device.CreatedAt == nil || (res.CreatedAt != nil && ttnpb.StdTime(res.CreatedAt).Before(*ttnpb.StdTime(device.CreatedAt))) {
 				device.CreatedAt = res.CreatedAt
 			}
-			if res.UpdatedAt.After(device.UpdatedAt) {
+			if res.UpdatedAt != nil && ttnpb.StdTime(res.UpdatedAt).After(*ttnpb.StdTime(device.UpdatedAt)) {
 				device.UpdatedAt = res.UpdatedAt
 			}
 
-			return io.Write(os.Stdout, config.OutputFormat, &device)
+			return io.Write(os.Stdout, config.OutputFormat, device)
 		}),
 	}
 	endDevicesSetCommand = &cobra.Command{
@@ -583,7 +698,7 @@ var (
 			if err != nil {
 				return err
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setEndDeviceFlags, attributesFlags(), endDevicePictureFlags)
+			paths := util.UpdateFieldMask(cmd.Flags(), setEndDeviceFlags, endDevicePictureFlags)
 			rawUnsetPaths, _ := cmd.Flags().GetStringSlice("unset")
 			unsetPaths := util.NormalizePaths(rawUnsetPaths)
 
@@ -599,11 +714,14 @@ var (
 				overlapPaths := ttnpb.ExcludeFields(paths, remainingPaths...)
 				return errConflictingPaths.WithAttributes("field_mask_paths", overlapPaths)
 			}
-			var device ttnpb.EndDevice
+			device := &ttnpb.EndDevice{
+				Ids: &ttnpb.EndDeviceIdentifiers{},
+			}
 			if ttnpb.HasAnyField(paths, setEndDeviceToJS...) || ttnpb.HasAnyField(unsetPaths, setEndDeviceToJS...) {
 				device.SupportsJoin = true
 			}
-			if err = util.SetFields(&device, setEndDeviceFlags); err != nil {
+			_, err = device.SetFromFlags(setEndDeviceFlags, "")
+			if err != nil {
 				return err
 			}
 			newPaths, err := parsePayloadFormatterParameterFlags("formatters", device.Formatters, cmd.Flags())
@@ -612,7 +730,7 @@ var (
 			}
 			paths = append(paths, newPaths...)
 			device.Attributes = mergeAttributes(device.Attributes, cmd.Flags())
-			device.EndDeviceIdentifiers = *devID
+			device.Ids = devID
 
 			paths = append(paths, unsetPaths...)
 			isPaths, nsPaths, asPaths, jsPaths := splitEndDeviceSetPaths(device.SupportsJoin, paths...)
@@ -648,46 +766,61 @@ var (
 				return err
 			}
 			logger.WithField("paths", isPaths).Debug("Get end device from Identity Server")
+
+			// Always get the join server address to determine if the device uses an external Join Server.
+			isGetPaths := ttnpb.AddFields(isPaths, "join_server_address")
 			existingDevice, err := ttnpb.NewEndDeviceRegistryClient(is).Get(ctx, &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: *devID,
-				FieldMask:            pbtypes.FieldMask{Paths: ttnpb.ExcludeFields(isPaths, unsetPaths...)},
+				EndDeviceIds: devID,
+				FieldMask:    ttnpb.FieldMask(ttnpb.ExcludeFields(isGetPaths, unsetPaths...)...),
 			})
 			if err != nil {
 				return err
 			}
 
 			// EUIs can not be updated, so we only accept EUI flags if they are equal to the existing ones.
-			if device.JoinEUI != nil {
-				if existingDevice.JoinEUI != nil && *device.JoinEUI != *existingDevice.JoinEUI {
-					return errEndDeviceEUIUpdate
+			if device.Ids.JoinEui != nil {
+				if existingDevice.Ids.JoinEui != nil && !bytes.Equal(device.Ids.JoinEui, existingDevice.Ids.JoinEui) {
+					return errEndDeviceEUIUpdate.New()
 				}
 			} else {
-				device.JoinEUI = existingDevice.JoinEUI
+				device.Ids.JoinEui = existingDevice.Ids.JoinEui
 			}
-			if device.DevEUI != nil {
-				if existingDevice.DevEUI != nil && *device.DevEUI != *existingDevice.DevEUI {
-					return errEndDeviceEUIUpdate
+			if device.Ids.DevEui != nil {
+				if existingDevice.Ids.DevEui != nil && !bytes.Equal(device.Ids.DevEui, existingDevice.Ids.DevEui) {
+					return errEndDeviceEUIUpdate.New()
 				}
 			} else {
-				device.DevEUI = existingDevice.DevEUI
+				device.Ids.DevEui = existingDevice.Ids.DevEui
 			}
 
 			// Require EUIs for devices that need to be updated in the Join Server.
-			if len(jsPaths) > 0 && (device.JoinEUI == nil || device.DevEUI == nil) {
-				return errNoEndDeviceEUI
+			if len(jsPaths) > 0 && (device.Ids.JoinEui == nil || device.Ids.DevEui == nil) {
+				return errNoEndDeviceEUI.New()
+			}
+			nsMismatch, asMismatch, jsMismatch := compareServerAddressesEndDevice(existingDevice, config)
+
+			if nsMismatch || asMismatch {
+				return errAddressMismatchEndDevice.New()
 			}
 
-			if nsMismatch, asMismatch, jsMismatch := compareServerAddressesEndDevice(existingDevice, config); nsMismatch || asMismatch || jsMismatch {
-				return errAddressMismatchEndDevice
+			if len(jsPaths) > 0 && existingDevice.JoinServerAddress == "" {
+				// End Device uses external Join Server. Disable dialing cluster Join Server.
+				// If End Device claim needs to be updated, add those fields here and dial the DCS.
+				logger.WithField("paths", jsPaths).Debug("End Device uses external Join Server, deselecting Join Server paths")
+				jsPaths = []string{}
+			} else if jsMismatch {
+				return errAddressMismatchEndDevice.New()
 			}
 
 			if hasUpdateDeviceLocationFlags(cmd.Flags()) {
-				device.SetFields(existingDevice, "locations")
-				updateDeviceLocation(&device, cmd.Flags())
+				if err := device.SetFields(existingDevice, "locations"); err != nil {
+					return err
+				}
+				updateDeviceLocation(device, cmd.Flags())
 			}
 
 			touch, _ := cmd.Flags().GetBool("touch")
-			res, err := setEndDevice(&device, isPaths, nsPaths, asPaths, jsPaths, unsetPaths, false, touch)
+			res, err := setEndDevice(device, isPaths, nsPaths, asPaths, jsPaths, unsetPaths, false, touch)
 			if err != nil {
 				return err
 			}
@@ -697,14 +830,15 @@ var (
 	}
 	// TODO: Remove (https://github.com/TheThingsNetwork/lorawan-stack/issues/999)
 	endDevicesProvisionCommand = &cobra.Command{
-		Use:   "provision",
-		Short: "Provision end devices using vendor-specific data",
+		Use:    "provision",
+		Short:  "Provision end devices using vendor-specific data (DEPRECATED)",
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logger.Warn("This command is deprecated. Please use `device template from-data` instead")
+			logger.Warn("This command is deprecated. Please use The Things Join Server instead")
 
 			appID := getApplicationID(cmd.Flags(), nil)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 
 			provisionerID, _ := cmd.Flags().GetString("provisioner-id")
@@ -714,32 +848,32 @@ var (
 			}
 
 			req := &ttnpb.ProvisionEndDevicesRequest{
-				ApplicationIdentifiers: *appID,
-				ProvisionerID:          provisionerID,
-				ProvisioningData:       data,
+				ApplicationIds:   appID,
+				ProvisionerId:    provisionerID,
+				ProvisioningData: data,
 			}
 
 			var joinEUI types.EUI64
 			if joinEUIHex, _ := cmd.Flags().GetString("join-eui"); joinEUIHex != "" {
 				if err := joinEUI.UnmarshalText([]byte(joinEUIHex)); err != nil {
-					return err
+					return errInvalidJoinEUI.WithCause(err)
 				}
 			}
 			if inputDecoder != nil {
 				list := &ttnpb.ProvisionEndDevicesRequest_IdentifiersList{
-					JoinEUI: &joinEUI,
+					JoinEui: joinEUI.Bytes(),
 				}
 				for {
 					var ids ttnpb.EndDeviceIdentifiers
-					_, err := inputDecoder.Decode(&ids)
-					if err == stdio.EOF {
+					err := inputDecoder.Decode(&ids)
+					if errors.Is(err, stdio.EOF) {
 						break
 					}
 					if err != nil {
 						return err
 					}
-					ids.ApplicationIdentifiers = *appID
-					list.EndDeviceIDs = append(list.EndDeviceIDs, ids)
+					ids.ApplicationIds = appID
+					list.EndDeviceIds = append(list.EndDeviceIds, &ids)
 				}
 				req.EndDevices = &ttnpb.ProvisionEndDevicesRequest_List{
 					List: list,
@@ -748,18 +882,18 @@ var (
 				if startDevEUIHex, _ := cmd.Flags().GetString("start-dev-eui"); startDevEUIHex != "" {
 					var startDevEUI types.EUI64
 					if err := startDevEUI.UnmarshalText([]byte(startDevEUIHex)); err != nil {
-						return err
+						return errInvalidDevEUI.WithCause(err)
 					}
 					req.EndDevices = &ttnpb.ProvisionEndDevicesRequest_Range{
 						Range: &ttnpb.ProvisionEndDevicesRequest_IdentifiersRange{
-							StartDevEUI: startDevEUI,
-							JoinEUI:     &joinEUI,
+							StartDevEui: startDevEUI.Bytes(),
+							JoinEui:     joinEUI.Bytes(),
 						},
 					}
 				} else {
 					req.EndDevices = &ttnpb.ProvisionEndDevicesRequest_FromData{
 						FromData: &ttnpb.ProvisionEndDevicesRequest_IdentifiersFromData{
-							JoinEUI: &joinEUI,
+							JoinEui: joinEUI.Bytes(),
 						},
 					}
 				}
@@ -775,7 +909,7 @@ var (
 			}
 			for {
 				dev, err := stream.Recv()
-				if err == stdio.EOF {
+				if errors.Is(err, stdio.EOF) {
 					return nil
 				}
 				if err != nil {
@@ -799,7 +933,7 @@ var (
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectEndDeviceFlags)
 
-			isPaths, nsPaths, _, _ := splitEndDeviceGetPaths(paths...)
+			isPaths, nsPaths, asPaths, jsPaths := splitEndDeviceGetPaths(paths...)
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -807,8 +941,8 @@ var (
 			}
 			logger.WithField("paths", isPaths).Debug("Get end device from Identity Server")
 			device, err := ttnpb.NewEndDeviceRegistryClient(is).Get(ctx, &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: *devID,
-				FieldMask:            pbtypes.FieldMask{Paths: isPaths},
+				EndDeviceIds: devID,
+				FieldMask:    ttnpb.FieldMask(isPaths...),
 			})
 			if err != nil {
 				return err
@@ -825,19 +959,88 @@ var (
 			}
 			logger.WithField("paths", nsPaths).Debug("Reset end device to factory defaults on Network Server")
 			nsDevice, err := ttnpb.NewNsEndDeviceRegistryClient(ns).ResetFactoryDefaults(ctx, &ttnpb.ResetAndGetEndDeviceRequest{
-				EndDeviceIdentifiers: *devID,
-				FieldMask:            pbtypes.FieldMask{Paths: nsPaths},
+				EndDeviceIds: devID,
+				FieldMask:    ttnpb.FieldMask(ttnpb.AddFields(nsPaths, "supports_join")...),
 			})
 			if err != nil {
 				return err
 			}
-			device.SetFields(nsDevice, "ids.dev_addr")
-			device.SetFields(nsDevice, ttnpb.AllowedBottomLevelFields(nsPaths, getEndDeviceFromNS)...)
-			if device.CreatedAt.IsZero() || (!nsDevice.CreatedAt.IsZero() && nsDevice.CreatedAt.Before(device.CreatedAt)) {
-				device.CreatedAt = nsDevice.CreatedAt
+			if err = device.SetFields(nsDevice, "ids.dev_addr"); err != nil {
+				return err
 			}
-			if nsDevice.UpdatedAt.After(device.UpdatedAt) {
-				device.UpdatedAt = nsDevice.UpdatedAt
+			if err = device.SetFields(nsDevice, ttnpb.AllowedBottomLevelFields(nsPaths, getEndDeviceFromNS)...); err != nil {
+				return err
+			}
+			device.UpdateTimestamps(nsDevice)
+
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			logger.WithField("paths", asPaths).Debug("Reset end device to factory defaults on Application Server")
+			asDevice, err := ttnpb.NewAsEndDeviceRegistryClient(as).Get(ctx, &ttnpb.GetEndDeviceRequest{
+				EndDeviceIds: devID,
+				FieldMask:    ttnpb.FieldMask(asPaths...),
+			})
+			if err != nil {
+				return err
+			}
+			var fieldsToReset []string
+			if device.SupportsJoin {
+				fieldsToReset = []string{"session", "pending_session"}
+			} else {
+				fieldsToReset = []string{"session.last_a_f_cnt_down"}
+			}
+			if err = asDevice.SetFields(nil, fieldsToReset...); err != nil {
+				return err
+			}
+			_, err = ttnpb.NewAsEndDeviceRegistryClient(as).Set(ctx, &ttnpb.SetEndDeviceRequest{
+				EndDevice: asDevice,
+				FieldMask: ttnpb.FieldMask(asPaths...),
+			})
+			if err != nil {
+				return err
+			}
+			if err := device.SetFields(asDevice, asPaths...); err != nil {
+				return err
+			}
+			device.UpdateTimestamps(asDevice)
+
+			if device.SupportsJoin {
+				js, err := api.Dial(ctx, config.JoinServerGRPCAddress)
+				if err != nil {
+					return err
+				}
+				logger.WithField("paths", jsPaths).Debug("Reset end device to factory defaults on Join Server")
+				jsDevice, err := ttnpb.NewJsEndDeviceRegistryClient(js).Get(ctx, &ttnpb.GetEndDeviceRequest{
+					EndDeviceIds: devID,
+					FieldMask:    ttnpb.FieldMask(jsPaths...),
+				})
+				if err != nil {
+					return err
+				}
+				if err = jsDevice.SetFields(nil, "last_dev_nonce", "used_dev_nonces", "last_join_nonce", "last_rj_count_0", "last_rj_count_1"); err != nil {
+					return err
+				}
+				_, err = ttnpb.NewJsEndDeviceRegistryClient(js).Set(ctx, &ttnpb.SetEndDeviceRequest{
+					EndDevice: jsDevice,
+					FieldMask: ttnpb.FieldMask(jsPaths...),
+				})
+				if err != nil {
+					return err
+				}
+				if err := device.SetFields(jsDevice, jsPaths...); err != nil {
+					return err
+				}
+				device.UpdateTimestamps(jsDevice)
+			}
+
+			// Remove temporary fields (e.g. "supports_join") that were not selected by user
+			joinedPaths := ttnpb.AddFields(isPaths, ttnpb.AddFields(nsPaths, ttnpb.AddFields(asPaths, jsPaths...)...)...)
+			if diff := ttnpb.ExcludeFields(joinedPaths, paths...); len(diff) > 0 {
+				if err := device.SetFields(nil, diff...); err != nil {
+					return err
+				}
 			}
 			return io.Write(os.Stdout, config.OutputFormat, device)
 		},
@@ -857,294 +1060,299 @@ var (
 				return err
 			}
 			existingDevice, err := ttnpb.NewEndDeviceRegistryClient(is).Get(ctx, &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: *devID,
-				FieldMask: pbtypes.FieldMask{Paths: []string{
+				EndDeviceIds: devID,
+				FieldMask: ttnpb.FieldMask(
 					"network_server_address",
 					"application_server_address",
 					"join_server_address",
-				}},
+				),
 			})
 			if err != nil {
 				return err
 			}
 
 			// EUIs must match registered EUIs if set.
-			if devID.JoinEUI != nil {
-				if existingDevice.JoinEUI != nil && *devID.JoinEUI != *existingDevice.JoinEUI {
-					return errInconsistentEndDeviceEUI
+			if devID.JoinEui != nil {
+				if existingDevice.Ids.JoinEui != nil && !bytes.Equal(devID.JoinEui, existingDevice.Ids.JoinEui) {
+					return errInconsistentEndDeviceEUI.New()
 				}
 			} else {
-				devID.JoinEUI = existingDevice.JoinEUI
+				devID.JoinEui = existingDevice.Ids.JoinEui
 			}
-			if devID.DevEUI != nil {
-				if existingDevice.DevEUI != nil && *devID.DevEUI != *existingDevice.DevEUI {
-					return errInconsistentEndDeviceEUI
+			if devID.DevEui != nil {
+				if existingDevice.Ids.DevEui != nil && !bytes.Equal(devID.DevEui, existingDevice.Ids.DevEui) {
+					return errInconsistentEndDeviceEUI.New()
 				}
 			} else {
-				devID.DevEUI = existingDevice.DevEUI
+				devID.DevEui = existingDevice.Ids.DevEui
 			}
 
-			if nsMismatch, asMismatch, jsMismatch := compareServerAddressesEndDevice(existingDevice, config); nsMismatch || asMismatch || jsMismatch {
-				return errAddressMismatchEndDevice
+			var skipClusterJS bool
+			nsMismatch, asMismatch, jsMismatch := compareServerAddressesEndDevice(existingDevice, config)
+
+			if nsMismatch || asMismatch {
+				return errAddressMismatchEndDevice.New()
 			}
 
-			return deleteEndDevice(ctx, devID)
-		},
-	}
-	endDevicesClaimCommand = &cobra.Command{
-		Use:   "claim [application-id]",
-		Short: "Claim an end device (EXPERIMENTAL)",
-		Long: `Claim an end device (EXPERIMENTAL)
-
-The claiming procedure transfers devices from the source application to the
-target application using the Device Claiming Server, thereby transferring
-ownership of the device.
-
-Authentication of device claiming is by the device's JoinEUI, DevEUI and claim
-authentication code as stored in the Join Server. This information is typically
-encoded in a QR code. This command supports claiming by QR code (via stdin), as
-well as providing the claim information through the flags --source-join-eui,
---source-dev-eui, --source-authentication-code.
-
-Claim authentication code validity is controlled by the owner of the device by
-setting the value and optionally a time window when the code is valid. As part
-of the claiming, the claim authentication code is invalidated by default to
-block subsequent claiming attempts. You can keep the claim authentication code
-valid by specifying --invalidate-authentication-code=false.
-
-As part of claiming, you can optionally provide the target NetID, Network Server
-KEK label and Application Server ID and KEK label. The Network Server and
-Application Server addresses will be taken from the CLI configuration. These
-values will be stored in the Join Server.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			targetAppID := getApplicationID(cmd.Flags(), args)
-			if targetAppID == nil {
-				return errNoApplicationID
-			}
-
-			req := &ttnpb.ClaimEndDeviceRequest{
-				TargetApplicationIDs: *targetAppID,
-			}
-
-			var joinEUI, devEUI *types.EUI64
-			if joinEUIHex, _ := cmd.Flags().GetString("source-join-eui"); joinEUIHex != "" {
-				joinEUI = new(types.EUI64)
-				if err := joinEUI.UnmarshalText([]byte(joinEUIHex)); err != nil {
-					return err
-				}
-			}
-			if devEUIHex, _ := cmd.Flags().GetString("source-dev-eui"); devEUIHex != "" {
-				devEUI = new(types.EUI64)
-				if err := devEUI.UnmarshalText([]byte(devEUIHex)); err != nil {
-					return err
-				}
-			}
-			if joinEUI != nil && devEUI != nil {
-				authenticationCode, _ := cmd.Flags().GetString("source-authentication-code")
-				req.SourceDevice = &ttnpb.ClaimEndDeviceRequest_AuthenticatedIdentifiers_{
-					AuthenticatedIdentifiers: &ttnpb.ClaimEndDeviceRequest_AuthenticatedIdentifiers{
-						JoinEUI:            *joinEUI,
-						DevEUI:             *devEUI,
-						AuthenticationCode: authenticationCode,
-					},
-				}
-			} else {
-				if joinEUI != nil || devEUI != nil {
-					logger.Warn("Either target JoinEUI or DevEUI specified but need both, not considering any and using scan mode")
-				}
-				rd, ok := io.BufferedPipe(os.Stdin)
-				if !ok {
-					logger.Info("Scan QR code")
-					rd = bufio.NewReader(os.Stdin)
-				}
-				qrCode, err := rd.ReadBytes('\n')
+			if existingDevice.JoinServerAddress == "" && devID.GetJoinEui() != nil {
+				// Attempt to unclaim device via the DCS.
+				dcs, err := api.Dial(ctx, config.DeviceClaimingServerGRPCAddress)
 				if err != nil {
 					return err
 				}
-				qrCode = qrCode[:len(qrCode)-1]
-				logger.WithField("code", string(qrCode)).Debug("Scanned QR code")
-				req.SourceDevice = &ttnpb.ClaimEndDeviceRequest_QRCode{
-					QRCode: qrCode,
+				claimInfoResp, err := ttnpb.NewEndDeviceClaimingServerClient(dcs).GetInfoByJoinEUI(ctx, &ttnpb.GetInfoByJoinEUIRequest{
+					JoinEui: devID.JoinEui,
+				})
+				if err != nil {
+					return errEndDeviceClaimInfo.WithCause(err)
 				}
-			}
-
-			req.TargetDeviceID, _ = cmd.Flags().GetString("target-device-id")
-			if netIDHex, _ := cmd.Flags().GetString("target-net-id"); netIDHex != "" {
-				if err := req.TargetNetID.UnmarshalText([]byte(netIDHex)); err != nil {
-					return err
+				if claimInfoResp.SupportsClaiming {
+					_, err = ttnpb.NewEndDeviceClaimingServerClient(dcs).Unclaim(ctx, devID)
+					if err != nil {
+						logger.WithError(err).Warn("Failed to unclaim end device")
+					} else {
+						logger.Info("Device successfully unclaimed")
+					}
+					skipClusterJS = true
 				}
-			}
-			if config.NetworkServerEnabled {
-				req.TargetNetworkServerAddress = config.NetworkServerGRPCAddress
-			}
-			req.TargetNetworkServerKEKLabel, _ = cmd.Flags().GetString("target-network-server-kek-label")
-			if config.ApplicationServerEnabled {
-				req.TargetApplicationServerAddress = config.ApplicationServerGRPCAddress
-			}
-			req.TargetApplicationServerKEKLabel, _ = cmd.Flags().GetString("target-application-server-kek-label")
-			req.TargetApplicationServerID, _ = cmd.Flags().GetString("target-application-server-id")
-			req.InvalidateAuthenticationCode, _ = cmd.Flags().GetBool("invalidate-authentication-code")
-
-			dcs, err := api.Dial(ctx, config.DeviceClaimingServerGRPCAddress)
-			if err != nil {
-				return err
-			}
-			ids, err := ttnpb.NewEndDeviceClaimingServerClient(dcs).Claim(ctx, req)
-			if err != nil {
-				return err
+			} else if jsMismatch {
+				// Check if there's an address mismatch only if using the cluster Join Server.
+				return errAddressMismatchEndDevice.New()
 			}
 
-			return io.Write(os.Stdout, config.OutputFormat, ids)
+			return deleteEndDevice(ctx, devID, skipClusterJS)
 		},
 	}
-	endDevicesListQRCodeFormatsCommand = &cobra.Command{
-		Use:     "list-qr-formats",
-		Aliases: []string{"ls-qr-formats", "listqrformats", "lsqrformats", "lsqrfmts", "lsqrfmt", "qr-formats"},
-		Short:   "List QR code formats (EXPERIMENTAL)",
+	endDevicesBatchDeleteCommand = &cobra.Command{
+		Use:   "batch-delete [application-id] [device-ids]",
+		Short: "Delete a batch of end devices within the same application (EXPERIMENTAL).",
+		Long: `Delete a batch of end devices within the same application (EXPERIMENTAL).
+Devices are also unclaimed from an external Join Server if applicable.
+Devices not found in the Identity Server are skipped and no error is returned.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			qrg, err := api.Dial(ctx, config.QRCodeGeneratorGRPCAddress)
-			if err != nil {
+			if err := checkComponentsEnabled(); err != nil {
 				return err
 			}
-
-			res, err := ttnpb.NewEndDeviceQRCodeGeneratorClient(qrg).ListFormats(ctx, ttnpb.Empty)
-			if err != nil {
-				return err
-			}
-
-			return io.Write(os.Stdout, config.OutputFormat, res)
-		},
-	}
-	endDevicesGenerateQRCommand = &cobra.Command{
-		Use:     "generate-qr [application-id] [device-id]",
-		Aliases: []string{"genqr"},
-		Short:   "Generate an end device QR code (EXPERIMENTAL)",
-		Long: `Generate an end device QR code (EXPERIMENTAL)
-
-This command saves a QR code in PNG format in the given folder. The filename is
-the device ID.
-
-This command may take end device identifiers from stdin.`,
-		Example: `
-  To generate a QR code for a single end device:
-    $ ttn-lw-cli end-devices generate-qr app1 dev1
-
-  To generate a QR code for multiple end devices:
-    $ ttn-lw-cli end-devices list app1 \
-      | ttn-lw-cli end-devices generate-qr`,
-		RunE: asBulk(func(cmd *cobra.Command, args []string) error {
-			var ids *ttnpb.EndDeviceIdentifiers
+			var (
+				appID     *ttnpb.ApplicationIdentifiers
+				devIDs    = make([]*ttnpb.EndDeviceIdentifiers, 0)
+				deviceIDs = make([]string, 0)
+			)
 			if inputDecoder != nil {
-				var dev ttnpb.EndDevice
-				if _, err := inputDecoder.Decode(&dev); err != nil {
-					return err
-				}
-				if dev.ApplicationID == "" {
-					return errNoApplicationID
-				}
-				if dev.DeviceID == "" {
-					return errNoEndDeviceID
-				}
-				ids = &dev.EndDeviceIdentifiers
-			} else {
-				var err error
-				ids, err = getEndDeviceID(cmd.Flags(), args, true)
+				dec := struct {
+					ApplicationID string   `json:"application_id"`
+					DeviceIDs     []string `json:"device_ids"`
+				}{}
+				err := inputDecoder.Decode(&dec)
 				if err != nil {
 					return err
 				}
-			}
-
-			formatID, _ := cmd.Flags().GetString("format-id")
-
-			qrg, err := api.Dial(ctx, config.QRCodeGeneratorGRPCAddress)
-			if err != nil {
-				return err
-			}
-			client := ttnpb.NewEndDeviceQRCodeGeneratorClient(qrg)
-			format, err := client.GetFormat(ctx, &ttnpb.GetQRCodeFormatRequest{
-				FormatID: formatID,
-			})
-			if err != nil {
-				return err
-			}
-
-			isPaths, nsPaths, asPaths, jsPaths := splitEndDeviceGetPaths(format.FieldMask.Paths...)
-
-			if len(nsPaths) > 0 {
-				isPaths = append(isPaths, "network_server_address")
-			}
-			if len(asPaths) > 0 {
-				isPaths = append(isPaths, "application_server_address")
-			}
-			if len(jsPaths) > 0 {
-				isPaths = append(isPaths, "join_server_address")
+				appID = &ttnpb.ApplicationIdentifiers{
+					ApplicationId: dec.ApplicationID,
+				}
+				for _, devID := range dec.DeviceIDs {
+					devIDs = append(devIDs, &ttnpb.EndDeviceIdentifiers{
+						ApplicationIds: appID,
+						DeviceId:       devID,
+					})
+					deviceIDs = append(deviceIDs, devID)
+				}
+			} else if len(args) < 2 {
+				return errNoIDs.New()
+			} else {
+				appID = &ttnpb.ApplicationIdentifiers{
+					ApplicationId: args[0],
+				}
+				for _, arg := range args[1:] {
+					devIDs = append(devIDs, &ttnpb.EndDeviceIdentifiers{
+						ApplicationIds: appID,
+						DeviceId:       arg,
+					})
+					deviceIDs = append(deviceIDs, arg)
+				}
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			logger.WithField("paths", isPaths).Debug("Get end device from Identity Server")
-			device, err := ttnpb.NewEndDeviceRegistryClient(is).Get(ctx, &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: *ids,
-				FieldMask:            pbtypes.FieldMask{Paths: isPaths},
+			var (
+				del     = make([]string, 0)              // Common devices to delete from IS/AS/NS.
+				js      = make([]string, 0)              // Devices to delete from JS.
+				unclaim = make(map[types.EUI64][]string) // Devices to unclaim from DCS.
+			)
+
+			devices, err := ttnpb.NewEndDeviceBatchRegistryClient(is).Get(ctx, &ttnpb.BatchGetEndDevicesRequest{
+				ApplicationIds: appID,
+				DeviceIds:      deviceIDs,
+				FieldMask: ttnpb.FieldMask(
+					"ids",
+					"network_server_address",
+					"application_server_address",
+					"join_server_address",
+				),
 			})
 			if err != nil {
 				return err
 			}
 
-			nsMismatch, asMismatch, jsMismatch := compareServerAddressesEndDevice(device, config)
-			if len(nsPaths) > 0 && nsMismatch {
-				return errAddressMismatchEndDevice
-			}
-			if len(asPaths) > 0 && asMismatch {
-				return errAddressMismatchEndDevice
-			}
-			if len(jsPaths) > 0 && jsMismatch {
-				return errAddressMismatchEndDevice
+			// Separate devices that need to be deleted from the cluster Join Server
+			// and the ones that need to be unclaimed from the DCS.
+			for _, dev := range devices.GetEndDevices() {
+				nsMismatch, asMismatch, _ := compareServerAddressesEndDevice(dev, config)
+				if nsMismatch || asMismatch {
+					return errAddressMismatchEndDevice.New()
+				}
+				del = append(del, dev.GetIds().GetDeviceId())
+
+				if dev.JoinServerAddress == "" && dev.GetIds().GetJoinEui() != nil {
+					key := types.MustEUI64(dev.GetIds().GetJoinEui()).OrZero()
+					unclaim[key] = append(unclaim[key], dev.GetIds().GetDeviceId())
+				} else {
+					// Check for JS mismatches only for devices registered in the cluster Join Server.
+					_, _, jsMismatch := compareServerAddressesEndDevice(dev, config)
+					if jsMismatch {
+						return errAddressMismatchEndDevice.New()
+					}
+					js = append(js, dev.GetIds().GetDeviceId())
+				}
 			}
 
-			dev, err := getEndDevice(device.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths, true)
+			dcs, err := api.Dial(ctx, config.DeviceClaimingServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			device.SetFields(dev, append(append(nsPaths, asPaths...), jsPaths...)...)
+			dcsBatchClient := ttnpb.NewEndDeviceBatchClaimingServerClient(dcs)
 
-			size, _ := cmd.Flags().GetUint32("size")
-			res, err := client.Generate(ctx, &ttnpb.GenerateEndDeviceQRCodeRequest{
-				FormatID:  formatID,
-				EndDevice: *device,
-				Image: &ttnpb.GenerateEndDeviceQRCodeRequest_Image{
-					ImageSize: size,
-				},
-			})
-			if err != nil {
-				return err
+			// Unclaim devices.
+			if len(unclaim) > 0 {
+				infoByJoinEUIs := make([]*ttnpb.GetInfoByJoinEUIRequest, 0, len(unclaim))
+				for joinEUI := range unclaim {
+					infoByJoinEUIs = append(infoByJoinEUIs, &ttnpb.GetInfoByJoinEUIRequest{
+						JoinEui: joinEUI.Bytes(),
+					})
+				}
+				claimInfosResp, err := dcsBatchClient.GetInfoByJoinEUIs(
+					ctx,
+					&ttnpb.GetInfoByJoinEUIsRequest{
+						Requests: infoByJoinEUIs,
+					},
+				)
+				if err != nil {
+					return err
+				}
+				for _, claimInfo := range claimInfosResp.Infos {
+					if !claimInfo.SupportsClaiming {
+						// These devices cannot be claimed but they also are not registered in the cluster Join Server.
+						// We assume that these devices are in the cluster Join Server with invalid registration information.
+						// We attempt to delete them from the cluster Join Server.
+						key := types.MustEUI64(claimInfo.JoinEui).OrZero()
+						js = append(js, unclaim[key]...)
+						delete(unclaim, key)
+					}
+				}
+				// Batch Unclaim using DCS.
+				var unclaimBatch []string
+				for _, devs := range unclaim {
+					unclaimBatch = append(unclaimBatch, devs...)
+				}
+				if len(unclaim) > 0 {
+					ret, err := dcsBatchClient.Unclaim(ctx, &ttnpb.BatchUnclaimEndDevicesRequest{
+						ApplicationIds: appID,
+						DeviceIds:      unclaimBatch,
+					})
+					if err != nil {
+						return err
+					}
+					if len(ret.Failed) != 0 {
+						logger.Warnf("Could not unclaim %d devices: %v", len(ret.Failed), ret.Failed)
+					}
+				}
 			}
 
-			folder, _ := cmd.Flags().GetString("folder")
-			if folder == "" {
-				folder, err = os.Getwd()
+			// Batch Delete from JS.
+			if len(js) > 0 {
+				jsConn, err := api.Dial(ctx, config.JoinServerGRPCAddress)
+				if err != nil {
+					return err
+				}
+				_, err = ttnpb.NewJsEndDeviceBatchRegistryClient(jsConn).Delete(ctx, &ttnpb.BatchDeleteEndDevicesRequest{
+					ApplicationIds: appID,
+					DeviceIds:      js,
+				})
 				if err != nil {
 					return err
 				}
 			}
 
-			var ext string
-			if exts, err := mime.ExtensionsByType(res.Image.Embedded.MimeType); err == nil && len(exts) > 0 {
-				ext = exts[0]
+			// Batch Delete from AS.
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
 			}
-			filename := path.Join(folder, device.DeviceID+ext)
-			if err := ioutil.WriteFile(filename, res.Image.Embedded.Data, 0o644); err != nil {
+			_, err = ttnpb.NewAsEndDeviceBatchRegistryClient(as).Delete(ctx, &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: appID,
+				DeviceIds:      del,
+			})
+			if err != nil {
 				return err
 			}
 
-			logger.WithFields(log.Fields(
-				"value", res.Text,
-				"filename", filename,
-			)).Info("Generated QR code")
+			// Batch Delete from NS.
+			ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			_, err = ttnpb.NewNsEndDeviceBatchRegistryClient(ns).Delete(ctx, &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: appID,
+				DeviceIds:      del,
+			})
+			if err != nil {
+				return err
+			}
+
+			// Delete from IS.
+			_, err = ttnpb.NewEndDeviceBatchRegistryClient(is).Delete(ctx, &ttnpb.BatchDeleteEndDevicesRequest{
+				ApplicationIds: appID,
+				DeviceIds:      del,
+			})
+			if err != nil {
+				return err
+			}
 			return nil
-		}),
+		},
+	}
+	endDevicesClaimCommand = &cobra.Command{
+		Use:    "claim [application-id]",
+		Short:  "Claim an end device (DEPRECATED)",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf(
+				"this command is no longer supported. End device claiming is integrated into the device creation flow",
+			)
+		},
+	}
+	endDevicesListQRCodeFormatsCommand = &cobra.Command{
+		Use:     "list-qr-formats",
+		Aliases: []string{"ls-qr-formats", "listqrformats", "lsqrformats", "lsqrfmts", "lsqrfmt", "qr-formats"},
+		Short:   "List QR code formats (DEPRECATED)",
+		Hidden:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf(
+				"this command is no longer supported. Join Servers are responsible for generating QR codes",
+			)
+		},
+	}
+	endDevicesGenerateQRCommand = &cobra.Command{
+		Use:     "generate-qr [application-id] [device-id]",
+		Aliases: []string{"genqr"},
+		Short:   "Generate an end device QR code (DEPRECATED)",
+		Hidden:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf(
+				"this command is no longer supported. Join Servers are responsible for generating QR codes",
+			)
+		},
 	}
 	endDevicesExternalJSCommand = &cobra.Command{
 		Use:     "use-external-join-server [application-id] [device-id]",
@@ -1156,7 +1364,7 @@ This command may take end device identifiers from stdin.`,
 				return err
 			}
 			if !config.JoinServerEnabled {
-				return errJoinServerDisabled
+				return errJoinServerDisabled.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -1164,15 +1372,14 @@ This command may take end device identifiers from stdin.`,
 				return err
 			}
 			dev, err := ttnpb.NewEndDeviceRegistryClient(is).Get(ctx, &ttnpb.GetEndDeviceRequest{
-				EndDeviceIdentifiers: *devID,
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"join_server_address",
-					},
-				},
+				EndDeviceIds: devID,
+				FieldMask:    ttnpb.FieldMask("join_server_address"),
 			})
+			if err != nil {
+				return err
+			}
 			if _, _, nok := compareServerAddressesEndDevice(dev, config); nok {
-				return errAddressMismatchEndDevice
+				return errAddressMismatchEndDevice.New()
 			}
 
 			js, err := api.Dial(ctx, config.JoinServerGRPCAddress)
@@ -1185,41 +1392,167 @@ This command may take end device identifiers from stdin.`,
 			}
 
 			_, err = ttnpb.NewEndDeviceRegistryClient(is).Update(ctx, &ttnpb.UpdateEndDeviceRequest{
-				EndDevice: ttnpb.EndDevice{
-					EndDeviceIdentifiers: *devID,
+				EndDevice: &ttnpb.EndDevice{
+					Ids: devID,
 				},
-				FieldMask: pbtypes.FieldMask{
-					Paths: []string{
-						"join_server_address",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("join_server_address"),
 			})
 			return err
+		},
+	}
+	endDevicesGetDefaultMACSettingsCommand = &cobra.Command{
+		Use:               "get-default-mac-settings",
+		Short:             "Get Network Server default MAC settings for frequency plan and LoRaWAN version",
+		PersistentPreRunE: preRun(),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !config.NetworkServerEnabled {
+				return errNetworkServerDisabled.New()
+			}
+
+			req := &ttnpb.GetDefaultMACSettingsRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+			ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewNsClient(ns).GetDefaultMACSettings(ctx, req)
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	endDevicesGetNetIDCommand = &cobra.Command{
+		Use:               "get-net-id",
+		Short:             "Get Network Server configured Net ID",
+		PersistentPreRunE: preRun(),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if !config.NetworkServerEnabled {
+				return errNetworkServerDisabled.New()
+			}
+
+			ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewNsClient(ns).GetNetID(ctx, ttnpb.Empty)
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	endDevicesGetDevAddrPrefixesCommand = &cobra.Command{
+		Use:               "get-dev-addr-prefixes",
+		Short:             "Get Network Server configured device address prefixes",
+		PersistentPreRunE: preRun(),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if !config.NetworkServerEnabled {
+				return errNetworkServerDisabled.New()
+			}
+
+			ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewNsClient(ns).GetDeviceAddressPrefixes(ctx, ttnpb.Empty)
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	endDevicesListBandsCommand = &cobra.Command{
+		Use:               "list-bands",
+		Short:             "List available band definitions",
+		PersistentPreRunE: preRun(),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !config.NetworkServerEnabled {
+				return errNetworkServerDisabled.New()
+			}
+
+			req := &ttnpb.ListBandsRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+			ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewConfigurationClient(ns).ListBands(ctx, req)
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	endDevicesListPhyVersionsCommand = &cobra.Command{
+		Use:               "list-phy-versions",
+		Aliases:           []string{"get-phy-versions"},
+		Short:             "List supported phy versions",
+		PersistentPreRunE: preRun(),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !config.NetworkServerEnabled {
+				return errNetworkServerDisabled.New()
+			}
+
+			req := &ttnpb.GetPhyVersionsRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+			ns, err := api.Dial(ctx, config.NetworkServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewConfigurationClient(ns).GetPhyVersions(ctx, req)
+			if err != nil {
+				return err
+			}
+			return io.Write(os.Stdout, config.OutputFormat, res)
 		},
 	}
 )
 
 func init() {
-	util.FieldMaskFlags(&ttnpb.EndDevice{}).VisitAll(func(flag *pflag.Flag) {
-		if ttnpb.ContainsField(flag.Name, getEndDeviceFromIS) {
-			selectEndDeviceListFlags.AddFlag(flag)
-			selectEndDeviceFlags.AddFlag(flag)
-		} else if ttnpb.ContainsField(flag.Name, getEndDeviceFromNS) ||
-			ttnpb.ContainsField(flag.Name, getEndDeviceFromAS) ||
-			ttnpb.ContainsField(flag.Name, getEndDeviceFromJS) {
-			selectEndDeviceFlags.AddFlag(flag)
+	ttnpb.AddSetFlagsForLocation(endDeviceLocationFlags, "location", false)
+	ttnpb.AddSetFlagsForGetDefaultMACSettingsRequest(getDefaultMACSettingsFlags, "", false)
+	ttnpb.AddSelectFlagsForEndDevice(allEndDeviceSelectFlags, "", false)
+	ttnpb.AddSetFlagsForEndDevice(allEndDeviceSetFlags, "", false)
+	ttnpb.AddSetFlagsForListBandsRequest(listBandsFlags, "", false)
+	ttnpb.AddSetFlagsForGetPhyVersionsRequest(listPhyVersionFlags, "", false)
+
+	allEndDeviceSelectFlags.VisitAll(func(flag *pflag.Flag) {
+		fieldName := toUnderscore.Replace(flag.Name)
+		f1 := *flag
+		f2 := *flag
+		selectEndDeviceListFlags.AddFlag(&f1)
+		selectEndDeviceFlags.AddFlag(&f2)
+		if !ttnpb.ContainsField(fieldName, getEndDeviceFromIS) {
+			util.HideFlag(selectEndDeviceListFlags, flag.Name)
+			if !ttnpb.ContainsField(fieldName, getEndDeviceFromNS) &&
+				!ttnpb.ContainsField(fieldName, getEndDeviceFromAS) &&
+				!ttnpb.ContainsField(fieldName, getEndDeviceFromJS) {
+				util.HideFlag(selectEndDeviceFlags, flag.Name)
+			}
 		}
 	})
 
 	addDeprecatedDeviceFlags(selectEndDeviceListFlags)
 	addDeprecatedDeviceFlags(selectEndDeviceFlags)
 
-	util.FieldFlags(&ttnpb.EndDevice{}).VisitAll(func(flag *pflag.Flag) {
-		if ttnpb.ContainsField(flag.Name, setEndDeviceToIS) ||
-			ttnpb.ContainsField(flag.Name, setEndDeviceToNS) ||
-			ttnpb.ContainsField(flag.Name, setEndDeviceToAS) ||
-			ttnpb.ContainsField(flag.Name, setEndDeviceToJS) {
-			setEndDeviceFlags.AddFlag(flag)
+	allEndDeviceSetFlags.VisitAll(func(flag *pflag.Flag) {
+		fieldName := toUnderscore.Replace(flag.Name)
+		setEndDeviceFlags.AddFlag(flag)
+		if !ttnpb.ContainsField(fieldName, setEndDeviceToIS) &&
+			!ttnpb.ContainsField(fieldName, setEndDeviceToNS) &&
+			!ttnpb.ContainsField(fieldName, setEndDeviceToAS) &&
+			!ttnpb.ContainsField(fieldName, setEndDeviceToJS) {
+			util.HideFlag(setEndDeviceFlags, flag.Name)
 		}
 	})
 
@@ -1235,9 +1568,8 @@ func init() {
 	endDevicesListCommand.Flags().AddFlagSet(paginationFlags())
 	endDevicesListCommand.Flags().AddFlagSet(orderFlags())
 	endDevicesCommand.AddCommand(endDevicesListCommand)
-	endDevicesSearchCommand.Flags().AddFlagSet(applicationIDFlags())
-	endDevicesSearchCommand.Flags().AddFlagSet(searchEndDevicesFlags)
-	endDevicesSearchCommand.Flags().AddFlagSet(selectApplicationFlags)
+	ttnpb.AddSetFlagsForSearchEndDevicesRequest(endDevicesSearchCommand.Flags(), "", false)
+	endDevicesSearchCommand.Flags().AddFlagSet(selectEndDeviceFlags)
 	endDevicesSearchCommand.Flags().AddFlagSet(selectAllEndDeviceFlags)
 	endDevicesCommand.AddCommand(endDevicesSearchCommand)
 	endDevicesGetCommand.Flags().AddFlagSet(endDeviceIDFlags())
@@ -1246,19 +1578,18 @@ func init() {
 	endDevicesCommand.AddCommand(endDevicesGetCommand)
 	endDevicesCreateCommand.Flags().AddFlagSet(endDeviceIDFlags())
 	endDevicesCreateCommand.Flags().AddFlagSet(setEndDeviceFlags)
-	endDevicesCreateCommand.Flags().AddFlagSet(attributesFlags())
 	endDevicesCreateCommand.Flags().AddFlagSet(payloadFormatterParameterFlags("formatters"))
 	endDevicesCreateCommand.Flags().Bool("defaults", true, "configure end device with defaults")
 	endDevicesCreateCommand.Flags().Bool("with-root-keys", false, "generate OTAA root keys")
 	endDevicesCreateCommand.Flags().Bool("abp", false, "configure end device as ABP")
 	endDevicesCreateCommand.Flags().Bool("with-session", false, "generate ABP session DevAddr and keys")
 	endDevicesCreateCommand.Flags().Bool("with-claim-authentication-code", false, "generate claim authentication code of 4 bytes")
+	endDevicesCreateCommand.Flags().Bool("request-dev-eui", false, "request a new DevEUI")
 	endDevicesCreateCommand.Flags().AddFlagSet(endDevicePictureFlags)
 	endDevicesCreateCommand.Flags().AddFlagSet(endDeviceLocationFlags)
 	endDevicesCommand.AddCommand(endDevicesCreateCommand)
 	endDevicesSetCommand.Flags().AddFlagSet(endDeviceIDFlags())
 	endDevicesSetCommand.Flags().AddFlagSet(setEndDeviceFlags)
-	endDevicesSetCommand.Flags().AddFlagSet(attributesFlags())
 	endDevicesSetCommand.Flags().AddFlagSet(payloadFormatterParameterFlags("formatters"))
 	endDevicesSetCommand.Flags().Bool("touch", false, "set in all registries even if no fields are specified")
 	endDevicesSetCommand.Flags().AddFlagSet(endDevicePictureFlags)
@@ -1299,6 +1630,30 @@ func init() {
 
 	endDevicesCommand.AddCommand(applicationsDownlinkCommand)
 
+	endDevicesGetDefaultMACSettingsCommand.Flags().AddFlagSet(getDefaultMACSettingsFlags)
+	endDevicesCommand.AddCommand(endDevicesGetDefaultMACSettingsCommand)
+
+	endDevicesGetNetIDCommand.Flags().AddFlagSet(getNetIDFlags)
+	endDevicesCommand.AddCommand(endDevicesGetNetIDCommand)
+
+	endDevicesGetDevAddrPrefixesCommand.Flags().AddFlagSet(getDevAddrPrefixesFlags)
+	endDevicesCommand.AddCommand(endDevicesGetDevAddrPrefixesCommand)
+
+	endDevicesListBandsCommand.Flags().AddFlagSet(listBandsFlags)
+	endDevicesCommand.AddCommand(endDevicesListBandsCommand)
+
+	endDevicesListPhyVersionsCommand.Flags().AddFlagSet(listPhyVersionFlags)
+	endDevicesCommand.AddCommand(endDevicesListPhyVersionsCommand)
+
+	endDevicesCommand.AddCommand(endDevicesBatchDeleteCommand)
+
+	// Deprecate flags.
+	util.DeprecateFlagWithoutForwarding(
+		endDevicesCreateCommand.Flags(),
+		"with-claim-authentication-code",
+		"use a valid claim authentication code registered with a Join Server instead",
+	)
+
 	Root.AddCommand(endDevicesCommand)
 
 	endDeviceTemplatesExtendCommand.Flags().AddFlagSet(setEndDeviceFlags)
@@ -1315,21 +1670,34 @@ func compareServerAddressesEndDevice(device *ttnpb.EndDevice, config *Config) (n
 		logger.WithFields(log.Fields(
 			"configured", nsHost,
 			"registered", host,
-		)).Warn("Registered Network Server address does not match CLI configuration")
+		)).Warnf("Registered Network Server address of end device %q does not match CLI configuration", device.GetIds().GetDeviceId())
 	}
 	if host := getHost(device.ApplicationServerAddress); config.ApplicationServerEnabled && host != "" && host != asHost {
 		asMismatch = true
 		logger.WithFields(log.Fields(
 			"configured", asHost,
 			"registered", host,
-		)).Warn("Registered Application Server address does not match CLI configuration")
+		)).Warnf("Registered Application Server address of end device %q does not match CLI configuration", device.GetIds().GetDeviceId())
 	}
 	if host := getHost(device.JoinServerAddress); config.JoinServerEnabled && host != "" && host != jsHost {
 		jsMismatch = true
 		logger.WithFields(log.Fields(
 			"configured", jsHost,
 			"registered", host,
-		)).Warn("Registered Join Server address does not match CLI configuration")
+		)).Warnf("Registered Join Server address of end device %q does not match CLI configuration", device.GetIds().GetDeviceId())
 	}
 	return
+}
+
+func checkComponentsEnabled() error {
+	if !config.NetworkServerEnabled {
+		return errNetworkServerDisabled.New()
+	}
+	if !config.ApplicationServerEnabled {
+		return errApplicationServerDisabled.New()
+	}
+	if !config.JoinServerEnabled {
+		return errJoinServerDisabled.New()
+	}
+	return nil
 }

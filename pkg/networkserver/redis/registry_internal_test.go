@@ -22,31 +22,29 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/redis/go-redis/v9"
+	"github.com/smarty/assertions"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestMsgpackCompatibility(t *testing.T) {
 	_, ctx := test.New(t)
 	cl, flush := test.NewRedis(ctx, "test", "devices")
-	t.Cleanup(func() {
+	defer func() {
 		flush()
-		if err := cl.Close(); err != nil {
-			t.Errorf("Failed to close Redis device registry client: %s", test.FormatError(err))
-		}
-	})
+		cl.Close()
+	}()
 	makeExpr := func(exprs ...string) string {
 		if len(exprs) == 0 {
 			panic("no expressions specified")
 		}
 		return fmt.Sprintf("%s\nand n == %d", strings.Join(exprs, "\nand "), len(exprs))
 	}
-	makeNumericExpr := func(name string, v interface{}) string {
+	makeNumericExpr := func(name string, v any) string {
 		return fmt.Sprintf("x.%s == %d", name, v)
 	}
 	makeStringExpr := func(name string, v string) string {
@@ -64,7 +62,7 @@ func TestMsgpackCompatibility(t *testing.T) {
 	}
 	makeFNwkSIntWrappedKeyExpr := func(v *ttnpb.KeyEnvelope) string {
 		return fmt.Sprintf(`%s and x.f_nwk_s_int_key.encrypted_key == "%s"`,
-			makeStringExpr("f_nwk_s_int_key.kek_label", v.KEKLabel),
+			makeStringExpr("f_nwk_s_int_key.kek_label", v.KekLabel),
 			hex.EncodeToString(v.EncryptedKey),
 		)
 	}
@@ -95,7 +93,7 @@ func TestMsgpackCompatibility(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		Value   interface{}
+		Value   any
 		LuaExpr string
 	}{
 		{

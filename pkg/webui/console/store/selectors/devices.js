@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import getHostnameFromUrl from '@ttn-lw/lib/host-from-url'
 import { combineDeviceIds, extractDeviceIdFromCombinedId } from '@ttn-lw/lib/selectors/id'
-import { createFetchingSelector } from '@ttn-lw/lib/store/selectors/fetching'
-import { createErrorSelector } from '@ttn-lw/lib/store/selectors/error'
 import {
   createPaginationIdsSelectorByEntity,
   createPaginationTotalCountSelectorByEntity,
 } from '@ttn-lw/lib/store/selectors/pagination'
-
-import { GET_DEV_BASE, GET_DEVICES_LIST_BASE } from '@console/store/actions/devices'
+import { selectAsConfig, selectJsConfig, selectNsConfig } from '@ttn-lw/lib/selectors/env'
 
 import {
   createEventsSelector,
@@ -29,6 +27,7 @@ import {
   createEventsInterruptedSelector,
   createEventsPausedSelector,
   createEventsTruncatedSelector,
+  createEventsFilterSelector,
 } from './events'
 
 const ENTITY = 'devices'
@@ -47,39 +46,53 @@ export const selectSelectedCombinedDeviceId = state => selectDeviceStore(state).
 export const selectSelectedDevice = state =>
   selectDeviceById(state, selectSelectedCombinedDeviceId(state))
 export const selectSelectedDeviceFormatters = state => selectSelectedDevice(state).formatters
-export const selectDeviceFetching = createFetchingSelector(GET_DEV_BASE)
-export const selectDeviceError = createErrorSelector(GET_DEV_BASE)
+export const isOtherClusterDevice = device => {
+  const isOtherCluster =
+    getHostnameFromUrl(selectAsConfig().base_url) !== device.application_server_address &&
+    getHostnameFromUrl(selectNsConfig().base_url) !== device.network_server_address &&
+    getHostnameFromUrl(selectJsConfig().base_url) !== device.join_server_address
+
+  return isOtherCluster
+}
+export const selectDeviceLastSeen = (state, appId, devId) => {
+  const device = selectDeviceById(state, combineDeviceIds(appId, devId))
+  if (!Boolean(device)) return undefined
+
+  return device.last_seen_at
+}
 
 // Derived.
-export const selectDeviceUplinkFrameCount = (state, appId, devId) => {
+export const selectDeviceDerivedUplinkFrameCount = (state, appId, devId) => {
   const derived = selectDeviceDerivedById(state, combineDeviceIds(appId, devId))
   if (!Boolean(derived)) return undefined
 
   return derived.uplinkFrameCount
 }
-export const selectDeviceDownlinkFrameCount = (state, appId, devId) => {
+export const selectDeviceDerivedDownlinkFrameCount = (state, appId, devId) => {
   const derived = selectDeviceDerivedById(state, combineDeviceIds(appId, devId))
   if (!Boolean(derived)) return undefined
 
   return derived.downlinkFrameCount
 }
-export const selectDeviceLastSeen = (state, appId, devId) => {
-  const derived = selectDeviceDerivedById(state, combineDeviceIds(appId, devId))
-  if (!Boolean(derived)) return undefined
 
-  return derived.lastSeen
+export const selectSelectedDeviceClaimable = state =>
+  selectDeviceStore(state).selectedDeviceClaimable
+
+export const selectDevicesWithLastSeen = state => {
+  const devices = selectDevices(state)
+  const devicesWithLastSeen = devices.map(device => ({
+    ...device,
+    _lastSeen: selectDeviceLastSeen(state, device.application_ids, device.ids.device_id),
+  }))
+  return devicesWithLastSeen
 }
 
 // Devices.
 const selectDevsIds = createPaginationIdsSelectorByEntity(ENTITY)
 const selectDevsTotalCount = createPaginationTotalCountSelectorByEntity(ENTITY)
-const selectDevsFetching = createFetchingSelector(GET_DEVICES_LIST_BASE)
-const selectDevsError = createErrorSelector(GET_DEVICES_LIST_BASE)
 
 export const selectDevices = state => selectDevsIds(state).map(id => selectDeviceById(state, id))
 export const selectDevicesTotalCount = state => selectDevsTotalCount(state)
-export const selectDevicesFetching = state => selectDevsFetching(state)
-export const selectDevicesError = state => selectDevsError(state)
 
 // Events.
 export const selectDeviceEvents = createEventsSelector(ENTITY)
@@ -88,3 +101,4 @@ export const selectDeviceEventsStatus = createEventsStatusSelector(ENTITY)
 export const selectDeviceEventsInterruptted = createEventsInterruptedSelector(ENTITY)
 export const selectDeviceEventsPaused = createEventsPausedSelector(ENTITY)
 export const selectDeviceEventsTruncated = createEventsTruncatedSelector(ENTITY)
+export const selectDeviceEventsFilter = createEventsFilterSelector(ENTITY)

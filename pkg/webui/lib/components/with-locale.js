@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,193 +12,344 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/* global require */
+/* eslint-disable capitalized-comments */
 
-import React from 'react'
-import bind from 'autobind-decorator'
-import { connect } from 'react-redux'
-import { IntlProvider } from 'react-intl'
-import CancelablePromise from 'cancelable-promise'
+import React, { useState, useCallback, useEffect, createContext, useMemo } from 'react'
+import { IntlProvider, defineMessages, ReactIntlErrorCode } from 'react-intl'
+import { uniq } from 'lodash'
 
+import Overlay from '@ttn-lw/components/overlay'
 import Spinner from '@ttn-lw/components/spinner'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 import log, { error } from '@ttn-lw/lib/log'
-import { selectLanguageConfig } from '@ttn-lw/lib/selectors/env'
+import isDevelopment from '@ttn-lw/lib/dev'
+import { ingestError } from '@ttn-lw/lib/errors/utils'
 
-const defaultLocale = process.predefined.DEFAULT_MESSAGES_LOCALE // Note: defined by webpack define plugin.
-const envLocale = selectLanguageConfig()
-const defaultLanguage = defaultLocale.split('-')[0] || 'en'
-const xx = 'xx'
-const dev = '../../dev'
+const SUPPORTED_LOCALES = process.predefined.SUPPORTED_LOCALES // Note: defined by webpack define plugin.
+const defaultLanguage = 'en'
+const defaultEnglishRegion = 'US'
+const defaultLocale = `en-${defaultEnglishRegion}`
 
-/**
- * WithLocale is a component that fetches the user's preferred language and
- * sets the language in th react-intl provider context. It will asynchronously
- * fetch translated messages and polyfills `window.Intl`.
- * The default language will be fetched from the env.
- */
-@connect(state => ({
-  user: state.user,
-  checking: state.user.checking,
-}))
-export default class UserLocale extends React.PureComponent {
-  static propTypes = {
-    children: PropTypes.oneOfType([PropTypes.arrayOf(PropTypes.node), PropTypes.node]).isRequired,
-    user: PropTypes.shape({
-      language: PropTypes.string,
-    }),
-  }
+const getLanguageName = (languageCode, type = 'language') => {
+  const languageNames = new Intl.DisplayNames(languageCode, { type })
+  return languageNames.of(languageCode)
+}
 
-  static defaultProps = {
-    user: undefined,
-  }
-  /** @private */
-  promise = null
+// Helper function to get the appropriate available locale from the desired locale.
+const getAppropriateLocale = selectedLocale => {
+  const desiredLocale =
+    selectedLocale ||
+    localStorage.getItem('locale') ||
+    navigator.language ||
+    navigator.browserLanguage ||
+    defaultLocale
 
-  state = {
-    messages: process.predefined.DEFAULT_MESSAGES, // Note: defined by webpack define plugin.
-    xx: false,
-    loaded: false,
-  }
+  const desiredLanguage = desiredLocale.split('-')[0]
+  let locale
 
-  @bind
-  toggle() {
-    this.setState(state => ({ xx: !state.xx }))
-  }
-
-  componentDidUpdate(props) {
-    this.check(this.props, props)
-  }
-
-  componentDidMount() {
-    this.check({ user: {} }, this.props, true)
-
-    if (dev) {
-      window.addEventListener('keydown', this.onKeydown)
-      log('Press alt + L to toggle the xx locale')
+  // Check if the desired locale is available.
+  if (SUPPORTED_LOCALES.includes(desiredLocale)) {
+    locale = desiredLocale
+  } else if (supportedLanguages.includes(desiredLanguage)) {
+    if (SUPPORTED_LOCALES.includes(desiredLanguage)) {
+      // Use the language without region if possible.
+      locale = desiredLanguage
+    } else {
+      // Otherwise take the first available region.
+      locale = SUPPORTED_LOCALES.find(l => l.split('-')[0] === desiredLanguage)
     }
+  } else {
+    // If the desired language is not available, fall back to the default.
+    locale = defaultLocale
   }
 
-  @bind
-  check(prev, props, enforce = false) {
-    const current = (prev.user && prev.user.language) || envLocale
-    const next = (props.user && props.user.language) || envLocale || defaultLanguage
-
-    if (enforce || current !== next) {
-      this.promise = this.load(next)
-    }
+  // Decorate English base locale with US region.
+  if (locale === defaultLanguage) {
+    locale = defaultLocale
   }
 
-  @bind
-  success(p, withLocale) {
-    const newState = { loaded: true }
-    if (withLocale) {
-      const frontendMessages = p[0]
-      const backendMessages = p[1]
+  return locale
+}
 
-      newState.messages = { ...frontendMessages, ...backendMessages }
-    }
+const supportedLanguages = uniq(SUPPORTED_LOCALES.filter(l => l.split('-')[0]))
+const getSupportedLocalesMap = () =>
+  SUPPORTED_LOCALES.reduce((acc, locale) => {
+    const loc = locale === 'en' ? `${locale}-${defaultEnglishRegion}` : locale
+    const language = loc.split('-')[0]
+    const region = loc.split('-').length > 1 ? loc.split('-')[1] : undefined
 
-    this.setState(newState)
-  }
+    const title = region
+      ? `${getLanguageName(language)} (${getLanguageName(region, 'region')})`
+      : getLanguageName(language)
 
-  @bind
-  fail(err) {
-    error(err)
-    this.setState({ messages: null, loaded: true })
-  }
+    acc[loc] = title
+    return acc
+  }, {})
 
-  @bind
-  onKeydown(evt) {
-    if (evt.altKey && evt.code === 'KeyL') {
-      this.toggle()
-    }
-  }
+const m = defineMessages({
+  switchingLanguage: 'Switching language…',
+})
 
-  @bind
-  async load(language) {
-    let locale = navigator.language || navigator.browserLanguage || defaultLocale
+export const LanguageContext = createContext()
 
-    // If the browser locale does not match the lang on the html tag, prefer the
-    // lang otherwise we get mixed languages.
-    if (locale.split('-')[0] !== language && language !== xx) {
-      locale = language
-    }
+// `WithLocale` is a component that fetches necessary polyfills for `window.Intl`
+// This component has to mount before any other component that makes use of the `Intl` API.
+const WithLocale = ({ children }) => {
+  const [polyfillsLoaded, setPolyfillsLoaded] = useState(false)
+  const [error, setError] = useState(undefined)
 
-    // Load the language files if needed.
-    await this.setState({ loaded: false })
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        // Load critical polyfills.
+        if (!window.Intl.Locale) {
+          log('Polyfilling Intl.Locale')
+          await import(
+            /* webpackChunkName: "locale-display-names" */ '@formatjs/intl-locale/polyfill'
+          )
+        }
 
-    let promises = []
-    let withLocale = false
-    if (language !== defaultLanguage) {
-      withLocale = true
-      promises = [
-        import(/* WebpackChunkName: "lang.[request]" */ `../../locales/${language}.json`), // Frontend messages
-        import(/* WebpackChunkName: "lang.[request]" */ `../../locales/.backend/${language}.json`), // Backend messages
-      ]
-    }
+        if (!window.Intl.DisplayNames) {
+          log('Polyfilling Intl.DisplayNames')
+          await import(
+            /* webpackChunkName: "locale-display-names" */ '@formatjs/intl-displaynames/polyfill'
+          )
+          // Instead of using dynamic imports that would cause all possible locales to be bundled
+          // we only load the ones we want to support which as of now are English and Japanese.
+          // This means that these imports need to be revisited if we choose to support more locales.
+          await import(
+            /* webpackChunkName: "locale-display-names.en" */ '@formatjs/intl-displaynames/locale-data/en'
+          )
+          await import(
+            /* webpackChunkName: "locale-display-names.ja" */ '@formatjs/intl-displaynames/locale-data/ja'
+          )
+        }
 
-    if (!window.Intl.NumberFormat || !window.Intl.DateTimeFormat) {
-      log(`Polyfilling locale ${locale} for language ${language}`)
-      promises.push(import('intl'))
-      promises.push(
-        import(/* WebpackChunkName: "locale.[request]" */ `intl/locale-data/jsonp/${locale}`),
-      )
-    }
+        if (!window.Intl.ListFormat) {
+          log('Polyfilling Intl.ListFormat')
+          await import(
+            /* webpackChunkName: "locale-list-format" */ '@formatjs/intl-listformat/polyfill'
+          )
+        }
 
-    if (!window.Intl.PluralRules) {
-      log(`Polyfilling Intl.PluralRules`)
-      promises.push(import('intl-pluralrules'))
-    }
+        if (!window.Intl.PluralRules) {
+          log('Polyfilling Intl.PluralRules')
+          await import(
+            /* webpackChunkName: "locale-plural-rules" */ '@formatjs/intl-pluralrules/polyfill'
+          )
+        }
 
-    if (!window.Intl.RelativeTimeFormat) {
-      log(`Polyfilling Intl.RelativeTimeFormat data for language ${language}`)
-      promises.push(import('@formatjs/intl-relativetimeformat/polyfill'))
-      promises.push(import(`@formatjs/intl-relativetimeformat/dist/locale-data/${language}`))
-    }
+        if (!window.Intl.NumberFormat) {
+          log('Polyfilling Intl.NumberFormat')
+          await import(
+            /* webpackChunkName: "locale-number-format" */ '@formatjs/intl-numberformat/polyfill'
+          )
+        }
 
-    return CancelablePromise.resolve(Promise.all(promises))
-      .then(result => this.success(result, withLocale))
-      .catch(this.fail)
-  }
+        if (!window.Intl.RelativeTimeFormat) {
+          log('Polyfilling Intl.RelativeTimeFormat')
+          await import(
+            /* webpackChunkName: "locale-date-time-format" */ '@formatjs/intl-relativetimeformat/polyfill'
+          )
+        }
 
-  componentWillUnmount() {
-    if (this.promise) {
-      this.promise.cancel()
-    }
+        if (!window.Intl.DateTimeFormat) {
+          log('Polyfilling Intl.DateTimeFormat')
+          await import(
+            /* webpackChunkName: "locale-date-time-format" */ '@formatjs/intl-datetimeformat/polyfill'
+          )
+        }
 
-    window.removeEventListener('onKeydown', this.onKeydown)
-  }
-
-  render() {
-    const { user, children } = this.props
-
-    const { messages, loaded, xx } = this.state
-
-    if (!loaded) {
-      // Not using <Message />, since we're initializing locales.
-      return <Spinner center>Loading locale…</Spinner>
-    }
-
-    const lang = (user && user.language) || envLocale || defaultLanguage
-
-    if (dev && xx) {
-      messages = {
-        ...require('../../locales/xx.json'),
-        ...require('../../locales/.backend/xx.json'),
+        setPolyfillsLoaded(true)
+      } catch (error) {
+        setError(error)
       }
     }
 
-    const key = `${lang}${messages ? 1 : 0}${xx ? 'xx' : ''}`
-    const locale = lang === xx ? 'en' : lang
+    initialize()
+  }, [setError])
 
-    return (
-      messages && (
-        <IntlProvider key={key} messages={messages} locale={locale}>
-          {children}
-        </IntlProvider>
-      )
-    )
+  if (error) {
+    throw error
   }
+
+  if (!polyfillsLoaded) {
+    // Not using `<Message />`, since we're initializing locales.
+    return <Spinner center>Initializing multi-language support…</Spinner>
+  }
+
+  return <LocaleLoader>{children}</LocaleLoader>
 }
+
+// `LocaleLoader` is a component that fetches the user's preferred language and
+// sets the language in the react-intl provider context. It will asynchronously
+// fetch translated messages.
+const LocaleLoader = ({ children }) => {
+  const [intlState, setIntlState] = useState({
+    locale: undefined,
+    messages: undefined,
+  })
+  const [loaded, setLoaded] = useState(false)
+
+  const handleIntlError = useCallback(err => {
+    error(err)
+    if (err.code === ReactIntlErrorCode.FORMAT_ERROR && !isDevelopment) {
+      ingestError(err, { ingestedBy: 'IntlFormat' })
+    }
+  }, [])
+
+  const setLocale = useCallback(
+    async desiredLocale => {
+      const storeAsPreference = Boolean(desiredLocale)
+      const locale = getAppropriateLocale(desiredLocale)
+      const language = locale.split('-')[0]
+
+      // Exit if we don't need to change anything.
+      if (locale === intlState.locale) {
+        setLoaded(true)
+        return
+      }
+
+      // Load the language files.
+      setLoaded(false)
+
+      let promises = []
+      if (locale === defaultLocale) {
+        promises = [
+          // For the default locale (en-US), we only need to load the backend messages.
+          // For the other messages, we can use the default messages (via the `defaultLocale` prop).
+          import(
+            /* webpackChunkName: "lang.[request]" */ `../../locales/.backend/${language}.json`
+          ),
+        ]
+      } else {
+        promises = [
+          import(/* webpackChunkName: "lang.[request]" */ `../../locales/${language}.json`),
+        ]
+      }
+
+      // Load locale specific polyfills if needed.
+      if (window.Intl.NumberFormat.polyfilled) {
+        log(`Polyfilling NumberFormat for language ${language}`)
+        if (language === 'ja') {
+          promises.push(
+            import(
+              /* webpackChunkName: "locale.ja" */ '@formatjs/intl-numberformat/locale-data/ja'
+            ),
+          )
+        } else {
+          promises.push(
+            import(
+              /* webpackChunkName: "locale.en" */ '@formatjs/intl-numberformat/locale-data/en'
+            ),
+          )
+        }
+      }
+
+      if (window.Intl.DateTimeFormat.polyfilled) {
+        log(`Polyfilling DateTimeFormat for language ${language}`)
+        promises.push(
+          import(/* webpackChunkName: "locale" */ '@formatjs/intl-datetimeformat/add-all-tz'),
+        )
+        switch (language) {
+          case 'ja':
+            promises.push(
+              import(
+                /* webpackChunkName: "locale.ja" */ '@formatjs/intl-datetimeformat/locale-data/ja'
+              ),
+            )
+            break
+          case 'en':
+          default:
+            promises.push(
+              import(
+                /* webpackChunkName: "locale.en" */ '@formatjs/intl-datetimeformat/locale-data/en'
+              ),
+            )
+            break
+        }
+      }
+
+      if (window.Intl.RelativeTimeFormat.polyfilled) {
+        log(`Polyfilling RelativeTimeFormat for language ${language}`)
+        switch (language) {
+          case 'ja':
+            promises.push(
+              import(
+                /* webpackChunkName: "locale.ja" */ '@formatjs/intl-relativetimeformat/locale-data/ja'
+              ),
+            )
+            break
+          case 'en':
+          default:
+            promises.push(
+              import(
+                /* webpackChunkName: "locale.en" */ '@formatjs/intl-relativetimeformat/locale-data/en'
+              ),
+            )
+            break
+        }
+      }
+
+      try {
+        const res = await Promise.all(promises)
+        setIntlState({ locale, messages: res[0] })
+
+        // Set `lang` attribute of the `html` tag.
+        document.documentElement.lang = language
+
+        if (storeAsPreference) {
+          localStorage.setItem('locale', locale)
+        }
+      } catch (err) {
+        // Log the error and fall back to default locale.
+        handleIntlError(err)
+        setIntlState({ locale: defaultLocale, messages: undefined })
+      }
+      setLoaded(true)
+    },
+    [setLoaded, setIntlState, handleIntlError, intlState.locale],
+  )
+
+  useEffect(() => {
+    // Perform the initial locale load.
+    setLocale()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const languageContext = useMemo(
+    () => ({
+      locale: intlState.locale,
+      supportedLocales: getSupportedLocalesMap(),
+      setLocale,
+    }),
+    [intlState.locale, setLocale],
+  )
+
+  if (!Boolean(intlState.locale)) {
+    // Not using `<Message />`, since we're initializing locales.
+    return <Spinner center>Loading language…</Spinner>
+  }
+
+  return (
+    <LanguageContext.Provider value={languageContext}>
+      <IntlProvider
+        messages={intlState.messages}
+        locale={intlState.locale}
+        defaultLocale={defaultLocale}
+        onError={handleIntlError}
+      >
+        <Overlay loading={!loaded} visible={!loaded} spinnerMessage={m.switchingLanguage}>
+          {children}
+        </Overlay>
+      </IntlProvider>
+    </LanguageContext.Provider>
+  )
+}
+
+LocaleLoader.propTypes = WithLocale.propTypes = {
+  children: PropTypes.oneOfType([PropTypes.arrayOf(PropTypes.node), PropTypes.node]).isRequired,
+}
+
+export default WithLocale

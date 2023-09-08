@@ -19,13 +19,17 @@ import (
 	"sort"
 	"strings"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-var applicationUpFlags = util.FieldMaskFlags(&ttnpb.ApplicationUp{})
+var applicationUpFlags = util.NormalizedFlagSet()
 
 func getStoredUpFlags() *pflag.FlagSet {
 	flags := &pflag.FlagSet{}
@@ -37,8 +41,13 @@ func getStoredUpFlags() *pflag.FlagSet {
 	flags.Uint32("limit", 0, "limit number of upstream messages to fetch")
 	flags.AddFlagSet(timestampFlags("after", "query upstream messages after specified timestamp"))
 	flags.AddFlagSet(timestampFlags("before", "query upstream messages before specified timestamp"))
+	flags.Duration("last", 0, "query upstream messages in the last hours or minutes")
+	flags.String(
+		"continuation-token", "",
+		"continuation token for pagination (if used additional flags other than the type are ignored)",
+	)
 
-	flags.AddFlagSet(applicationUpFlags)
+	ttnpb.AddSelectFlagsForApplicationUp(flags, "", false)
 
 	types := make([]string, 0, len(ttnpb.StoredApplicationUpTypes))
 	for k := range ttnpb.StoredApplicationUpTypes {
@@ -51,33 +60,123 @@ func getStoredUpFlags() *pflag.FlagSet {
 }
 
 func getStoredUpRequest(flags *pflag.FlagSet) (*ttnpb.GetStoredApplicationUpRequest, error) {
-	var err error
 	req := &ttnpb.GetStoredApplicationUpRequest{}
 
-	req.After, err = getTimestampFlags(flags, "after")
-	if err != nil {
-		return nil, err
-	}
-	req.Before, err = getTimestampFlags(flags, "before")
-	if err != nil {
-		return nil, err
-	}
-	req.Order, _ = flags.GetString("order")
 	req.Type, _ = flags.GetString("type")
+	req.ContinuationToken, _ = flags.GetString("continuation-token")
+	if req.ContinuationToken != "" {
+		return req, nil
+	}
+
+	before, after, last, err := timeRangeFromFlags(flags)
+	if err != nil {
+		return nil, err
+	}
+	req.Before = before
+	req.After = after
+	req.Last = last //nolint
+	req.Order, _ = flags.GetString("order")
 
 	if flags.Changed("f-port") {
 		fport, _ := flags.GetUint32("f-port")
-		req.FPort = &pbtypes.UInt32Value{
-			Value: fport,
-		}
+		req.FPort = wrapperspb.UInt32(fport)
 	}
-	req.FieldMask.Paths = ttnpb.AllowedFields(util.SelectFieldMask(flags, applicationUpFlags), ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ApplicationUpStorage/GetStoredApplicationUp"].Allowed)
+	req.FieldMask = ttnpb.FieldMask(
+		ttnpb.AllowedFields(
+			util.SelectFieldMask(flags, applicationUpFlags),
+			ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ApplicationUpStorage/GetStoredApplicationUp"].Allowed,
+		)...,
+	)
 
 	if flags.Changed("limit") {
 		limit, _ := flags.GetUint32("limit")
-		req.Limit = &pbtypes.UInt32Value{
+		req.Limit = &wrapperspb.UInt32Value{
 			Value: limit,
 		}
 	}
 	return req, nil
+}
+
+func countStoredUpFlags() *pflag.FlagSet {
+	flags := &pflag.FlagSet{}
+
+	flags.Uint32("f-port", 0, "query upstream messages with specific FPort")
+	flags.AddFlagSet(timestampFlags("after", "query upstream messages after specified timestamp"))
+	flags.AddFlagSet(timestampFlags("before", "query upstream messages before specified timestamp"))
+	flags.Duration("last", 0, "query upstream messages in the last hours or minutes")
+
+	types := make([]string, 0, len(ttnpb.StoredApplicationUpTypes))
+	for k := range ttnpb.StoredApplicationUpTypes {
+		types = append(types, k)
+	}
+	sort.Strings(types)
+	flags.String("type", "", fmt.Sprintf("message type (allowed values: %s)", strings.Join(types, ", ")))
+
+	return flags
+}
+
+func countStoredUpRequest(flags *pflag.FlagSet) (*ttnpb.GetStoredApplicationUpCountRequest, error) {
+	before, after, last, err := timeRangeFromFlags(flags)
+	if err != nil {
+		return nil, err
+	}
+	req := &ttnpb.GetStoredApplicationUpCountRequest{
+		Before: before,
+		After:  after,
+		Last:   last,
+	}
+	if flags.Changed("f-port") {
+		fport, _ := flags.GetUint32("f-port")
+		req.FPort = &wrapperspb.UInt32Value{
+			Value: fport,
+		}
+	}
+	req.Type, _ = flags.GetString("type")
+
+	return req, nil
+}
+
+func timeRangeFromFlags(flags *pflag.FlagSet) (beforePB *timestamppb.Timestamp, afterPB *timestamppb.Timestamp, lastPB *durationpb.Duration, err error) {
+	if flags.Changed("last") && (hasTimestampFlags(flags, "after") || hasTimestampFlags(flags, "before")) {
+		return nil, nil, nil, fmt.Errorf("--last cannot be used with --after or --before flags")
+	}
+	after, err := getTimestampFlags(flags, "after")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if after != nil {
+		afterPB = timestamppb.New(*after)
+	}
+	before, err := getTimestampFlags(flags, "before")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if before != nil {
+		beforePB = timestamppb.New(*before)
+	}
+
+	if flags.Changed("last") {
+		d, err := flags.GetDuration("last")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		lastPB = durationpb.New(d)
+	}
+	return
+}
+
+type continuationToken struct {
+	ContinuationToken string `json:"continuation_token,omitempty"`
+}
+
+var errNoContinuationToken = errors.DefineUnavailable("no_continuation_token", "no continuation token")
+
+func newContinuationTokenFromMD(md metadata.MD) (*continuationToken, error) {
+	continuationTokenHeaderValues := md.Get("x-continuation-token")
+	if len(continuationTokenHeaderValues) == 1 {
+		return &continuationToken{
+			ContinuationToken: continuationTokenHeaderValues[0],
+		}, nil
+	}
+	return nil, errNoContinuationToken
 }

@@ -17,43 +17,7 @@ package ttnpb
 import (
 	"bytes"
 	"fmt"
-	"strconv"
-	"strings"
 )
-
-// MarshalText implements encoding.TextMarshaler interface.
-func (v PayloadFormatter) MarshalText() ([]byte, error) {
-	return []byte(v.String()), nil
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler interface.
-func (v *PayloadFormatter) UnmarshalText(b []byte) error {
-	s := string(b)
-	if i, ok := PayloadFormatter_value[s]; ok {
-		*v = PayloadFormatter(i)
-		return nil
-	}
-	if !strings.HasPrefix(s, "FORMATTER_") {
-		if i, ok := PayloadFormatter_value["FORMATTER_"+s]; ok {
-			*v = PayloadFormatter(i)
-			return nil
-		}
-	}
-	return errCouldNotParse("PayloadFormatter")(string(b))
-}
-
-// UnmarshalJSON implements json.Unmarshaler interface.
-func (v *PayloadFormatter) UnmarshalJSON(b []byte) error {
-	if len(b) > 2 && b[0] == '"' && b[len(b)-1] == '"' {
-		return v.UnmarshalText(b[1 : len(b)-1])
-	}
-	i, err := strconv.Atoi(string(b))
-	if err != nil {
-		return errCouldNotParse("PayloadFormatter")(string(b)).WithCause(err)
-	}
-	*v = PayloadFormatter(i)
-	return nil
-}
 
 // FieldIsZero returns whether path p is zero.
 func (v *MessagePayloadFormatters) FieldIsZero(p string) bool {
@@ -88,6 +52,20 @@ func (v *ApplicationDownlink_ClassBC) FieldIsZero(p string) bool {
 }
 
 // FieldIsZero returns whether path p is zero.
+func (v *ApplicationDownlink_ConfirmedRetry) FieldIsZero(p string) bool {
+	if v == nil {
+		return true
+	}
+	switch p {
+	case "attempt":
+		return v.Attempt == 0
+	case "max_attempts":
+		return v.MaxAttempts == nil
+	}
+	panic(fmt.Sprintf("unknown path '%s'", p))
+}
+
+// FieldIsZero returns whether path p is zero.
 func (v *ApplicationDownlink) FieldIsZero(p string) bool {
 	if v == nil {
 		return true
@@ -102,7 +80,7 @@ func (v *ApplicationDownlink) FieldIsZero(p string) bool {
 	case "confirmed":
 		return !v.Confirmed
 	case "correlation_ids":
-		return v.CorrelationIDs == nil
+		return v.CorrelationIds == nil
 	case "decoded_payload":
 		return v.DecodedPayload == nil
 	case "decoded_payload_warnings":
@@ -112,41 +90,19 @@ func (v *ApplicationDownlink) FieldIsZero(p string) bool {
 	case "f_port":
 		return v.FPort == 0
 	case "frm_payload":
-		return v.FRMPayload == nil
+		return v.FrmPayload == nil
 	case "priority":
 		return v.Priority == 0
 	case "session_key_id":
-		return v.SessionKeyID == nil
+		return v.SessionKeyId == nil
+	case "confirmed_retry":
+		return v.ConfirmedRetry == nil
+	case "confirmed_retry.attempt":
+		return v.ConfirmedRetry.FieldIsZero("attempt")
+	case "confirmed_retry.max_attempts":
+		return v.ConfirmedRetry.FieldIsZero("max_attempts")
 	}
 	panic(fmt.Sprintf("unknown path '%s'", p))
-}
-
-// MarshalText implements encoding.TextMarshaler interface.
-func (v TxAcknowledgment_Result) MarshalText() ([]byte, error) {
-	return []byte(v.String()), nil
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler interface.
-func (v *TxAcknowledgment_Result) UnmarshalText(b []byte) error {
-	s := string(b)
-	if i, ok := TxAcknowledgment_Result_value[s]; ok {
-		*v = TxAcknowledgment_Result(i)
-		return nil
-	}
-	return errCouldNotParse("TxAcknowledgment_Result")(string(b))
-}
-
-// UnmarshalJSON implements json.Unmarshaler interface.
-func (v *TxAcknowledgment_Result) UnmarshalJSON(b []byte) error {
-	if len(b) > 2 && b[0] == '"' && b[len(b)-1] == '"' {
-		return v.UnmarshalText(b[1 : len(b)-1])
-	}
-	i, err := strconv.Atoi(string(b))
-	if err != nil {
-		return errCouldNotParse("TxAcknowledgment_Result")(string(b)).WithCause(err)
-	}
-	*v = TxAcknowledgment_Result(i)
-	return nil
 }
 
 // PartitionDownlinks partitions downlinks based on the general predicate p.
@@ -164,7 +120,7 @@ func PartitionDownlinks(p func(down *ApplicationDownlink) bool, downs ...*Applic
 
 // PartitionDownlinksBySessionKeyID partitions the downlinks based on the session key ID predicate p.
 func PartitionDownlinksBySessionKeyID(p func([]byte) bool, downs ...*ApplicationDownlink) (t, f []*ApplicationDownlink) {
-	return PartitionDownlinks(func(down *ApplicationDownlink) bool { return p(down.SessionKeyID) }, downs...)
+	return PartitionDownlinks(func(down *ApplicationDownlink) bool { return p(down.SessionKeyId) }, downs...)
 }
 
 // PartitionDownlinksBySessionKeyIDEquality partitions the downlinks based on the equality to the given session key ID.

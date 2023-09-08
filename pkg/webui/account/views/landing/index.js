@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,9 +13,12 @@
 // limitations under the License.
 
 import React from 'react'
-import { Switch, Route } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
+import classnames from 'classnames'
 
 import authRoutes from '@account/constants/auth-routes'
+
+import sidebarStyle from '@ttn-lw/components/navigation/side/side.styl'
 
 import Footer from '@ttn-lw/containers/footer'
 
@@ -32,12 +35,14 @@ const Landing = () => (
     <Header />
     <main className={style.main}>
       <div className={style.stage} id="stage">
-        <Switch>
+        <div id="sidebar" className={sidebarStyle.container} />
+        <div className={classnames('breadcrumbs', style.desktopBreadcrumbs)} />
+        <Routes>
           {authRoutes.map(route => (
             <Route {...route} key={route.path} />
           ))}
-          <Route component={GenericNotFound} />
-        </Switch>
+          <Route path="*" element={<GenericNotFound />} />
+        </Routes>
       </div>
     </main>
     <Footer />

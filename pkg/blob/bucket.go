@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"gocloud.dev/blob"
+	"gocloud.dev/blob/azureblob"
 	"gocloud.dev/blob/fileblob"
 	"gocloud.dev/blob/gcsblob"
 	"gocloud.dev/blob/s3blob"
@@ -30,9 +31,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-var (
-	errInvalidConfig = errors.DefineInvalidArgument("invalid_config", "invalid blob store configuration")
-)
+var errInvalidConfig = errors.DefineInvalidArgument("invalid_config", "invalid blob store configuration")
 
 func Local(_ context.Context, bucket, path string) (*blob.Bucket, error) {
 	bucketPath, err := filepath.Abs(filepath.Join(path, bucket))
@@ -41,7 +40,7 @@ func Local(_ context.Context, bucket, path string) (*blob.Bucket, error) {
 	}
 	_, err = os.Stat(bucketPath)
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(bucketPath, 0755)
+		err = os.MkdirAll(bucketPath, 0o755)
 		if err != nil {
 			return nil, errInvalidConfig.WithCause(err)
 		}
@@ -57,6 +56,21 @@ func AWS(ctx context.Context, bucket string, conf *aws.Config) (*blob.Bucket, er
 		return nil, err
 	}
 	return s3blob.OpenBucket(ctx, s, bucket, nil)
+}
+
+// Azure returns an open bucket that is connected to container containerName in storage account accountName.
+func Azure(ctx context.Context, accountName, containerName string) (*blob.Bucket, error) {
+	serviceURL, err := azureblob.NewServiceURL(&azureblob.ServiceURLOptions{
+		AccountName: accountName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	serviceClient, err := azureblob.NewDefaultClient(serviceURL, azureblob.ContainerName(containerName))
+	if err != nil {
+		return nil, err
+	}
+	return azureblob.OpenBucket(ctx, serviceClient, &azureblob.Options{})
 }
 
 func GCP(ctx context.Context, bucket string, jsonCredentials []byte) (*blob.Bucket, error) {

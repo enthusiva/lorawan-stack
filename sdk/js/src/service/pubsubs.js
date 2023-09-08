@@ -12,13 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import autoBind from 'auto-bind'
+
 import Marshaler from '../util/marshaler'
 
-const remaps = [['nats', 'provider.nats'], ['mqtt', 'provider.mqtt']]
+const remaps = [
+  ['nats', 'provider.nats'],
+  ['mqtt', 'provider.mqtt'],
+]
 
 class PubSub {
   constructor(registry) {
     this._api = registry
+    autoBind(this)
   }
 
   _fillZeroValues(pubsub, paths) {

@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,39 +18,55 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"regexp"
 	"runtime/trace"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/internal/registry"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/provisioning"
 	ttnredis "go.thethings.network/lorawan-stack/v3/pkg/redis"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
-	errAlreadyProvisioned   = errors.DefineAlreadyExists("already_provisioned", "device already provisioned")
-	errDuplicateIdentifiers = errors.DefineAlreadyExists("duplicate_identifiers", "duplicate identifiers")
-	errInvalidFieldmask     = errors.DefineInvalidArgument("invalid_fieldmask", "invalid fieldmask")
-	errInvalidIdentifiers   = errors.DefineInvalidArgument("invalid_identifiers", "invalid identifiers")
-	errReadOnlyField        = errors.DefineInvalidArgument("read_only_field", "read-only field `{field}`")
-	errProvisionerNotFound  = errors.DefineNotFound("provisioner_not_found", "provisioner `{id}` not found")
+	errAlreadyProvisioned  = errors.DefineAlreadyExists("already_provisioned", "device already provisioned")
+	errInvalidFieldmask    = errors.DefineInvalidArgument("invalid_fieldmask", "invalid fieldmask")
+	errInvalidIdentifiers  = errors.DefineInvalidArgument("invalid_identifiers", "invalid identifiers")
+	errReadOnlyField       = errors.DefineInvalidArgument("read_only_field", "read-only field `{field}`")
+	errProvisionerNotFound = errors.DefineNotFound("provisioner_not_found", "provisioner `{id}` not found")
 )
+
+// SchemaVersion is the Network Server database schema version. Bump when a migration is required.
+const SchemaVersion = 1
 
 // DeviceRegistry is an implementation of joinserver.DeviceRegistry.
 type DeviceRegistry struct {
-	Redis *ttnredis.Client
+	Redis   *ttnredis.Client
+	LockTTL time.Duration
+}
+
+// Init initializes the DeviceRegistry.
+func (r *DeviceRegistry) Init(ctx context.Context) error {
+	if err := ttnredis.InitMutex(ctx, r.Redis); err != nil {
+		return err
+	}
+	return nil
 }
 
 func provisionerUniqueID(dev *ttnpb.EndDevice) (string, error) {
-	if dev.ProvisionerID == "" {
+	if dev.ProvisionerId == "" {
 		return "", nil
 	}
-	provisioner := provisioning.Get(dev.ProvisionerID)
+	provisioner := provisioning.Get(dev.ProvisionerId)
 	if provisioner == nil {
-		return "", errProvisionerNotFound.WithAttributes("id", dev.ProvisionerID)
+		return "", errProvisionerNotFound.WithAttributes("id", dev.ProvisionerId)
 	}
 	return provisioner.UniqueID(dev.ProvisioningData)
 }
@@ -68,10 +84,10 @@ func (r *DeviceRegistry) provisionerKey(provisionerID, pid string) string {
 }
 
 // GetByID gets device by appID, devID.
-func (r *DeviceRegistry) GetByID(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, paths []string) (*ttnpb.EndDevice, error) {
-	ids := ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: appID,
-		DeviceID:               devID,
+func (r *DeviceRegistry) GetByID(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, paths []string) (*ttnpb.EndDevice, error) {
+	ids := &ttnpb.EndDeviceIdentifiers{
+		ApplicationIds: appID,
+		DeviceId:       devID,
 	}
 	if err := ids.ValidateContext(ctx); err != nil {
 		return nil, err
@@ -96,6 +112,11 @@ func (r *DeviceRegistry) GetByEUI(ctx context.Context, joinEUI, devEUI types.EUI
 
 	pb := &ttnpb.EndDevice{}
 	if err := ttnredis.FindProto(ctx, r.Redis, r.euiKey(joinEUI, devEUI), func(uid string) (string, error) {
+		var err error
+		ctx, err = unique.WithContext(ctx, uid)
+		if err != nil {
+			return "", err
+		}
 		return r.uidKey(uid), nil
 	}).ScanProto(pb); err != nil {
 		return nil, err
@@ -174,15 +195,15 @@ func (r *DeviceRegistry) set(ctx context.Context, tx *redis.Tx, uid string, gets
 	if pb == nil && len(sets) == 0 {
 		pipelined = func(p redis.Pipeliner) error {
 			p.Del(ctx, uk)
-			if stored.JoinEUI != nil && stored.DevEUI != nil {
-				p.Del(ctx, r.euiKey(*stored.JoinEUI, *stored.DevEUI))
+			if stored.Ids.JoinEui != nil && stored.Ids.DevEui != nil {
+				p.Del(ctx, r.euiKey(types.MustEUI64(stored.Ids.JoinEui).OrZero(), types.MustEUI64(stored.Ids.DevEui).OrZero()))
 			}
 			pid, err := provisionerUniqueID(stored)
 			if err != nil {
 				return err
 			}
 			if pid != "" {
-				p.Del(ctx, r.provisionerKey(stored.ProvisionerID, pid))
+				p.Del(ctx, r.provisionerKey(stored.ProvisionerId, pid))
 			}
 			return nil
 		}
@@ -191,7 +212,7 @@ func (r *DeviceRegistry) set(ctx context.Context, tx *redis.Tx, uid string, gets
 			pb = &ttnpb.EndDevice{}
 		}
 
-		pb.UpdatedAt = time.Now().UTC()
+		pb.UpdatedAt = timestamppb.Now()
 		sets = append(append(sets[:0:0], sets...),
 			"updated_at",
 		)
@@ -219,26 +240,26 @@ func (r *DeviceRegistry) set(ctx context.Context, tx *redis.Tx, uid string, gets
 			if err != nil {
 				return nil, err
 			}
-			if updated.JoinEUI == nil || updated.DevEUI == nil || updated.DevEUI.IsZero() {
+			if updated.Ids.JoinEui == nil || types.MustEUI64(updated.Ids.DevEui).OrZero().IsZero() {
 				return nil, errInvalidIdentifiers.New()
 			}
 		} else {
-			if ttnpb.HasAnyField(sets, "ids.application_ids.application_id") && pb.ApplicationID != stored.ApplicationID {
+			if ttnpb.HasAnyField(sets, "ids.application_ids.application_id") && pb.Ids.ApplicationIds.ApplicationId != stored.Ids.ApplicationIds.ApplicationId {
 				return nil, errReadOnlyField.WithAttributes("field", "ids.application_ids.application_id")
 			}
-			if ttnpb.HasAnyField(sets, "ids.device_id") && pb.DeviceID != stored.DeviceID {
+			if ttnpb.HasAnyField(sets, "ids.device_id") && pb.Ids.DeviceId != stored.Ids.DeviceId {
 				return nil, errReadOnlyField.WithAttributes("field", "ids.device_id")
 			}
-			if ttnpb.HasAnyField(sets, "ids.join_eui") && !equalEUI64(pb.JoinEUI, stored.JoinEUI) {
+			if ttnpb.HasAnyField(sets, "ids.join_eui") && !bytes.Equal(pb.Ids.JoinEui, stored.Ids.JoinEui) {
 				return nil, errReadOnlyField.WithAttributes("field", "ids.join_eui")
 			}
-			if ttnpb.HasAnyField(sets, "ids.dev_eui") && !equalEUI64(pb.DevEUI, stored.DevEUI) {
+			if ttnpb.HasAnyField(sets, "ids.dev_eui") && !bytes.Equal(pb.Ids.DevEui, stored.Ids.DevEui) {
 				return nil, errReadOnlyField.WithAttributes("field", "ids.dev_eui")
 			}
-			if ttnpb.HasAnyField(sets, "provisioner_id") && pb.ProvisionerID != stored.ProvisionerID {
+			if ttnpb.HasAnyField(sets, "provisioner_id") && pb.ProvisionerId != stored.ProvisionerId {
 				return nil, errReadOnlyField.WithAttributes("field", "provisioner_id")
 			}
-			if ttnpb.HasAnyField(sets, "provisioning_data") && !pb.ProvisioningData.Equal(stored.ProvisioningData) {
+			if ttnpb.HasAnyField(sets, "provisioning_data") && !proto.Equal(pb.ProvisioningData, stored.ProvisioningData) {
 				return nil, errReadOnlyField.WithAttributes("field", "provisioning_data")
 			}
 			if err := cmd.ScanProto(updated); err != nil {
@@ -249,28 +270,31 @@ func (r *DeviceRegistry) set(ctx context.Context, tx *redis.Tx, uid string, gets
 				return nil, err
 			}
 		}
-		if err := updated.ValidateFields(sets...); err != nil {
+		if err := updated.ValidateFields(); err != nil {
 			return nil, err
 		}
 
 		pipelined = func(p redis.Pipeliner) error {
 			if stored == nil {
-				ek := r.euiKey(*updated.JoinEUI, *updated.DevEUI)
+				joinEUI := types.MustEUI64(updated.Ids.JoinEui).OrZero()
+				devEUI := types.MustEUI64(updated.Ids.DevEui).OrZero()
+				ek := r.euiKey(joinEUI, devEUI)
 				if err := tx.Watch(ctx, ek).Err(); err != nil {
 					return err
 				}
-				i, err := tx.Exists(ctx, ek).Result()
-				if err != nil {
+
+				storedUIDStr, err := tx.Get(ctx, ek).Result()
+				if errors.Is(err, redis.Nil) {
+					p.SetNX(ctx, ek, uid, 0)
+				} else if err != nil {
 					return err
+				} else {
+					return registry.UniqueEUIViolationErr(ctx, joinEUI, devEUI, storedUIDStr)
 				}
-				if i != 0 {
-					return errDuplicateIdentifiers.New()
-				}
-				p.SetNX(ctx, ek, uid, 0)
 			}
 
 			if updatedPID != "" {
-				pk := r.provisionerKey(updated.ProvisionerID, updatedPID)
+				pk := r.provisionerKey(updated.ProvisionerId, updatedPID)
 				if err := tx.Watch(ctx, pk).Err(); err != nil {
 					return err
 				}
@@ -313,10 +337,15 @@ func (r *DeviceRegistry) SetByEUI(ctx context.Context, joinEUI types.EUI64, devE
 	}
 	ek := r.euiKey(joinEUI, devEUI)
 
+	lockerID, err := ttnredis.GenerateLockerID()
+	if err != nil {
+		return nil, err
+	}
+
 	defer trace.StartRegion(ctx, "set end device by eui").End()
 
 	var pb *ttnpb.ContextualEndDevice
-	err := r.Redis.Watch(ctx, func(tx *redis.Tx) error {
+	err = ttnredis.LockedWatch(ctx, r.Redis, ek, lockerID, r.LockTTL, func(tx *redis.Tx) error {
 		uid, err := tx.Get(ctx, ek).Result()
 		if err != nil {
 			return err
@@ -326,7 +355,7 @@ func (r *DeviceRegistry) SetByEUI(ctx context.Context, joinEUI types.EUI64, devE
 		}
 		pb, err = r.set(ctx, tx, uid, gets, f)
 		return err
-	}, ek)
+	})
 	if err != nil {
 		return nil, ttnredis.ConvertError(err)
 	}
@@ -334,10 +363,10 @@ func (r *DeviceRegistry) SetByEUI(ctx context.Context, joinEUI types.EUI64, devE
 }
 
 // SetByID sets device by appID, devID.
-func (r *DeviceRegistry) SetByID(ctx context.Context, appID ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(pb *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, error) {
-	ids := ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: appID,
-		DeviceID:               devID,
+func (r *DeviceRegistry) SetByID(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, devID string, gets []string, f func(pb *ttnpb.EndDevice) (*ttnpb.EndDevice, []string, error)) (*ttnpb.EndDevice, error) {
+	ids := &ttnpb.EndDeviceIdentifiers{
+		ApplicationIds: appID,
+		DeviceId:       devID,
 	}
 	if err := ids.ValidateContext(ctx); err != nil {
 		return nil, err
@@ -354,7 +383,7 @@ func (r *DeviceRegistry) SetByID(ctx context.Context, appID ttnpb.ApplicationIde
 			if err != nil {
 				return nil, nil, err
 			}
-			if stored == nil && updated != nil && (updated.ApplicationIdentifiers != appID || updated.DeviceID != devID) {
+			if stored == nil && updated != nil && (updated.Ids.ApplicationIds.ApplicationId != appID.ApplicationId || updated.Ids.DeviceId != devID) {
 				return nil, nil, errInvalidIdentifiers.New()
 			}
 			return updated, sets, nil
@@ -367,13 +396,56 @@ func (r *DeviceRegistry) SetByID(ctx context.Context, appID ttnpb.ApplicationIde
 	return pb.EndDevice, nil
 }
 
-// KeyRegistry is an implementation of joinserver.KeyRegistry.
-type KeyRegistry struct {
-	Redis *ttnredis.Client
+func (r *DeviceRegistry) RangeByID(ctx context.Context, paths []string, f func(context.Context, *ttnpb.EndDeviceIdentifiers, *ttnpb.EndDevice) bool) error {
+	deviceEntityRegex, err := ttnredis.EntityRegex((r.uidKey(unique.GenericID(ctx, "*"))))
+	if err != nil {
+		return err
+	}
+	return ttnredis.RangeRedisKeys(ctx, r.Redis, r.uidKey(unique.GenericID(ctx, "*")), ttnredis.DefaultRangeCount, func(key string) (bool, error) {
+		if !deviceEntityRegex.MatchString(key) {
+			return true, nil
+		}
+		dev := &ttnpb.EndDevice{}
+		if err := ttnredis.GetProto(ctx, r.Redis, key).ScanProto(dev); err != nil {
+			return false, err
+		}
+		dev, err := ttnpb.FilterGetEndDevice(dev, paths...)
+		if err != nil {
+			return false, err
+		}
+		if !f(ctx, dev.Ids, dev) {
+			return false, nil
+		}
+		return true, nil
+	})
 }
 
-func (r *KeyRegistry) idKey(joinEUI, devEUI types.EUI64, id []byte) string {
-	return r.Redis.Key("id", joinEUI.String(), devEUI.String(), base64.RawStdEncoding.EncodeToString(id))
+// KeyRegistry is an implementation of joinserver.KeyRegistry.
+type KeyRegistry struct {
+	Redis   *ttnredis.Client
+	LockTTL time.Duration
+	// Limit is the maximum number of session keys to store per JoinEUI and DevEUI combination.
+	Limit int
+}
+
+// Init initializes the KeyRegistry.
+func (r *KeyRegistry) Init(ctx context.Context) error {
+	if err := ttnredis.InitMutex(ctx, r.Redis); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *KeyRegistry) idValue(id []byte) string {
+	return base64.RawStdEncoding.EncodeToString(id)
+}
+
+func (r *KeyRegistry) idKey(joinEUI, devEUI types.EUI64, id string) string {
+	return r.Redis.Key("id", joinEUI.String(), devEUI.String(), id)
+}
+
+func (r *KeyRegistry) idSetKey(joinEUI, devEUI types.EUI64) string {
+	return r.Redis.Key("ids", joinEUI.String(), devEUI.String())
 }
 
 // GetByID gets session keys by joinEUI, devEUI, id.
@@ -385,7 +457,7 @@ func (r *KeyRegistry) GetByID(ctx context.Context, joinEUI, devEUI types.EUI64, 
 	defer trace.StartRegion(ctx, "get session keys").End()
 
 	pb := &ttnpb.SessionKeys{}
-	if err := ttnredis.GetProto(ctx, r.Redis, r.idKey(joinEUI, devEUI, id)).ScanProto(pb); err != nil {
+	if err := ttnredis.GetProto(ctx, r.Redis, r.idKey(joinEUI, devEUI, r.idValue(id))).ScanProto(pb); err != nil {
 		return nil, err
 	}
 	return ttnpb.FilterGetSessionKeys(pb, paths...)
@@ -396,12 +468,17 @@ func (r *KeyRegistry) SetByID(ctx context.Context, joinEUI, devEUI types.EUI64, 
 	if devEUI.IsZero() || len(id) == 0 {
 		return nil, errInvalidIdentifiers.New()
 	}
-	ik := r.idKey(joinEUI, devEUI, id)
+	ik, sk := r.idKey(joinEUI, devEUI, r.idValue(id)), r.idSetKey(joinEUI, devEUI)
+
+	lockerID, err := ttnredis.GenerateLockerID()
+	if err != nil {
+		return nil, err
+	}
 
 	defer trace.StartRegion(ctx, "set session keys").End()
 
 	var pb *ttnpb.SessionKeys
-	err := r.Redis.Watch(ctx, func(tx *redis.Tx) error {
+	err = ttnredis.LockedWatch(ctx, r.Redis, sk, lockerID, r.LockTTL, func(tx *redis.Tx) error {
 		cmd := ttnredis.GetProto(ctx, tx, ik)
 		stored := &ttnpb.SessionKeys{}
 		if err := cmd.ScanProto(stored); errors.IsNotFound(err) {
@@ -435,71 +512,125 @@ func (r *KeyRegistry) SetByID(ctx context.Context, joinEUI, devEUI types.EUI64, 
 			return err
 		}
 
-		var pipelined func(redis.Pipeliner) error
 		if pb == nil && len(sets) == 0 {
-			pipelined = func(p redis.Pipeliner) error {
+			_, err = tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
 				p.Del(ctx, ik)
+				p.LRem(ctx, sk, 0, r.idValue(id))
 				return nil
-			}
-		} else {
-			if pb == nil {
-				pb = &ttnpb.SessionKeys{}
-			}
-
-			updated := &ttnpb.SessionKeys{}
-			if stored == nil {
-				if err := ttnpb.RequireFields(sets,
-					"session_key_id",
-				); err != nil {
-					return errInvalidFieldmask.WithCause(err)
-				}
-				updated, err = ttnpb.ApplySessionKeysFieldMask(updated, pb, sets...)
-				if err != nil {
-					return err
-				}
-				if !bytes.Equal(updated.SessionKeyID, id) {
-					return errInvalidIdentifiers.New()
-				}
-			} else {
-				if err := ttnpb.ProhibitFields(sets,
-					"session_key_id",
-				); err != nil {
-					return errInvalidFieldmask.WithCause(err)
-				}
-				if err := cmd.ScanProto(updated); err != nil {
-					return err
-				}
-				updated, err = ttnpb.ApplySessionKeysFieldMask(updated, pb, sets...)
-				if err != nil {
-					return err
-				}
-			}
-			if err := updated.ValidateFields(sets...); err != nil {
+			})
+			if err != nil {
 				return err
 			}
+			return nil
+		}
 
-			pipelined = func(p redis.Pipeliner) error {
-				_, err := ttnredis.SetProto(ctx, p, ik, updated, 0)
+		if pb == nil {
+			pb = &ttnpb.SessionKeys{}
+		}
+
+		updated := &ttnpb.SessionKeys{}
+		if stored == nil {
+			if err := ttnpb.RequireFields(sets,
+				"session_key_id",
+			); err != nil {
+				return errInvalidFieldmask.WithCause(err)
+			}
+			updated, err = ttnpb.ApplySessionKeysFieldMask(updated, pb, sets...)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(updated.SessionKeyId, id) {
+				return errInvalidIdentifiers.New()
+			}
+			if r.Limit > 0 {
+				count, err := tx.RPush(ctx, sk, r.idValue(id)).Result()
 				if err != nil {
 					return err
 				}
-				return nil
+				if d := int(count) - r.Limit; d > 0 {
+					oldIDs, err := tx.LPopCount(ctx, sk, d).Result()
+					if err != nil {
+						return err
+					}
+					if _, err := tx.Pipelined(ctx, func(p redis.Pipeliner) error {
+						for _, oldID := range oldIDs {
+							p.Del(ctx, r.idKey(joinEUI, devEUI, oldID))
+						}
+						return nil
+					}); err != nil {
+						return err
+					}
+				}
 			}
-			pb, err = ttnpb.FilterGetSessionKeys(updated, gets...)
+		} else {
+			if err := ttnpb.ProhibitFields(sets,
+				"session_key_id",
+			); err != nil {
+				return errInvalidFieldmask.WithCause(err)
+			}
+			if err := cmd.ScanProto(updated); err != nil {
+				return err
+			}
+			updated, err = ttnpb.ApplySessionKeysFieldMask(updated, pb, sets...)
 			if err != nil {
 				return err
 			}
 		}
-		_, err = tx.TxPipelined(ctx, pipelined)
+		if err := updated.ValidateFields(); err != nil {
+			return err
+		}
+
+		pb, err = ttnpb.FilterGetSessionKeys(updated, gets...)
+		if err != nil {
+			return err
+		}
+		_, err = ttnredis.SetProto(ctx, tx, ik, updated, 0)
 		if err != nil {
 			return err
 		}
 		return nil
-	}, ik)
+	})
 	if err != nil {
 		return nil, ttnredis.ConvertError(err)
 	}
 	return pb, nil
+}
+
+// Delete implements KeyRegistry.
+func (r *KeyRegistry) Delete(ctx context.Context, joinEUI, devEUI types.EUI64) error {
+	if r.Limit == 0 {
+		return nil
+	}
+	if devEUI.IsZero() {
+		return errInvalidIdentifiers.New()
+	}
+	sk := r.idSetKey(joinEUI, devEUI)
+
+	lockerID, err := ttnredis.GenerateLockerID()
+	if err != nil {
+		return err
+	}
+
+	defer trace.StartRegion(ctx, "delete session keys").End()
+
+	err = ttnredis.LockedWatch(ctx, r.Redis, sk, lockerID, r.LockTTL, func(tx *redis.Tx) error {
+		sids, err := tx.LRange(ctx, sk, 0, int64(r.Limit)).Result()
+		if err != nil {
+			return err
+		}
+		_, err = tx.Pipelined(ctx, func(p redis.Pipeliner) error {
+			for _, sid := range sids {
+				p.Del(ctx, r.idKey(joinEUI, devEUI, sid))
+			}
+			p.Del(ctx, sk)
+			return nil
+		})
+		return err
+	})
+	if err != nil {
+		return ttnredis.ConvertError(err)
+	}
+	return nil
 }
 
 // applyApplicationActivationSettingsFieldMask applies fields specified by paths from src to dst and returns the result.
@@ -518,7 +649,16 @@ func filterGetApplicationActivationSettings(pb *ttnpb.ApplicationActivationSetti
 
 // ApplicationActivationSettingRegistry is an implementation of joinserver.ApplicationActivationSettingRegistry.
 type ApplicationActivationSettingRegistry struct {
-	Redis *ttnredis.Client
+	Redis   *ttnredis.Client
+	LockTTL time.Duration
+}
+
+// Init initializes the ApplicationActivationSettingRegistry.
+func (r *ApplicationActivationSettingRegistry) Init(ctx context.Context) error {
+	if err := ttnredis.InitMutex(ctx, r.Redis); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ApplicationActivationSettingRegistry) uidKey(uid string) string {
@@ -526,7 +666,7 @@ func (r *ApplicationActivationSettingRegistry) uidKey(uid string) string {
 }
 
 // GetByID gets application activation settings by appID.
-func (r *ApplicationActivationSettingRegistry) GetByID(ctx context.Context, appID ttnpb.ApplicationIdentifiers, paths []string) (*ttnpb.ApplicationActivationSettings, error) {
+func (r *ApplicationActivationSettingRegistry) GetByID(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, paths []string) (*ttnpb.ApplicationActivationSettings, error) {
 	if appID.IsZero() {
 		return nil, errInvalidIdentifiers.New()
 	}
@@ -541,16 +681,21 @@ func (r *ApplicationActivationSettingRegistry) GetByID(ctx context.Context, appI
 }
 
 // SetByID sets application activation settings by appID.
-func (r *ApplicationActivationSettingRegistry) SetByID(ctx context.Context, appID ttnpb.ApplicationIdentifiers, gets []string, f func(*ttnpb.ApplicationActivationSettings) (*ttnpb.ApplicationActivationSettings, []string, error)) (*ttnpb.ApplicationActivationSettings, error) {
+func (r *ApplicationActivationSettingRegistry) SetByID(ctx context.Context, appID *ttnpb.ApplicationIdentifiers, gets []string, f func(*ttnpb.ApplicationActivationSettings) (*ttnpb.ApplicationActivationSettings, []string, error)) (*ttnpb.ApplicationActivationSettings, error) {
 	if appID.IsZero() {
 		return nil, errInvalidIdentifiers.New()
 	}
 	uk := r.uidKey(unique.ID(ctx, appID))
 
+	lockerID, err := ttnredis.GenerateLockerID()
+	if err != nil {
+		return nil, err
+	}
+
 	defer trace.StartRegion(ctx, "set application activation settings").End()
 
 	var pb *ttnpb.ApplicationActivationSettings
-	err := r.Redis.Watch(ctx, func(tx *redis.Tx) error {
+	err = ttnredis.LockedWatch(ctx, r.Redis, uk, lockerID, r.LockTTL, func(tx *redis.Tx) error {
 		cmd := ttnredis.GetProto(ctx, tx, uk)
 		stored := &ttnpb.ApplicationActivationSettings{}
 		if err := cmd.ScanProto(stored); errors.IsNotFound(err) {
@@ -610,7 +755,7 @@ func (r *ApplicationActivationSettingRegistry) SetByID(ctx context.Context, appI
 					return err
 				}
 			}
-			if err := updated.ValidateFields(sets...); err != nil {
+			if err := updated.ValidateFields(); err != nil {
 				return err
 			}
 
@@ -631,9 +776,203 @@ func (r *ApplicationActivationSettingRegistry) SetByID(ctx context.Context, appI
 			return err
 		}
 		return nil
-	}, uk)
+	})
 	if err != nil {
 		return nil, ttnredis.ConvertError(err)
 	}
 	return pb, nil
+}
+
+var uniqueIDPattern = regexp.MustCompile(`(.*)\:(.*)`)
+
+func (r *ApplicationActivationSettingRegistry) Range(ctx context.Context, paths []string, f func(context.Context, *ttnpb.ApplicationIdentifiers, *ttnpb.ApplicationActivationSettings) bool) error {
+	appKeyRegex, err := ttnredis.EntityRegex((r.uidKey(unique.GenericID(ctx, "*"))))
+	if err != nil {
+		return err
+	}
+	return ttnredis.RangeRedisKeys(ctx, r.Redis, r.uidKey(unique.GenericID(ctx, "*")), ttnredis.DefaultRangeCount, func(key string) (bool, error) {
+		if !appKeyRegex.MatchString(key) {
+			return true, nil
+		}
+		matches := uniqueIDPattern.FindStringSubmatch(key)
+		appUID := matches[len(matches)-1]
+		applicationId, err := unique.ToApplicationID(appUID)
+		if err != nil {
+			return false, err
+		}
+		ctx, err := unique.WithContext(ctx, appUID)
+		if err != nil {
+			return false, err
+		}
+		appAs := &ttnpb.ApplicationActivationSettings{}
+		if err := ttnredis.GetProto(ctx, r.Redis, key).ScanProto(appAs); err != nil {
+			return false, err
+		}
+		appAs, err = applyApplicationActivationSettingsFieldMask(nil, appAs, paths...)
+		if err != nil {
+			return false, err
+		}
+		if !f(ctx, applicationId, appAs) {
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
+// BatchDelete implements DeviceRegistry.
+// This function deletes all the devices in a single transaction.
+func (r *DeviceRegistry) BatchDelete(
+	ctx context.Context,
+	appIDs *ttnpb.ApplicationIdentifiers,
+	deviceIDs []string,
+) ([]*ttnpb.EndDeviceIdentifiers, error) {
+	var (
+		uidKeys = make([]string, 0, len(deviceIDs))
+		ret     = make([]*ttnpb.EndDeviceIdentifiers, 0)
+	)
+	for _, devID := range deviceIDs {
+		uidKeys = append(
+			uidKeys,
+			r.uidKey(
+				unique.ID(
+					ctx,
+					&ttnpb.EndDeviceIdentifiers{
+						ApplicationIds: appIDs,
+						DeviceId:       devID,
+					}),
+			),
+		)
+	}
+
+	// Delete the devices in a single transaction.
+	transaction := func(tx *redis.Tx) error {
+		keys := make([]string, 0)
+		// Read the devices to delete.
+		raw, err := tx.MGet(ctx, uidKeys...).Result()
+		if err != nil {
+			return err
+		}
+		for _, raw := range raw {
+			switch val := raw.(type) {
+			case nil:
+				continue
+			case string:
+				dev := &ttnpb.EndDevice{}
+				if err := ttnredis.UnmarshalProto(val, dev); err != nil {
+					log.FromContext(ctx).WithError(err).Warn("Failed to decode stored end device")
+					continue
+				}
+				ret = append(ret, dev.Ids)
+				if dev.Ids.JoinEui != nil && dev.Ids.DevEui != nil {
+					keys = append(keys, r.euiKey(
+						types.MustEUI64(dev.GetIds().GetJoinEui()).OrZero(),
+						types.MustEUI64(dev.GetIds().GetDevEui()).OrZero(),
+					))
+				}
+				pid, err := provisionerUniqueID(dev)
+				if err != nil {
+					log.FromContext(ctx).WithError(err).Warn("Failed to get provisioner unique ID")
+					continue
+				}
+				if pid != "" {
+					keys = append(keys, r.provisionerKey(dev.ProvisionerId, pid))
+				}
+			}
+		}
+		// If the provided end device identifiers are not registered, it is possible
+		// that the `keys` set will be empty. `WATCH` does not allow an empty set of
+		// keys to be provided, and as such must be manually skipped.
+		if len(keys) > 0 {
+			if err := tx.Watch(ctx, keys...).Err(); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
+			p.Del(ctx, append(uidKeys, keys...)...)
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err := r.Redis.Watch(ctx, transaction, uidKeys...)
+	if err != nil {
+		return nil, ttnredis.ConvertError(err)
+	}
+	return ret, nil
+}
+
+// BatchDelete implements KeyRegistry.
+func (r *KeyRegistry) BatchDelete(ctx context.Context, devIDs []*ttnpb.EndDeviceIdentifiers) error {
+	if r.Limit == 0 {
+		return nil
+	}
+	rangeRes := make([]*redis.StringSliceCmd, 0, len(devIDs))
+	_, err := r.Redis.Pipelined(ctx, func(p redis.Pipeliner) error {
+		for _, devID := range devIDs {
+			rangeRes = append(rangeRes, p.LRange(
+				ctx,
+				r.idSetKey(
+					types.MustEUI64(devID.JoinEui).OrZero(),
+					types.MustEUI64(devID.DevEui).OrZero(),
+				),
+				0,
+				int64(r.Limit),
+			))
+		}
+		return nil
+	})
+	if err != nil {
+		return ttnredis.ConvertError(err)
+	}
+
+	delItems := make(map[string][]string, 0)
+	for i, res := range rangeRes {
+		if res == nil {
+			continue
+		}
+		sids, err := res.Result()
+		if err != nil {
+			return ttnredis.ConvertError(err)
+		}
+		idSetKey := r.idSetKey(
+			types.MustEUI64(devIDs[i].JoinEui).OrZero(),
+			types.MustEUI64(devIDs[i].DevEui).OrZero(),
+		)
+		sidKeys := make([]string, 0, len(sids))
+		for _, sid := range sids {
+			sidKeys = append(sidKeys, r.idKey(
+				types.MustEUI64(devIDs[i].JoinEui).OrZero(),
+				types.MustEUI64(devIDs[i].DevEui).OrZero(),
+				sid,
+			))
+		}
+		delItems[idSetKey] = sidKeys
+	}
+
+	// Delete all the keys for all the selected EUI pairs in a single transaction.
+	transaction := func(tx *redis.Tx) error {
+		if _, err := tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
+			for key, sidKeys := range delItems {
+				p.Del(ctx, sidKeys...)
+				p.Del(ctx, key)
+			}
+			return nil
+		}); err != nil {
+			return ttnredis.ConvertError(err)
+		}
+		return nil
+	}
+
+	defer trace.StartRegion(ctx, "batch delete session keys").End()
+	watched := make([]string, 0, len(delItems))
+	for k := range delItems {
+		watched = append(watched, k)
+	}
+	err = r.Redis.Watch(ctx, transaction, watched...)
+	if err != nil {
+		return ttnredis.ConvertError(err)
+	}
+	return nil
 }

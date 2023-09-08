@@ -19,38 +19,40 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	ttnpbv2 "go.thethings.network/lorawan-stack-legacy/v2/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/encoding/lorawan"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mqtt"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestProtobufV2Downlink(t *testing.T) {
 	a := assertions.New(t)
 	pld, _ := base64.RawStdEncoding.DecodeString("YHBhYUoAAgABj9/clY414A")
-	ids := ttnpb.GatewayIdentifiers{
-		GatewayID: "gateway-id",
+	ids := &ttnpb.GatewayIdentifiers{
+		GatewayId: "gateway-id",
 	}
 	input := &ttnpb.DownlinkMessage{
 		RawPayload: pld,
 		Payload:    &ttnpb.Message{},
 		Settings: &ttnpb.DownlinkMessage_Scheduled{
 			Scheduled: &ttnpb.TxSettings{
-				DataRate: ttnpb.DataRate{
-					Modulation: &ttnpb.DataRate_LoRa{
-						LoRa: &ttnpb.LoRaDataRate{
+				DataRate: &ttnpb.DataRate{
+					Modulation: &ttnpb.DataRate_Lora{
+						Lora: &ttnpb.LoRaDataRate{
 							Bandwidth:       125000,
 							SpreadingFactor: 12,
+							CodingRate:      band.Cr4_5,
 						},
 					},
 				},
-				CodingRate:    "4/5",
-				DataRateIndex: 0,
-				Frequency:     863000000,
+				Frequency: 863000000,
 				Downlink: &ttnpb.TxSettings_Downlink{
 					TxPower: 16.15,
 				},
@@ -73,14 +75,14 @@ func TestProtobufV2Downlink(t *testing.T) {
 		},
 		ProtocolConfiguration: &ttnpbv2.ProtocolTxConfiguration{
 			Lorawan: &ttnpbv2.LoRaWANTxConfiguration{
-				CodingRate: "4/5",
+				CodingRate: band.Cr4_5,
 				DataRate:   "SF12BW125",
 				FCnt:       2,
 				Modulation: ttnpbv2.Modulation_LORA,
 			},
 		},
 	}
-	expectedBuf, err := Expected.Marshal()
+	expectedBuf, err := proto.Marshal(Expected)
 	if !a.So(err, should.BeNil) {
 		t.Fatal("Could not marshal the v2 struct")
 	}
@@ -95,7 +97,7 @@ func TestProtobufV2Downlink(t *testing.T) {
 func TestProtobufV2Uplinks(t *testing.T) {
 	validV2Settings := ttnpbv2.ProtocolRxMetadata{
 		Lorawan: &ttnpbv2.LoRaWANMetadata{
-			CodingRate:    "4/5",
+			CodingRate:    band.Cr4_5,
 			DataRate:      "SF7BW125",
 			FrequencyPlan: 0,
 			Modulation:    ttnpbv2.Modulation_LORA,
@@ -103,16 +105,15 @@ func TestProtobufV2Uplinks(t *testing.T) {
 	}
 	validV3Settings := ttnpb.TxSettings{
 		Timestamp: 1000,
-		DataRate: ttnpb.DataRate{
-			Modulation: &ttnpb.DataRate_LoRa{
-				LoRa: &ttnpb.LoRaDataRate{
+		DataRate: &ttnpb.DataRate{
+			Modulation: &ttnpb.DataRate_Lora{
+				Lora: &ttnpb.LoRaDataRate{
 					Bandwidth:       125000,
 					SpreadingFactor: 7,
+					CodingRate:      band.Cr4_5,
 				},
 			},
 		},
-		CodingRate:    "4/5",
-		DataRateIndex: 5,
 	}
 	validV2Metadata := ttnpbv2.GatewayRxMetadata{
 		GatewayId: "gateway-id",
@@ -130,18 +131,18 @@ func TestProtobufV2Uplinks(t *testing.T) {
 		},
 		Timestamp: validV2Metadata.Timestamp,
 	}
-	nilTime := time.Unix(0, 0)
+	nilTime := timestamppb.New(time.Unix(0, 0))
 	ids := ttnpb.GatewayIdentifiers{
-		GatewayID: "gateway-id",
+		GatewayId: "gateway-id",
 	}
 	validV3Metadata := []*ttnpb.RxMetadata{
 		{
-			GatewayIdentifiers: ids,
-			ChannelRSSI:        -2,
-			RSSI:               -2,
-			SNR:                -75,
-			Time:               &nilTime,
-			Timestamp:          1000,
+			GatewayIds:  &ids,
+			ChannelRssi: -2,
+			Rssi:        -2,
+			Snr:         -75,
+			Time:        nilTime,
+			Timestamp:   1000,
 		},
 	}
 	validRawPayload := []byte{
@@ -169,7 +170,7 @@ func TestProtobufV2Uplinks(t *testing.T) {
 			},
 			InputPayload: validRawPayload,
 			Expected: &ttnpb.UplinkMessage{
-				Settings:   validV3Settings,
+				Settings:   &validV3Settings,
 				RxMetadata: validV3Metadata,
 			},
 		},
@@ -181,24 +182,9 @@ func TestProtobufV2Uplinks(t *testing.T) {
 			},
 			InputPayload: validRawPayload,
 			Expected: &ttnpb.UplinkMessage{
-				Settings:   validV3Settings,
+				Settings:   &validV3Settings,
 				RxMetadata: validV3Metadata,
 			},
-		},
-		{
-			Name: "incorrect data rate",
-			Input: &ttnpbv2.UplinkMessage{
-				GatewayMetadata: &validV2Metadata,
-				ProtocolMetadata: &ttnpbv2.ProtocolRxMetadata{
-					Lorawan: &ttnpbv2.LoRaWANMetadata{
-						CodingRate:    validV2Settings.Lorawan.CodingRate,
-						DataRate:      "SF3BW000",
-						FrequencyPlan: validV2Settings.Lorawan.FrequencyPlan,
-						Modulation:    validV2Settings.Lorawan.Modulation,
-					},
-				},
-			},
-			ErrorAssertion: errors.IsInvalidArgument,
 		},
 		{
 			Name: "incorrect modulation",
@@ -218,11 +204,11 @@ func TestProtobufV2Uplinks(t *testing.T) {
 	} {
 		tcok := t.Run(tc.Name, func(t *testing.T) {
 			a := assertions.New(t)
-			buf, err := tc.Input.Marshal()
+			buf, err := proto.Marshal(tc.Input)
 			if !a.So(err, should.BeNil) {
 				t.FailNow()
 			}
-			res, err := mqtt.NewProtobufV2(test.Context()).ToUplink(buf, ids)
+			res, err := mqtt.NewProtobufV2(test.Context()).ToUplink(buf, &ids)
 			if tc.ErrorAssertion != nil {
 				if !a.So(tc.ErrorAssertion(err), should.BeTrue) {
 					t.FailNow()
@@ -242,7 +228,7 @@ func TestProtobufV2Uplinks(t *testing.T) {
 
 func TestProtobufV2Status(t *testing.T) {
 	ids := ttnpb.GatewayIdentifiers{
-		GatewayID: "gateway-id",
+		GatewayId: "gateway-id",
 	}
 	for _, tc := range []struct {
 		Name           string
@@ -259,8 +245,8 @@ func TestProtobufV2Status(t *testing.T) {
 				RxOk: 14,
 			},
 			Expected: &ttnpb.GatewayStatus{
-				BootTime: time.Unix(0, 0),
-				Time:     time.Unix(0, 0),
+				BootTime: timestamppb.New(time.Unix(0, 0)),
+				Time:     timestamppb.New(time.Unix(0, 0)),
 				Metrics: map[string]float32{
 					"lmnw": 0.0,
 					"lmst": 0.0,
@@ -282,8 +268,8 @@ func TestProtobufV2Status(t *testing.T) {
 				Fpga:     4,
 			},
 			Expected: &ttnpb.GatewayStatus{
-				BootTime: time.Unix(0, 0),
-				Time:     time.Unix(0, 0),
+				BootTime: timestamppb.New(time.Unix(0, 0)),
+				Time:     timestamppb.New(time.Unix(0, 0)),
 				Metrics: map[string]float32{
 					"lmnw": 0.0,
 					"lmst": 0.0,
@@ -299,6 +285,8 @@ func TestProtobufV2Status(t *testing.T) {
 					"dsp":      "3",
 					"fpga":     "4",
 					"hal":      "v1.1",
+					"model":    "The Things Kickstarter Gateway v1",
+					"firmware": "v1.2.3-12345678",
 				},
 			},
 		},
@@ -316,8 +304,8 @@ func TestProtobufV2Status(t *testing.T) {
 				Rtt: 3,
 			},
 			Expected: &ttnpb.GatewayStatus{
-				BootTime: time.Unix(0, 0),
-				Time:     time.Unix(0, 0),
+				BootTime: timestamppb.New(time.Unix(0, 0)),
+				Time:     timestamppb.New(time.Unix(0, 0)),
 				Metrics: map[string]float32{
 					"lmnw":              0.0,
 					"lmst":              0.0,
@@ -348,8 +336,8 @@ func TestProtobufV2Status(t *testing.T) {
 				},
 			},
 			Expected: &ttnpb.GatewayStatus{
-				BootTime: time.Unix(0, 0),
-				Time:     time.Unix(0, 0),
+				BootTime: timestamppb.New(time.Unix(0, 0)),
+				Time:     timestamppb.New(time.Unix(0, 0)),
 				Metrics: map[string]float32{
 					"lmnw": 0.0,
 					"lmst": 0.0,
@@ -365,7 +353,7 @@ func TestProtobufV2Status(t *testing.T) {
 						Altitude:  10,
 						Latitude:  10.0,
 						Longitude: 10.0,
-						Source:    ttnpb.SOURCE_GPS,
+						Source:    ttnpb.LocationSource_SOURCE_GPS,
 					},
 				},
 			},
@@ -373,11 +361,11 @@ func TestProtobufV2Status(t *testing.T) {
 	} {
 		tcok := t.Run(tc.Name, func(t *testing.T) {
 			a := assertions.New(t)
-			buf, err := tc.input.Marshal()
+			buf, err := proto.Marshal(tc.input)
 			if !a.So(err, should.BeNil) {
 				t.FailNow()
 			}
-			res, err := mqtt.NewProtobufV2(test.Context()).ToStatus(buf, ids)
+			res, err := mqtt.NewProtobufV2(test.Context()).ToStatus(buf, &ids)
 			if tc.ErrorAssertion != nil {
 				if !a.So(tc.ErrorAssertion(err), should.BeTrue) {
 					t.FailNow()

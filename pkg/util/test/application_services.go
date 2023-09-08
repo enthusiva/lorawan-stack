@@ -17,19 +17,21 @@ package test
 import (
 	"context"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // MockApplicationAccessServer is a mock ttnpb.ApplicationAccessServer used for testing.
 type MockApplicationAccessServer struct {
+	ttnpb.UnimplementedApplicationAccessServer
+
 	CreateAPIKeyFunc      func(context.Context, *ttnpb.CreateApplicationAPIKeyRequest) (*ttnpb.APIKey, error)
 	GetAPIKeyFunc         func(context.Context, *ttnpb.GetApplicationAPIKeyRequest) (*ttnpb.APIKey, error)
 	ListAPIKeysFunc       func(context.Context, *ttnpb.ListApplicationAPIKeysRequest) (*ttnpb.APIKeys, error)
 	ListCollaboratorsFunc func(context.Context, *ttnpb.ListApplicationCollaboratorsRequest) (*ttnpb.Collaborators, error)
 	ListRightsFunc        func(context.Context, *ttnpb.ApplicationIdentifiers) (*ttnpb.Rights, error)
 	GetCollaboratorFunc   func(context.Context, *ttnpb.GetApplicationCollaboratorRequest) (*ttnpb.GetCollaboratorResponse, error)
-	SetCollaboratorFunc   func(context.Context, *ttnpb.SetApplicationCollaboratorRequest) (*pbtypes.Empty, error)
+	SetCollaboratorFunc   func(context.Context, *ttnpb.SetApplicationCollaboratorRequest) (*emptypb.Empty, error)
 	UpdateAPIKeyFunc      func(context.Context, *ttnpb.UpdateApplicationAPIKeyRequest) (*ttnpb.APIKey, error)
 }
 
@@ -82,7 +84,7 @@ func (m MockApplicationAccessServer) GetCollaborator(ctx context.Context, req *t
 }
 
 // SetCollaborator calls SetCollaboratorFunc if set and panics otherwise.
-func (m MockApplicationAccessServer) SetCollaborator(ctx context.Context, req *ttnpb.SetApplicationCollaboratorRequest) (*pbtypes.Empty, error) {
+func (m MockApplicationAccessServer) SetCollaborator(ctx context.Context, req *ttnpb.SetApplicationCollaboratorRequest) (*emptypb.Empty, error) {
 	if m.SetCollaboratorFunc == nil {
 		panic("SetCollaborator called, but not set")
 	}
@@ -121,7 +123,7 @@ func MakeApplicationAccessListRightsChFunc(reqCh chan<- ApplicationAccessListRig
 	}
 }
 
-func AssertListRightsRequest(ctx context.Context, reqCh <-chan ApplicationAccessListRightsRequest, assert func(ctx, reqCtx context.Context, ids ttnpb.Identifiers) bool, rights ...ttnpb.Right) bool {
+func AssertListApplicationRightsRequest(ctx context.Context, reqCh <-chan ApplicationAccessListRightsRequest, assert func(ctx, reqCtx context.Context, ids *ttnpb.ApplicationIdentifiers) bool, rights ...ttnpb.Right) bool {
 	t := MustTFromContext(ctx)
 	t.Helper()
 	select {

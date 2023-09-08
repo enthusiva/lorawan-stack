@@ -37,24 +37,24 @@ var (
 	webhookIDKey webhookIDKeyType
 )
 
-func withDeviceID(ctx context.Context, id ttnpb.EndDeviceIdentifiers) context.Context {
+func withDeviceID(ctx context.Context, id *ttnpb.EndDeviceIdentifiers) context.Context {
 	return context.WithValue(ctx, deviceIDKey, id)
 }
 
-func deviceIDFromContext(ctx context.Context) ttnpb.EndDeviceIdentifiers {
-	id, ok := ctx.Value(deviceIDKey).(ttnpb.EndDeviceIdentifiers)
+func deviceIDFromContext(ctx context.Context) *ttnpb.EndDeviceIdentifiers {
+	id, ok := ctx.Value(deviceIDKey).(*ttnpb.EndDeviceIdentifiers)
 	if !ok {
 		panic("no end device identifiers found in context")
 	}
 	return id
 }
 
-func withWebhookID(ctx context.Context, id ttnpb.ApplicationWebhookIdentifiers) context.Context {
+func withWebhookID(ctx context.Context, id *ttnpb.ApplicationWebhookIdentifiers) context.Context {
 	return context.WithValue(ctx, webhookIDKey, id)
 }
 
-func webhookIDFromContext(ctx context.Context) ttnpb.ApplicationWebhookIdentifiers {
-	id, ok := ctx.Value(webhookIDKey).(ttnpb.ApplicationWebhookIdentifiers)
+func webhookIDFromContext(ctx context.Context) *ttnpb.ApplicationWebhookIdentifiers {
+	id, ok := ctx.Value(webhookIDKey).(*ttnpb.ApplicationWebhookIdentifiers)
 	if !ok {
 		panic("no webhook identifiers found in context")
 	}
@@ -66,12 +66,12 @@ func (w *webhooks) validateAndFillIDs(next http.Handler) http.Handler {
 		ctx := r.Context()
 		vars := mux.Vars(r)
 		appID := ttnpb.ApplicationIdentifiers{
-			ApplicationID: vars["application_id"],
+			ApplicationId: vars["application_id"],
 		}
 
-		devID := ttnpb.EndDeviceIdentifiers{
-			ApplicationIdentifiers: appID,
-			DeviceID:               vars["device_id"],
+		devID := &ttnpb.EndDeviceIdentifiers{
+			ApplicationIds: &appID,
+			DeviceId:       vars["device_id"],
 		}
 		if err := devID.ValidateContext(ctx); err != nil {
 			webhandlers.Error(w, r, err)
@@ -79,9 +79,9 @@ func (w *webhooks) validateAndFillIDs(next http.Handler) http.Handler {
 		}
 		ctx = withDeviceID(ctx, devID)
 
-		hookID := ttnpb.ApplicationWebhookIdentifiers{
-			ApplicationIdentifiers: appID,
-			WebhookID:              vars["webhook_id"],
+		hookID := &ttnpb.ApplicationWebhookIdentifiers{
+			ApplicationIds: &appID,
+			WebhookId:      vars["webhook_id"],
 		}
 		if err := hookID.ValidateContext(ctx); err != nil {
 			webhandlers.Error(w, r, err)
@@ -97,7 +97,7 @@ func (w *webhooks) requireApplicationRights(required ...ttnpb.Right) mux.Middlew
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 			ctx := req.Context()
-			appID := deviceIDFromContext(ctx).ApplicationIdentifiers
+			appID := deviceIDFromContext(ctx).ApplicationIds
 			if err := rights.RequireApplication(ctx, appID, required...); err != nil {
 				webhandlers.Error(res, req, err)
 				return

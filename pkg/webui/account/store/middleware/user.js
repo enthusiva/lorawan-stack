@@ -82,9 +82,24 @@ const deleteUserLogic = createRequestLogic({
   process: async ({ action, getState }) => {
     const userId =
       'payload' in action && action.payload.id ? action.payload.id : selectUserId(getState())
+    const { options } = action.meta
+
+    if (options.purge) {
+      return await tts.Users.purgeById(userId)
+    }
 
     return await tts.Users.deleteById(userId)
   },
 })
 
-export default [logoutLogic, getUserLogic, updateUserLogic, deleteUserLogic]
+const getUserRightsLogic = createRequestLogic({
+  type: user.GET_USER_RIGHTS,
+  process: async ({ action }) => {
+    const { userId } = action.payload
+    const result = await tts.Users.getRightsById(userId)
+
+    return result.rights.sort()
+  },
+})
+
+export default [logoutLogic, getUserLogic, updateUserLogic, deleteUserLogic, getUserRightsLogic]

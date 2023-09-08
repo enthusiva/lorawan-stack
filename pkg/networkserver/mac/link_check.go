@@ -18,7 +18,7 @@ import (
 	"context"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
+	"go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 )
 
@@ -38,22 +38,22 @@ func HandleLinkCheckReq(ctx context.Context, dev *ttnpb.EndDevice, msg *ttnpb.Up
 	}
 
 	var floor float32
-	if dr, ok := msg.Settings.DataRate.Modulation.(*ttnpb.DataRate_LoRa); ok {
-		floor, ok = demodulationFloor[dr.LoRa.SpreadingFactor][dr.LoRa.Bandwidth]
+	if dr, ok := msg.Settings.DataRate.Modulation.(*ttnpb.DataRate_Lora); ok {
+		floor, ok = demodulationFloor[dr.Lora.SpreadingFactor][dr.Lora.Bandwidth]
 		if !ok {
-			return evs, ErrInvalidDataRate.New()
+			return evs, internal.ErrInvalidDataRate.New()
 		}
 	}
 	if len(msg.RxMetadata) == 0 {
 		return evs, nil
 	}
 
-	gtwCount, maxSNR := RXMetadataStats(ctx, msg.RxMetadata)
+	gtwCount, maxSNR := internal.RXMetadataStats(ctx, msg.RxMetadata)
 	ans := &ttnpb.MACCommand_LinkCheckAns{
 		Margin:       uint32(uint8(maxSNR - floor)),
 		GatewayCount: uint32(gtwCount),
 	}
-	dev.MACState.QueuedResponses = append(dev.MACState.QueuedResponses, ans.MACCommand())
+	dev.MacState.QueuedResponses = append(dev.MacState.QueuedResponses, ans.MACCommand())
 	return append(evs,
 		EvtEnqueueLinkCheckAnswer.With(events.WithData(ans)),
 	), nil

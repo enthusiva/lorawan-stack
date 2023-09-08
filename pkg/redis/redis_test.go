@@ -20,13 +20,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
-	"github.com/gogo/protobuf/proto"
-	"github.com/smartystreets/assertions"
+	"github.com/redis/go-redis/v9"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	. "go.thethings.network/lorawan-stack/v3/pkg/redis"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestInitTaskGroup(t *testing.T) {
@@ -103,7 +104,7 @@ func TestAddTask(t *testing.T) {
 			msg := rets[0].Messages[0]
 			a.So(msg, should.Resemble, redis.XMessage{
 				ID: msg.ID,
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"start_at": fmt.Sprintf("%d", time.Unix(0, 42).UnixNano()),
 					"payload":  "testPayload",
 				},
@@ -131,7 +132,7 @@ func TestAddTask(t *testing.T) {
 			msg0 := rets[0].Messages[0]
 			a.So(msg0, should.Resemble, redis.XMessage{
 				ID: msg0.ID,
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"start_at": fmt.Sprintf("%d", time.Unix(0, 42).UnixNano()),
 					"payload":  "testPayload",
 				},
@@ -139,7 +140,7 @@ func TestAddTask(t *testing.T) {
 			msg1 := rets[0].Messages[1]
 			a.So(msg1, should.Resemble, redis.XMessage{
 				ID: msg1.ID,
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"start_at": fmt.Sprintf("%d", time.Unix(0, 42).UnixNano()),
 					"payload":  "testPayload",
 					"replace":  "1",
@@ -147,6 +148,10 @@ func TestAddTask(t *testing.T) {
 			})
 		}
 	}
+}
+
+func testStreamBlockLimit() time.Duration {
+	return (1 << 5) * test.Delay
 }
 
 func TestPopTask(t *testing.T) {
@@ -170,18 +175,30 @@ func TestPopTask(t *testing.T) {
 		var called bool
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- PopTask(ctx, cl.Client, testGroup, "testID", 10, func(p redis.Pipeliner, payload string, startAt time.Time) error {
-				p.Ping(ctx)
-				if !test.AllTrue(
-					a.So(called, should.BeFalse),
-					a.So(payload, should.Equal, expectedPayload),
-					a.So(startAt, should.Resemble, expectedStartAt),
-				) {
-					t.Errorf("PopTask assertion failed for task with expected payload %s and expected starting time of %s", expectedPayload, expectedStartAt)
-				}
-				called = true
-				return nil
-			}, inputKey)
+			errCh <- PopTask(
+				ctx,
+				cl.Client,
+				testGroup,
+				"testID",
+				func(p redis.Pipeliner, payload string, startAt time.Time) error {
+					p.Ping(ctx)
+					if !test.AllTrue(
+						a.So(called, should.BeFalse),
+						a.So(payload, should.Equal, expectedPayload),
+						a.So(startAt, should.Resemble, expectedStartAt),
+					) {
+						t.Errorf(
+							"PopTask assertion failed for task with expected payload %s and expected starting time of %s", //nolint:lll
+							expectedPayload,
+							expectedStartAt,
+						)
+					}
+					called = true
+					return nil
+				},
+				inputKey,
+				testStreamBlockLimit(),
+			)
 		}()
 
 		select {
@@ -215,19 +232,21 @@ func TestPopTask(t *testing.T) {
 		timeout := (1 << 5) * test.Delay
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-		err = PopTask(timeoutCtx, cl.Client, testGroup, "testID", 10, func(redis.Pipeliner, string, time.Time) error {
+		err = PopTask(timeoutCtx, cl.Client, testGroup, "testID", func(redis.Pipeliner, string, time.Time) error {
 			panic("must not be called")
-		}, k)
+		}, k, testStreamBlockLimit())
 		cancel()
 		if a.So(err, should.BeError) {
-			a.So(errors.IsDeadlineExceeded(err), should.BeTrue)
+			if !a.So(errors.IsDeadlineExceeded(err) || errors.IsUnavailable(err), should.BeTrue) {
+				t.FailNow()
+			}
 		}
 
 		cancelCtx, cancel := context.WithCancel(ctx)
 		time.AfterFunc(timeout, cancel)
-		err = PopTask(cancelCtx, cl.Client, testGroup, "testID", 10, func(redis.Pipeliner, string, time.Time) error {
+		err = PopTask(cancelCtx, cl.Client, testGroup, "testID", func(redis.Pipeliner, string, time.Time) error {
 			panic("must not be called")
-		}, k)
+		}, k, testStreamBlockLimit())
 		cancel()
 		if a.So(err, should.BeError) {
 			a.So(errors.IsCanceled(err), should.BeTrue)
@@ -251,56 +270,56 @@ func TestPopTask(t *testing.T) {
 	for _, x := range []*redis.XAddArgs{
 		{
 			Stream: inputKeys[0],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": fmt.Sprintf("%d", time.Unix(0, 42).UnixNano()),
 				"payload":  payloads[0],
 			},
 		},
 		{
 			Stream: inputKeys[0],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": fmt.Sprintf("%d", time.Unix(0, 43).UnixNano()),
 				"payload":  payloads[0],
 			},
 		},
 		{
 			Stream: inputKeys[0],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": fmt.Sprintf("%d", time.Unix(0, 41).UnixNano()),
 				"payload":  payloads[0],
 			},
 		},
 		{
 			Stream: inputKeys[0],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": fmt.Sprintf("%d", time.Unix(0, 41).UnixNano()),
 				"payload":  payloads[0],
 			},
 		},
 		{
 			Stream: inputKeys[1],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": fmt.Sprintf("%d", time.Unix(0, 66).UnixNano()),
 				"payload":  payloads[0],
 			},
 		},
 		{
 			Stream: inputKeys[0],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": nextMin.UnixNano(),
 				"payload":  payloads[1],
 			},
 		},
 		{
 			Stream: inputKeys[0],
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": "0",
 				"payload":  payloads[2],
 			},
 		},
 		{
 			Stream: InputTaskKey(cl.Key("testKeyUnrelated")),
-			Values: map[string]interface{}{
+			Values: map[string]any{
 				"start_at": "0",
 				"payload":  "testPayloadUnrelated",
 			},
@@ -310,6 +329,31 @@ func TestPopTask(t *testing.T) {
 		if !a.So(err, should.BeNil) {
 			t.FailNow()
 		}
+	}
+
+	for _, k := range testKeys {
+		errCh := make(chan error, 1)
+
+		cancelCtx, cancel := context.WithCancel(ctx)
+		inputKey := k
+		go func() {
+			errCh <- DispatchTask(
+				cancelCtx, cl.Client, testGroup, "testID", 10, inputKey, testStreamBlockLimit(),
+			)
+		}()
+
+		defer func() {
+			cancel()
+
+			select {
+			case <-ctx.Done():
+				t.Error("Timed out while waiting for Dispatch to finish running")
+			case err := <-errCh:
+				if !a.So(errors.IsCanceled(err), should.BeTrue) {
+					t.Errorf("DispatchTask failed with: %s", test.FormatError(err))
+				}
+			}
+		}()
 	}
 
 	a.So(assertPop(ctx, testKeys[0], payloads[2], time.Unix(0, 0).UTC()), should.BeTrue)
@@ -325,11 +369,11 @@ func TestTaskQueue(t *testing.T) {
 	defer cl.Close()
 
 	q := &TaskQueue{
-		Redis:  cl,
-		MaxLen: 42,
-		Group:  "testGroup",
-		ID:     "testID",
-		Key:    cl.Key("test"),
+		Redis:            cl,
+		MaxLen:           16384,
+		Group:            "testGroup",
+		Key:              cl.Key("test"),
+		StreamBlockLimit: testStreamBlockLimit(),
 	}
 
 	err := q.Init(ctx)
@@ -339,7 +383,25 @@ func TestTaskQueue(t *testing.T) {
 		a.So(err, should.BeNil)
 	}()
 
-	assertPop := func(ctx context.Context, r redis.Cmdable, expectedPayload string, expectedStartAt time.Time) bool {
+	errCh := make(chan error, 1)
+	cancelCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		errCh <- q.Dispatch(cancelCtx, "testID", nil)
+	}()
+	defer func() {
+		cancel()
+
+		select {
+		case <-ctx.Done():
+			t.Error("Timed out while waiting for Dispatch to finish running")
+		case err := <-errCh:
+			if !a.So(errors.IsCanceled(err), should.BeTrue) {
+				t.Errorf("DispatchTask failed with: %s", test.FormatError(err))
+			}
+		}
+	}()
+
+	assertPop := func(ctx context.Context, expectedPayload string, expectedStartAt time.Time) bool {
 		t, a := test.MustNewTFromContext(ctx)
 		t.Helper()
 
@@ -353,7 +415,7 @@ func TestTaskQueue(t *testing.T) {
 		var called bool
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- q.Pop(ctx, r, func(p redis.Pipeliner, payload string, startAt time.Time) error {
+			errCh <- q.Pop(ctx, "testID", nil, func(p redis.Pipeliner, payload string, startAt time.Time) error {
 				p.Ping(ctx)
 				a.So(called, should.BeFalse)
 				a.So(payload, should.Equal, expectedPayload)
@@ -376,21 +438,52 @@ func TestTaskQueue(t *testing.T) {
 		}
 	}
 
-	p := cl.Pipeline()
 	switch {
-	case !a.So(q.Add(ctx, nil, "test", time.Now(), true), should.BeNil),
-		!a.So(q.Add(ctx, p, "test", time.Unix(0, 42), true), should.BeNil),
+	case
+		// We use a relative timestamp in order to ensure that the message is not immediately dispatched.
+		// This allows us to test task replacement.
+		!a.So(q.Add(ctx, nil, "test", time.Now().Add(time.Minute), true), should.BeNil),
 		!a.So(q.Add(ctx, nil, "test", time.Unix(0, 24), false), should.BeNil),
-		!a.So(q.Add(ctx, p, "test2", time.Unix(0, 43), false), should.BeNil),
-		!a.So(q.Add(ctx, p, "test", time.Unix(0, 420), false), should.BeNil),
-		!a.So(func() error {
+		!a.So(q.Add(ctx, nil, "test", time.Unix(0, 42), true), should.BeNil),
+		!a.So(assertPop(ctx, "test", time.Unix(0, 42).UTC()), should.BeTrue),
+		!a.So(q.Add(ctx, nil, "test2", time.Unix(0, 41), true), should.BeNil),
+		!a.So(assertPop(ctx, "test2", time.Unix(0, 41).UTC()), should.BeTrue),
+		!a.So(q.Add(ctx, nil, "test2", time.Unix(0, 43), false), should.BeNil),
+		!a.So(assertPop(ctx, "test2", time.Unix(0, 43).UTC()), should.BeTrue):
+	}
+
+	// The Lua stack limit is 8000. See https://www.lua.org/source/5.1/luaconf.h.html
+	// specifically LUAI_MAXCSTACK.
+	for _, batchSize := range []int{512 + 1, (512 + 1) * 2, 8192} {
+		p := cl.Pipeline()
+		for i := 0; i < batchSize; i++ {
+			a.So(q.Add(ctx, p, fmt.Sprintf("test%d", i), time.Unix(int64(i), 0), false), should.BeNil)
+		}
+		a.So(func() error {
 			_, err := p.Exec(ctx)
 			return err
-		}(), should.BeNil),
-		!a.So(assertPop(ctx, nil, "test", time.Unix(0, 42).UTC()), should.BeTrue),
-		!a.So(q.Add(ctx, nil, "test2", time.Unix(0, 41), true), should.BeNil),
-		!a.So(assertPop(ctx, nil, "test2", time.Unix(0, 43).UTC()), should.BeTrue),
-		!a.So(assertPop(ctx, nil, "test2", time.Unix(0, 41).UTC()), should.BeTrue):
+		}(), should.BeNil)
+
+		times := make(map[string]time.Time)
+		for i := 0; i < batchSize; i++ {
+			a.So(q.Pop(ctx, "testID", nil, func(p redis.Pipeliner, payload string, startAt time.Time) error {
+				p.Ping(ctx)
+
+				_, ok := times[payload]
+				a.So(ok, should.BeFalse)
+				times[payload] = startAt
+
+				return nil
+			}), should.BeNil)
+		}
+		a.So(times, should.HaveLength, batchSize)
+		for i := 0; i < batchSize; i++ {
+			k := fmt.Sprintf("test%d", i)
+
+			t, ok := times[k]
+			a.So(ok, should.BeTrue)
+			a.So(t, should.Equal, time.Unix(int64(i), 0).UTC())
+		}
 	}
 }
 
@@ -401,14 +494,13 @@ func TestProtoDeduplicator(t *testing.T) {
 	defer flush()
 	defer cl.Close()
 
-	makeMockProto := func(s string) proto.Message {
-		return &test.MockProtoMessageMarshalUnmarshaler{
-			MockProtoMarshaler: test.MockProtoMarshaler{
-				MarshalFunc: func() ([]byte, error) {
-					return []byte(s), nil
-				},
-			},
-		}
+	makeProto := func(s string) proto.Message {
+		return &ttnpb.APIKey{Id: s}
+	}
+	makeProtoString := func(s string) string {
+		m := makeProto(s)
+		s, _ = MarshalProto(m)
+		return s
 	}
 
 	ttl := (1 << 12) * test.Delay
@@ -421,31 +513,31 @@ func TestProtoDeduplicator(t *testing.T) {
 	}
 	a.So(v, should.BeTrue)
 
-	v, err = DeduplicateProtos(ctx, cl, key1, ttl, makeMockProto("proto1"))
+	v, err = DeduplicateProtos(ctx, cl, key1, ttl, makeProto("proto1"))
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
 	}
 	a.So(v, should.BeFalse)
 
-	v, err = DeduplicateProtos(ctx, cl, key2, ttl, makeMockProto("proto1"))
+	v, err = DeduplicateProtos(ctx, cl, key2, ttl, makeProto("proto1"))
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
 	}
 	a.So(v, should.BeTrue)
 
-	v, err = DeduplicateProtos(ctx, cl, key1, ttl, makeMockProto("proto1"))
+	v, err = DeduplicateProtos(ctx, cl, key1, ttl, makeProto("proto1"))
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
 	}
 	a.So(v, should.BeFalse)
 
-	v, err = DeduplicateProtos(ctx, cl, key1, ttl, makeMockProto("proto2"), makeMockProto("proto3"))
+	v, err = DeduplicateProtos(ctx, cl, key1, ttl, makeProto("proto2"), makeProto("proto3"))
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
 	}
 	a.So(v, should.BeFalse)
 
-	v, err = DeduplicateProtos(ctx, cl, key2, ttl, makeMockProto("proto2"))
+	v, err = DeduplicateProtos(ctx, cl, key2, ttl, makeProto("proto2"))
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
 	}
@@ -464,10 +556,10 @@ func TestProtoDeduplicator(t *testing.T) {
 		t.FailNow()
 	}
 	a.So(ss, should.Resemble, []string{
-		Encoding.EncodeToString([]byte("proto1")),
-		Encoding.EncodeToString([]byte("proto1")),
-		Encoding.EncodeToString([]byte("proto2")),
-		Encoding.EncodeToString([]byte("proto3")),
+		makeProtoString("proto1"),
+		makeProtoString("proto1"),
+		makeProtoString("proto2"),
+		makeProtoString("proto3"),
 	})
 	a.So(lockTTL, should.BeGreaterThan, 0)
 	a.So(lockTTL, should.BeLessThanOrEqualTo, ttl)
@@ -487,8 +579,8 @@ func TestProtoDeduplicator(t *testing.T) {
 		t.FailNow()
 	}
 	a.So(ss, should.Resemble, []string{
-		Encoding.EncodeToString([]byte("proto1")),
-		Encoding.EncodeToString([]byte("proto2")),
+		makeProtoString("proto1"),
+		makeProtoString("proto2"),
 	})
 	a.So(lockTTL, should.BeGreaterThan, 0)
 	a.So(lockTTL, should.BeLessThanOrEqualTo, ttl)
@@ -499,14 +591,14 @@ func TestProtoDeduplicator(t *testing.T) {
 func TestMutex(t *testing.T) {
 	a, ctx := test.New(t)
 
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second+(1<<8)*test.Delay)
+	ttl := (1 << 10) * test.Delay
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second+ttl)
 	defer cancel()
 
 	cl, flush := test.NewRedis(ctx, "redis_test")
 	defer flush()
 	defer cl.Close()
 
-	ttl := (1 << 8) * test.Delay
 	key := cl.Key("test1")
 
 	err := LockMutex(ctx, cl, key, "test-id-1", ttl)
@@ -528,7 +620,7 @@ func TestMutex(t *testing.T) {
 
 	timeoutErrCh := make(chan error, 1)
 	go func() {
-		ctx, cancel := context.WithTimeout(ctx, (1<<5)*test.Delay)
+		ctx, cancel := context.WithTimeout(ctx, (1<<8)*test.Delay)
 		defer cancel()
 		timeoutErrCh <- LockMutex(ctx, cl, key, "test-id-3", ttl)
 	}()
@@ -537,7 +629,9 @@ func TestMutex(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("Timed out while waiting for LockMutex with a deadline to return")
 	case err := <-timeoutErrCh:
-		a.So(errors.IsDeadlineExceeded(err), should.BeTrue)
+		if !a.So(errors.IsDeadlineExceeded(err) || errors.IsUnavailable(err), should.BeTrue) {
+			t.Fatal(err)
+		}
 	}
 	select {
 	case err := <-blockErrCh:
@@ -577,7 +671,7 @@ func TestMutex(t *testing.T) {
 	}
 	a.So(lockTTL, should.BeGreaterThan, 0)
 	a.So(lockTTL, should.BeLessThanOrEqualTo, ttl)
-	a.So(listTTL, should.BeLessThanOrEqualTo, lockTTL)
+	a.So(listTTL, should.BeLessThanOrEqualTo, ttl)
 
 	err = UnlockMutex(ctx, cl, key, "non-existent-id", ttl)
 	if !a.So(err, should.BeNil) {

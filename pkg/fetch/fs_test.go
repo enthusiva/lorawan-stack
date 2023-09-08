@@ -15,12 +15,11 @@
 package fetch_test
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
@@ -28,7 +27,7 @@ import (
 type frequencyPlansFileSystem string
 
 func createMockFileSystem() (frequencyPlansFileSystem, error) {
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", err
 	}

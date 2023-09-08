@@ -20,6 +20,7 @@ import { defineMessages } from 'react-intl'
 import api from '@account/api'
 
 import Button from '@ttn-lw/components/button'
+import ButtonGroup from '@ttn-lw/components/button/group'
 import Form from '@ttn-lw/components/form'
 import Input from '@ttn-lw/components/input'
 import SubmitButton from '@ttn-lw/components/submit-button'
@@ -35,7 +36,7 @@ import {
   selectApplicationSiteTitle,
 } from '@ttn-lw/lib/selectors/env'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import { id as userRegexp } from '@ttn-lw/lib/regexp'
+import { userId as userIdRegexp } from '@ttn-lw/lib/regexp'
 
 import { selectEnableUserRegistration } from '@account/lib/selectors/app-config'
 
@@ -54,10 +55,11 @@ const enableUserRegistration = selectEnableUserRegistration()
 
 const validationSchema = Yup.object().shape({
   user_id: Yup.string()
-    .min(3, Yup.passValues(sharedMessages.validateTooShort))
+    .min(2, Yup.passValues(sharedMessages.validateTooShort))
     .max(36, Yup.passValues(sharedMessages.validateTooLong))
-    .matches(userRegexp, Yup.passValues(sharedMessages.validateIdFormat))
-    .required(sharedMessages.validateRequired),
+    .matches(userIdRegexp, Yup.passValues(sharedMessages.validateIdFormat))
+    .required(sharedMessages.validateRequired)
+    .trim(),
   password: Yup.string().required(sharedMessages.validateRequired),
 })
 
@@ -68,6 +70,11 @@ const url = (location, omitQuery = false) => {
 
   if (omitQuery) {
     return next.split('?')[0]
+  }
+
+  // Only allow relative redirects to prevent open redirects.
+  if (!next.startsWith('/') || next.startsWith('//')) {
+    return appRoot
   }
 
   return next
@@ -81,7 +88,9 @@ const Login = () => {
     async (values, { setSubmitting }) => {
       try {
         setError(undefined)
-        await api.account.login(values)
+
+        const castedValues = validationSchema.cast(values)
+        await api.account.login(castedValues)
 
         window.location = url(location)
       } catch (error) {
@@ -140,22 +149,18 @@ const Login = () => {
           type="password"
           required
         />
-        <div className={style.buttons}>
+        <ButtonGroup>
           <Form.Submit
             component={SubmitButton}
             message={sharedMessages.login}
             className={style.submitButton}
+            error={Boolean(error)}
           />
           {enableUserRegistration && (
-            <Button.Link to={`/register${location.search}`} secondary message={m.createAccount} />
+            <Button.Link to={`/register${location.search}`} message={m.createAccount} />
           )}
-          <Button.Link
-            naked
-            secondary
-            message={m.forgotPassword}
-            to={`/forgot-password${location.search}`}
-          />
-        </div>
+          <Button.Link naked message={m.forgotPassword} to={`/forgot-password${location.search}`} />
+        </ButtonGroup>
       </Form>
     </div>
   )

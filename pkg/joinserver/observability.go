@@ -22,17 +22,25 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/metrics"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
+)
+
+const (
+	logNamespace    = "joinserver"
+	tracerNamespace = "go.thethings.network/lorawan-stack/pkg/joinserver"
 )
 
 var (
 	evtRejectJoin = events.Define(
 		"js.join.reject", "reject join-request",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
 		events.WithErrorDataType(),
+		events.WithPropagateToParent(),
 	)
 	evtAcceptJoin = events.Define(
 		"js.join.accept", "accept join-request",
-		events.WithVisibility(ttnpb.RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithPropagateToParent(),
 	)
 )
 
@@ -58,6 +66,24 @@ var jsMetrics = &messageMetrics{
 		},
 		[]string{"error"},
 	),
+	devNonce: &devNonceMetrics{
+		tooSmall: metrics.NewContextualCounterVec(
+			prometheus.CounterOpts{
+				Subsystem: subsystem,
+				Name:      "dev_nonce_too_small",
+				Help:      "Total number of DevNonces too small errors",
+			},
+			[]string{"mac_version"},
+		),
+		reuse: metrics.NewContextualCounterVec(
+			prometheus.CounterOpts{
+				Subsystem: subsystem,
+				Name:      "dev_nonce_reuse",
+				Help:      "Total number of DevNonces reuse errors",
+			},
+			[]string{"mac_version"},
+		),
+	},
 }
 
 func init() {
@@ -67,21 +93,31 @@ func init() {
 type messageMetrics struct {
 	joinAccepted *metrics.ContextualCounterVec
 	joinRejected *metrics.ContextualCounterVec
+	devNonce     *devNonceMetrics
+}
+
+type devNonceMetrics struct {
+	tooSmall *metrics.ContextualCounterVec
+	reuse    *metrics.ContextualCounterVec
 }
 
 func (m messageMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.joinAccepted.Describe(ch)
 	m.joinRejected.Describe(ch)
+	m.devNonce.reuse.Describe(ch)
+	m.devNonce.tooSmall.Describe(ch)
 }
 
 func (m messageMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.joinAccepted.Collect(ch)
 	m.joinRejected.Collect(ch)
+	m.devNonce.reuse.Collect(ch)
+	m.devNonce.tooSmall.Collect(ch)
 }
 
 func registerAcceptJoin(ctx context.Context, dev *ttnpb.EndDevice, msg *ttnpb.JoinRequest) {
-	events.Publish(evtAcceptJoin.NewWithIdentifiersAndData(ctx, dev.EndDeviceIdentifiers, nil))
-	jsMetrics.joinAccepted.WithLabelValues(ctx, msg.NetID.String()).Inc()
+	events.Publish(evtAcceptJoin.NewWithIdentifiersAndData(ctx, dev.Ids, nil))
+	jsMetrics.joinAccepted.WithLabelValues(ctx, types.MustNetID(msg.NetId).OrZero().String()).Inc()
 }
 
 func registerRejectJoin(ctx context.Context, req *ttnpb.JoinRequest, err error) {
@@ -91,4 +127,12 @@ func registerRejectJoin(ctx context.Context, req *ttnpb.JoinRequest, err error) 
 	} else {
 		jsMetrics.joinRejected.WithLabelValues(ctx, unknown).Inc()
 	}
+}
+
+func registerDevNonceReuse(ctx context.Context, msg *ttnpb.JoinRequest) {
+	jsMetrics.devNonce.tooSmall.WithLabelValues(ctx, ttnpb.MACVersion_name[int32(msg.SelectedMacVersion)]).Inc()
+}
+
+func registerDevNonceTooSmall(ctx context.Context, msg *ttnpb.JoinRequest) {
+	jsMetrics.devNonce.reuse.WithLabelValues(ctx, ttnpb.MACVersion_name[int32(msg.SelectedMacVersion)]).Inc()
 }

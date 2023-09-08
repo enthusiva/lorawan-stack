@@ -61,7 +61,7 @@
     background-color: $c-backdrop
 
   &.actionable
-    border-radius: $br.s 0 0 $br.s
+    margin-right: $cs.xs
 
 ::placeholder
   font-family: $font-family
@@ -82,11 +82,17 @@
   flex-grow: 2
   z-index: $zi.slight
   height: $default-input-height
+  width: 100%
 
   &[type='password']
     letter-spacing: 1px
     font-variant: small-caption
     font-size: 16px
+
+.hidden
+  font-family: text-security-disc
+  &:not(.byte)
+    -webkit-text-security: disc
 
 .spinner
   padding: 0 $cs.xs
@@ -97,10 +103,12 @@
   display: inline-block
   flex-grow: 0
   flex-shrink: 0
-  padding-right: $cs.s
 
   transition: opacity $ad.m
   opacity: 0
+
+  &:last-child
+    padding-right: $cs.s
 
   &.show
     opacity: 1
@@ -109,10 +117,12 @@
     fill: $c-active-blue
 
 .byte, .code, .placeholder
-  font-family: 'IBM Plex Mono', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace
+  &:not(.hidden)
+    font-family: 'IBM Plex Mono', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace
 
 .byte
   font-weight: $fw.bold
+  width: 0
 
 .code
   font-size: $fs.s
@@ -139,6 +149,17 @@ textarea.input
 
   .button
     max-height: $default-input-height
-    border-radius: 0 $br.s $br.s 0
+    border-radius: $br.s
     height: 100%
-    margin-left: -1px
+
+  .hide-toggle
+    margin-left: -2.5rem
+
+.append
+  border-input('left')
+  padding: $cs.xxs $cs.xs
+  height: 100%
+  font-weight: $fw.bold
+  display: flex
+  align-items: center
+  justify-content: center

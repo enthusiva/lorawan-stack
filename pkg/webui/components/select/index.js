@@ -12,15 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useCallback, useState } from 'react'
 import ReactSelect, { components } from 'react-select'
-import { injectIntl } from 'react-intl'
-import bind from 'autobind-decorator'
+import { useIntl } from 'react-intl'
 import classnames from 'classnames'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 
+import Icon from '../icon'
+
+import SuggestedSelect from './suggested-select'
+import SuggestedMultiSelect from './multi-select'
+
 import style from './select.styl'
+
+const customOption = props => {
+  const { showOptionIcon } = props.selectProps
+
+  return (
+    <components.Option {...props}>
+      {showOptionIcon && <Icon icon={props.data.icon} className="mr-cs-xs" />}
+      <b>{props.label}</b>
+    </components.Option>
+  )
+}
+
+customOption.propTypes = {
+  data: PropTypes.shape({
+    icon: PropTypes.string,
+  }).isRequired,
+  label: PropTypes.string.isRequired,
+}
 
 const Input = props => {
   const { selectProps } = props
@@ -38,150 +60,145 @@ Input.propTypes = {
 // See: https://github.com/JedWatson/react-select/issues/2841
 const getValue = (opts, val) => opts.find(o => o.value === val)
 
-class Select extends React.PureComponent {
-  static propTypes = {
-    className: PropTypes.string,
-    disabled: PropTypes.bool,
-    error: PropTypes.bool,
-    id: PropTypes.string,
-    inputWidth: PropTypes.inputWidth,
-    intl: PropTypes.shape({
-      formatMessage: PropTypes.func,
-    }).isRequired,
-    name: PropTypes.string.isRequired,
-    onBlur: PropTypes.func,
-    onChange: PropTypes.func,
-    onFocus: PropTypes.func,
-    options: PropTypes.arrayOf(
-      PropTypes.shape({
-        value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        label: PropTypes.message,
-      }),
-    ),
-    placeholder: PropTypes.message,
-    value: PropTypes.string,
-    warning: PropTypes.bool,
-  }
+const Select = props => {
+  const {
+    value,
+    name,
+    onBlur,
+    onChange,
+    hasAutosuggest,
+    loadOptions,
+    className,
+    options,
+    inputWidth,
+    onFocus,
+    disabled,
+    error,
+    warning,
+    id,
+    placeholder,
+    showOptionIcon,
+    customComponents,
+    ...rest
+  } = props
 
-  static defaultProps = {
-    className: undefined,
-    onChange: () => null,
-    onBlur: () => null,
-    onFocus: () => null,
-    options: [],
-    disabled: false,
-    error: false,
-    warning: false,
-    value: undefined,
-    id: undefined,
-    inputWidth: 'm',
-    placeholder: undefined,
-  }
+  const { formatMessage } = useIntl()
+  const [inputValue, setInputValue] = useState(value)
 
-  constructor(props) {
-    super(props)
-
-    let value
-    if ('value' in props && this.context) {
-      value = props.value
-    }
-
-    this.state = {
-      checked: value,
-    }
-  }
-
-  static getDerivedStateFromProps(props, state) {
-    const { value } = props
-
-    if ('value' in props && value !== state.value) {
-      return { value }
-    }
-
-    return null
-  }
-
-  @bind
-  async onChange({ value }) {
-    const { onChange } = this.props
-
-    if (!('value' in this.props)) {
-      await this.setState({ value })
-    }
-
-    onChange(value, true)
-  }
-
-  @bind
-  onBlur(event) {
-    const { value } = this.state
-    const { onBlur, name } = this.props
-
-    // https://github.com/JedWatson/react-select/issues/3523
-    // Make sure the input name is always present in the event object.
-    event.target.name = name
-
-    if (typeof value !== 'undefined') {
-      // https://github.com/JedWatson/react-select/issues/3175
-      event.target.value = value
-    }
-
-    onBlur(event)
-  }
-
-  render() {
-    const {
-      className,
-      options,
-      inputWidth,
-      intl,
-      value,
-      onChange,
-      onBlur,
-      onFocus,
-      disabled,
-      error,
-      warning,
-      name,
-      id,
-      placeholder,
-      ...rest
-    } = this.props
-
-    const formatMessage = (label, values) => (intl ? intl.formatMessage(label, values) : label)
-    const cls = classnames(className, style.container, style[`input-width-${inputWidth}`], {
-      [style.error]: error,
-      [style.warning]: warning,
-    })
-    const translatedOptions = options.map(option => {
-      const { label, labelValues = {} } = option
-      if (typeof label === 'object' && label.id && label.defaultMessage) {
-        return { ...option, label: formatMessage(label, labelValues) }
+  const handleChange = useCallback(
+    value => {
+      if (!('value' in props)) {
+        setInputValue(value?.value)
       }
 
-      return option
-    })
+      onChange(value?.value, true)
+    },
+    [onChange, props],
+  )
 
-    return (
-      <ReactSelect
-        className={cls}
-        inputId={id}
-        classNamePrefix="select"
-        value={getValue(translatedOptions, value) || null}
-        options={translatedOptions}
-        onChange={this.onChange}
-        onBlur={this.onBlur}
-        onFocus={onFocus}
-        isDisabled={disabled}
-        name={name}
-        components={{ Input }}
-        aria-describedby={rest['aria-describedby']}
-        placeholder={Boolean(placeholder) ? formatMessage(placeholder) : undefined}
-        {...rest}
-      />
-    )
-  }
+  const handleBlur = useCallback(
+    event => {
+      // https://github.com/JedWatson/react-select/issues/3523
+      // Make sure the input name is always present in the event object.
+      event.target.name = name
+
+      if (typeof inputValue !== 'undefined') {
+        // https://github.com/JedWatson/react-select/issues/3175
+        event.target.value = inputValue
+      }
+
+      onBlur(event)
+    },
+    [onBlur, name, inputValue],
+  )
+
+  const cls = classnames(className, style.container, style[`input-width-${inputWidth}`], {
+    [style.error]: error,
+    [style.warning]: warning,
+  })
+
+  const translatedOptions = options?.map(option => {
+    const { label, labelValues = {} } = option
+    if (typeof label === 'object' && label.id && label.defaultMessage) {
+      return { ...option, label: formatMessage(label, labelValues) }
+    }
+
+    return option
+  })
+
+  return (
+    <ReactSelect
+      className={cls}
+      inputId={id}
+      classNamePrefix="select"
+      value={getValue(translatedOptions, value) || null}
+      options={translatedOptions}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onFocus={onFocus}
+      isDisabled={disabled}
+      name={name}
+      components={{ Input }}
+      aria-describedby={rest['aria-describedby']}
+      placeholder={Boolean(placeholder) ? formatMessage(placeholder) : undefined}
+      {...rest}
+    />
+  )
 }
 
-export default injectIntl(Select)
-export { Select }
+Select.propTypes = {
+  className: PropTypes.string,
+  customComponents: PropTypes.shape({
+    Option: PropTypes.func,
+    SingleValue: PropTypes.func,
+  }),
+  disabled: PropTypes.bool,
+  error: PropTypes.bool,
+  hasAutosuggest: PropTypes.bool,
+  id: PropTypes.string,
+  inputWidth: PropTypes.inputWidth,
+  loadOptions: PropTypes.func,
+  menuPlacement: PropTypes.string,
+  name: PropTypes.string.isRequired,
+  onBlur: PropTypes.func,
+  onChange: PropTypes.func,
+  onFocus: PropTypes.func,
+  options: PropTypes.arrayOf(
+    PropTypes.shape({
+      value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      label: PropTypes.message,
+    }),
+  ),
+  placeholder: PropTypes.message,
+  showOptionIcon: PropTypes.bool,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.shape({})]),
+  warning: PropTypes.bool,
+}
+
+Select.defaultProps = {
+  className: undefined,
+  onChange: () => null,
+  onBlur: () => null,
+  onFocus: () => null,
+  options: [],
+  disabled: false,
+  error: false,
+  warning: false,
+  value: undefined,
+  id: undefined,
+  inputWidth: 'm',
+  placeholder: undefined,
+  menuPlacement: 'auto',
+  hasAutosuggest: false,
+  loadOptions: () => null,
+  showOptionIcon: false,
+  customComponents: {},
+}
+
+Select.Suggested = SuggestedSelect
+Select.Suggested.displayName = 'Select.Suggested'
+
+Select.Multi = SuggestedMultiSelect
+Select.Multi.displayName = 'Select.Multi'
+
+export default Select

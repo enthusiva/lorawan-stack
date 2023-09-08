@@ -16,7 +16,6 @@ package assertions
 
 import (
 	"fmt"
-	"reflect"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 )
@@ -35,7 +34,7 @@ const (
 // ShouldHaveSameElementsFunc takes as arguments the actual value, a comparison function and the expected value.
 // If the actual value equals the expected value using the comparison function, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldHaveSameElementsFunc(actual interface{}, expected ...interface{}) (message string) {
+func ShouldHaveSameElementsFunc(actual any, expected ...any) (message string) {
 	defer func() {
 		if r := recover(); r != nil {
 			message = fmt.Sprintf(shouldHaveHadSameElementsErr, expected[0], actual, r)
@@ -54,7 +53,7 @@ func ShouldHaveSameElementsFunc(actual interface{}, expected ...interface{}) (me
 // If the actual value does not equal the expected value using the comparison function,
 // this function returns an empty string. Otherwise, it returns a string describing the
 // error.
-func ShouldNotHaveSameElementsFunc(actual interface{}, expected ...interface{}) (message string) {
+func ShouldNotHaveSameElementsFunc(actual any, expected ...any) (message string) {
 	defer func() {
 		if r := recover(); r != nil {
 			message = fmt.Sprintf(shouldNotHaveHadSameElementsErr, expected[0], actual, r)
@@ -70,30 +69,30 @@ func ShouldNotHaveSameElementsFunc(actual interface{}, expected ...interface{}) 
 }
 
 // ShouldHaveSameElementsDeep takes as arguments the actual value and the expected value.
-// If the actual value equals the expected value using reflect.DeepEqual, this
+// If the actual value equals the expected value using test.DiffEqual, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldHaveSameElementsDeep(actual interface{}, expected ...interface{}) (message string) {
+func ShouldHaveSameElementsDeep(actual any, expected ...any) (message string) {
 	if message = need(1, expected); message != success {
 		return
 	}
-	return ShouldHaveSameElementsFunc(actual, reflect.DeepEqual, expected[0])
+	return ShouldHaveSameElementsFunc(actual, test.DiffEqual, expected[0])
 }
 
 // ShouldNotHaveSameElementsDeep takes as arguments the actual value and the expected
 // value.
-// If the actual value does not equal the expected value using reflect.DeepEqual, this
+// If the actual value does not equal the expected value using test.DiffEqual, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldNotHaveSameElementsDeep(actual interface{}, expected ...interface{}) (message string) {
+func ShouldNotHaveSameElementsDeep(actual any, expected ...any) (message string) {
 	if message = need(1, expected); message != success {
 		return
 	}
-	return ShouldNotHaveSameElementsFunc(actual, reflect.DeepEqual, expected[0])
+	return ShouldNotHaveSameElementsFunc(actual, test.DiffEqual, expected[0])
 }
 
 // ShouldHaveSameElementsDiff takes as arguments the actual value and the expected value.
-// If the actual value equals the expected value using pretty.Diff, this
+// If the actual value equals the expected value using test.Diff, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldHaveSameElementsDiff(actual interface{}, expected ...interface{}) (message string) {
+func ShouldHaveSameElementsDiff(actual any, expected ...any) (message string) {
 	if message = need(1, expected); message != success {
 		return
 	}
@@ -102,9 +101,9 @@ func ShouldHaveSameElementsDiff(actual interface{}, expected ...interface{}) (me
 
 // ShouldNotHaveSameElementsDiff takes as arguments the actual value and the expected
 // value.
-// If the actual value does not equal the expected value using pretty.Diff, this
+// If the actual value does not equal the expected value using test.Diff, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldNotHaveSameElementsDiff(actual interface{}, expected ...interface{}) (message string) {
+func ShouldNotHaveSameElementsDiff(actual any, expected ...any) (message string) {
 	if message = need(1, expected); message != success {
 		return
 	}
@@ -114,7 +113,7 @@ func ShouldNotHaveSameElementsDiff(actual interface{}, expected ...interface{}) 
 // ShouldHaveSameElementsEvent takes as arguments the actual value and the expected value.
 // If the actual value equals the expected value using test.EventEqual, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldHaveSameElementsEvent(actual interface{}, expected ...interface{}) (message string) {
+func ShouldHaveSameElementsEvent(actual any, expected ...any) (message string) {
 	if message = need(1, expected); message != success {
 		return
 	}
@@ -125,7 +124,7 @@ func ShouldHaveSameElementsEvent(actual interface{}, expected ...interface{}) (m
 // value.
 // If the actual value does not equal the expected value using test.EventEqual, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldNotHaveSameElementsEvent(actual interface{}, expected ...interface{}) (message string) {
+func ShouldNotHaveSameElementsEvent(actual any, expected ...any) (message string) {
 	if message = need(1, expected); message != success {
 		return
 	}
@@ -135,7 +134,7 @@ func ShouldNotHaveSameElementsEvent(actual interface{}, expected ...interface{})
 // ShouldBeProperSupersetOfElementsFunc takes as arguments the actual value, a comparison function and the expected value.
 // If the actual value represents a proper superset of expected value under equality given by the comparison function, this
 // function returns an empty string. Otherwise, it returns a string describing the error.
-func ShouldBeProperSupersetOfElementsFunc(actual interface{}, expected ...interface{}) (message string) {
+func ShouldBeProperSupersetOfElementsFunc(actual any, expected ...any) (message string) {
 	defer func() {
 		if r := recover(); r != nil {
 			message = fmt.Sprintf(shouldHaveBeenProperSubsetOfElementsErr, expected[0], actual, r)

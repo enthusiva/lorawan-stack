@@ -47,14 +47,14 @@ var errInvalidKey = errors.DefineInvalidArgument("invalid_key", "key `{key}` inv
 
 type kv struct {
 	key   string
-	value interface{}
+	value any
 }
 
 type orderedMap struct {
 	kv []kv
 }
 
-func (m *orderedMap) add(k string, v interface{}) {
+func (m *orderedMap) add(k string, v any) {
 	m.kv = append(m.kv, kv{key: k, value: v})
 }
 
@@ -277,7 +277,7 @@ var defaultTxLUTConfigs = []TxLUTConfig{
 
 // BuildSX1301Config builds the SX1301 configuration for the given frequency plan.
 func BuildSX1301Config(frequencyPlan *frequencyplans.FrequencyPlan) (*SX1301Config, error) {
-	phy, err := band.GetByID(frequencyPlan.BandID)
+	phy, err := band.GetLatest(frequencyPlan.BandID)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func BuildSX1301Config(frequencyPlan *frequencyplans.FrequencyPlan) (*SX1301Conf
 	if channel := frequencyPlan.LoRaStandardChannel; channel != nil {
 		dr, ok := phy.DataRates[ttnpb.DataRateIndex(channel.DataRate)]
 		if ok {
-			if lora := dr.Rate.GetLoRa(); lora != nil {
+			if lora := dr.Rate.GetLora(); lora != nil {
 				conf.LoRaStandardChannel = &IFConfig{
 					Enable:       true,
 					Radio:        channel.Radio,
@@ -358,7 +358,7 @@ func BuildSX1301Config(frequencyPlan *frequencyplans.FrequencyPlan) (*SX1301Conf
 	if channel := frequencyPlan.FSKChannel; channel != nil {
 		dr, ok := phy.DataRates[ttnpb.DataRateIndex(channel.DataRate)]
 		if ok {
-			if fsk := dr.Rate.GetFSK(); fsk != nil {
+			if fsk := dr.Rate.GetFsk(); fsk != nil {
 				conf.FSKChannel = &IFConfig{
 					Enable:    true,
 					Radio:     channel.Radio,

@@ -35,16 +35,17 @@ const (
 // newSubscriptionSet creates a new subscription set. The timeout represents
 // the period after which the set will shut down if empty. If the timeout is
 // zero, the set never timeouts.
-func newSubscriptionSet(ctx context.Context, rd RequestDecoupler, timeout time.Duration) *subscriptionSet {
+func newSubscriptionSet(ctx context.Context, rd RequestDecoupler, timeout time.Duration, opts ...io.SubscriptionOption) *subscriptionSet {
 	ctx, cancel := errorcontext.New(ctx)
 	s := &subscriptionSet{
 		ctx:           ctx,
 		cancel:        cancel,
 		rd:            rd,
 		timeout:       timeout,
-		subscribeCh:   make(chan *io.Subscription, 1),
-		unsubscribeCh: make(chan *io.Subscription, 1),
+		subscribeCh:   make(chan *io.Subscription),
+		unsubscribeCh: make(chan *io.Subscription),
 		upCh:          make(chan *io.ContextualApplicationUp, subscriptionSetBufferSize),
+		subOpts:       opts,
 	}
 	go s.run()
 	return s
@@ -58,6 +59,7 @@ type subscriptionSet struct {
 	subscribeCh   chan *io.Subscription
 	unsubscribeCh chan *io.Subscription
 	upCh          chan *io.ContextualApplicationUp
+	subOpts       []io.SubscriptionOption
 }
 
 // Context returns the context of the set.
@@ -72,7 +74,7 @@ func (s *subscriptionSet) Cancel(err error) {
 
 // Subscribe creates a subscription for the provided application with the given protocol.
 func (s *subscriptionSet) Subscribe(ctx context.Context, protocol string, ids *ttnpb.ApplicationIdentifiers) (*io.Subscription, error) {
-	sub := io.NewSubscription(ctx, protocol, ids)
+	sub := io.NewSubscription(ctx, protocol, ids, s.subOpts...)
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -143,6 +145,8 @@ func (s *subscriptionSet) run() {
 			if correlationID, ok := subscribers[sub]; ok {
 				delete(subscribers, sub)
 				s.observeUnsubscribe(correlationID, sub)
+			} else {
+				panic("unknown subscription")
 			}
 			lastAction = time.Now()
 		case up := <-s.upCh:
@@ -153,6 +157,9 @@ func (s *subscriptionSet) run() {
 				))
 				if err := sub.Publish(ctx, up.ApplicationUp); err != nil {
 					log.FromContext(ctx).WithError(err).Warn("Failed to publish message")
+					registerPublishFailed(ctx, sub, err)
+				} else {
+					registerPublishSuccess(ctx, sub)
 				}
 			}
 		case <-tickCh:

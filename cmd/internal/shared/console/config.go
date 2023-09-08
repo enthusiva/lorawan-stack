@@ -24,11 +24,12 @@ import (
 // DefaultConsoleConfig is the default configuration for the Console.
 var DefaultConsoleConfig = console.Config{
 	OAuth: oauthclient.Config{
-		AuthorizeURL: shared.DefaultOAuthPublicURL + "/authorize",
-		LogoutURL:    shared.DefaultOAuthPublicURL + "/logout",
-		TokenURL:     shared.DefaultOAuthPublicURL + "/token",
-		ClientID:     "console",
-		ClientSecret: "console",
+		AuthorizeURL:    shared.DefaultOAuthPublicURL + "/authorize",
+		LogoutURL:       shared.DefaultOAuthPublicURL + "/logout",
+		TokenURL:        shared.DefaultOAuthPublicURL + "/token",
+		ClientID:        "console",
+		ClientSecret:    "console",
+		CrossSiteCookie: false,
 	},
 	UI: console.UIConfig{
 		TemplateData: webui.TemplateData{
@@ -40,10 +41,10 @@ var DefaultConsoleConfig = console.Config{
 			AssetsBaseURL: shared.DefaultAssetsBaseURL,
 			IconPrefix:    "console-",
 			CSSFiles:      []string{"console.css"},
-			JSFiles:       []string{"console.js"},
+			JSFiles:       []string{"libs.bundle.js", "console.js"},
 		},
 		FrontendConfig: console.FrontendConfig{
-			DocumentationBaseURL: "https://thethingsstack.io",
+			DocumentationBaseURL: "https://thethingsindustries.com/docs",
 			AccountURL:           "/oauth",
 			StackConfig: console.StackConfig{
 				IS:   webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
@@ -54,6 +55,7 @@ var DefaultConsoleConfig = console.Config{
 				EDTC: webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
 				QRG:  webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
 				GCS:  webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
+				DCS:  webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
 			},
 		},
 	},

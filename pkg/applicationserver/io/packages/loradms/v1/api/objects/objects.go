@@ -58,6 +58,8 @@ type PositionSolutionType uint8
 const (
 	// GNSSPositionSolutionType is GNSS position solution type.
 	GNSSPositionSolutionType PositionSolutionType = iota
+	// GNSSNGPositionSolutionType is GNSSNG position solution type.
+	GNSSNGPositionSolutionType
 	// WiFiPositionSolutionType is WiFi position solution type.
 	WiFiPositionSolutionType
 	// UnknownPositionSolutionType is used when the position solution type is unknown.
@@ -73,6 +75,7 @@ type PositionSolution struct {
 
 const (
 	gnssPositionSolutionType    = "gnss"
+	gnssngPositionSolutionType  = "gnssng"
 	wifiPositionSolutionType    = "wifi"
 	unknownPositionSolutionType = "unknown"
 )
@@ -83,6 +86,8 @@ func (t PositionSolutionType) MarshalJSON() ([]byte, error) {
 	switch t {
 	case GNSSPositionSolutionType:
 		tp = gnssPositionSolutionType
+	case GNSSNGPositionSolutionType:
+		tp = gnssngPositionSolutionType
 	case WiFiPositionSolutionType:
 		tp = wifiPositionSolutionType
 	default:
@@ -101,6 +106,8 @@ func (t *PositionSolutionType) UnmarshalJSON(b []byte) error {
 	switch tp {
 	case gnssPositionSolutionType:
 		*t = GNSSPositionSolutionType
+	case gnssngPositionSolutionType:
+		*t = GNSSNGPositionSolutionType
 	case wifiPositionSolutionType:
 		*t = WiFiPositionSolutionType
 	default:
@@ -114,6 +121,8 @@ func (t PositionSolutionType) String() string {
 	switch t {
 	case GNSSPositionSolutionType:
 		return gnssPositionSolutionType
+	case GNSSNGPositionSolutionType:
+		return gnssngPositionSolutionType
 	case WiFiPositionSolutionType:
 		return wifiPositionSolutionType
 	default:
@@ -129,7 +138,7 @@ type StreamRecord struct {
 
 // MarshalJSON implements json.Marshaler.
 func (r StreamRecord) MarshalJSON() ([]byte, error) {
-	return json.Marshal([]interface{}{r.Offset, r.Data})
+	return json.Marshal([]any{r.Offset, r.Data})
 }
 
 var errInvalidStreamRecord = errors.DefineCorruption("invalid_stream_record", "invalid stream record")
@@ -291,8 +300,8 @@ type LoRaDnlink struct {
 }
 
 // Fields implements log.Fielder.
-func (u LoRaDnlink) Fields() map[string]interface{} {
-	return map[string]interface{}{
+func (u LoRaDnlink) Fields() map[string]any {
+	return map[string]any{
 		"port":    u.Port,
 		"payload": u.Payload,
 	}
@@ -315,7 +324,7 @@ func (h Hex) String() string {
 func (h *Hex) UnmarshalJSON(b []byte) (err error) {
 	s := strings.TrimSuffix(strings.TrimPrefix(string(b), "\""), "\"")
 	*h, err = hex.DecodeString(s)
-	return
+	return err
 }
 
 // EUI represents a dash-separated EUI64.
@@ -343,5 +352,5 @@ func (e EUI) String() string {
 
 func toEUI(s string) (e EUI, err error) {
 	_, err = fmt.Sscanf(s, euiPattern, &e[0], &e[1], &e[2], &e[3], &e[4], &e[5], &e[6], &e[7])
-	return
+	return e, err
 }

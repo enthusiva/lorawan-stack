@@ -20,7 +20,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -35,7 +35,9 @@ func ExampleHandlerFunc() {
 	})
 
 	subCtx, unsubscribe := context.WithCancel(ctx)
-	events.Subscribe(subCtx, "example", nil, handler)
+	if err := events.Subscribe(subCtx, []string{"example"}, nil, handler); err != nil {
+		panic(err)
+	}
 
 	// From this moment on, "example" events will be delivered to the handler func.
 
@@ -52,7 +54,9 @@ func ExampleChannel() {
 	eventChan := make(events.Channel, 2)
 
 	subCtx, unsubscribe := context.WithCancel(ctx)
-	events.Subscribe(subCtx, "example", nil, eventChan)
+	if err := events.Subscribe(subCtx, []string{"example"}, nil, eventChan); err != nil {
+		panic(err)
+	}
 
 	// From this moment on, "example" events will be delivered to the channel.
 	// As soon as the channel is full, events will be dropped, so it's probably a
@@ -72,6 +76,7 @@ func ExampleChannel() {
 }
 
 func TestChannelReceive(t *testing.T) {
+	t.Parallel()
 	a := assertions.New(t)
 
 	eventChan := make(events.Channel, 2)
@@ -100,7 +105,9 @@ func ExampleContextHandler() {
 	eventChan := make(events.Channel, 2)
 	handler := events.ContextHandler(ctx, eventChan)
 
-	events.Subscribe(ctx, "example", nil, handler)
+	if err := events.Subscribe(ctx, []string{"example"}, nil, handler); err != nil {
+		panic(err)
+	}
 
 	// We automatically unsubscribe when he context gets canceled.
 

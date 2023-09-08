@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	. "go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/validator"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type testSubject struct {
@@ -39,7 +40,7 @@ func (t testSubject) getResult() *testSubject {
 	return &t
 }
 
-func (t *testSubject) ValidateFields(...string) error { return nil }
+func (*testSubject) ValidateFields(...string) error { return nil }
 
 type msgWithValidate struct {
 	testSubject
@@ -62,15 +63,14 @@ func (m *msgWithValidateContext) ValidateContext(ctx context.Context) error {
 
 type msgWithFieldMask struct {
 	testSubject
-	fieldMask types.FieldMask
+	fieldMask *fieldmaskpb.FieldMask
 
-	fieldIsZero       map[string]bool
-	fieldIsZeroCalled bool
+	fieldIsZero map[string]bool
 }
 
-func (m *msgWithFieldMask) GetFieldMask() types.FieldMask { return m.fieldMask }
+func (m *msgWithFieldMask) GetFieldMask() *fieldmaskpb.FieldMask { return m.fieldMask }
 
-func (m *msgWithFieldMask) ValidateFields(...string) error { return nil }
+func (*msgWithFieldMask) ValidateFields(...string) error { return nil }
 
 func (m *msgWithFieldMask) FieldIsZero(s string) bool {
 	v, ok := m.fieldIsZero[s]
@@ -80,7 +80,7 @@ func (m *msgWithFieldMask) FieldIsZero(s string) bool {
 	return v
 }
 
-func handler(ctx context.Context, req interface{}) (interface{}, error) {
+func handler(_ context.Context, req any) (any, error) {
 	res := req.(interface{ getResult() *testSubject }).getResult()
 	res.handlerCalled = true
 	return res, nil
@@ -123,7 +123,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		err: testErr,
 	}}, info, handler)
 	if a.So(err, should.BeError) {
-		a.So(err, should.Resemble, &testErr)
+		a.So(err, should.EqualErrorOrDefinition, testErr)
 	}
 
 	res, err = intercept(ctx, &msgWithValidateContext{}, info, handler)
@@ -137,13 +137,11 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		err: testErr,
 	}}, info, handler)
 	if a.So(err, should.BeError) {
-		a.So(err, should.Resemble, &testErr)
+		a.So(err, should.EqualErrorOrDefinition, testErr)
 	}
 
 	_, err = intercept(ctx, &msgWithFieldMask{
-		fieldMask: types.FieldMask{Paths: []string{
-			"foo",
-		}},
+		fieldMask: ttnpb.FieldMask("foo"),
 		fieldIsZero: map[string]bool{
 			"foo.a.a": true,
 			"foo.b":   true,
@@ -152,9 +150,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	a.So(err, should.BeNil)
 
 	_, err = intercept(ctx, &msgWithFieldMask{
-		fieldMask: types.FieldMask{Paths: []string{
-			"foo.a",
-		}},
+		fieldMask: ttnpb.FieldMask("foo.a"),
 		fieldIsZero: map[string]bool{
 			"foo.a.a": true,
 		},
@@ -162,16 +158,12 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	a.So(err, should.BeNil)
 
 	_, err = intercept(ctx, &msgWithFieldMask{
-		fieldMask: types.FieldMask{Paths: []string{
-			"foo.a.b",
-		}},
+		fieldMask: ttnpb.FieldMask("foo.a.b"),
 	}, info, handler)
 	a.So(err, should.BeNil)
 
 	_, err = intercept(ctx, &msgWithFieldMask{
-		fieldMask: types.FieldMask{Paths: []string{
-			"foo",
-		}},
+		fieldMask: ttnpb.FieldMask("foo"),
 		fieldIsZero: map[string]bool{
 			"foo.a.a": false,
 			"foo.b":   true,
@@ -182,9 +174,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	}
 
 	_, err = intercept(ctx, &msgWithFieldMask{
-		fieldMask: types.FieldMask{Paths: []string{
-			"foo",
-		}},
+		fieldMask: ttnpb.FieldMask("foo"),
 		fieldIsZero: map[string]bool{
 			"foo.a.a": false,
 			"foo.b":   true,
@@ -195,9 +185,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	}
 
 	_, err = intercept(ctx, &msgWithFieldMask{
-		fieldMask: types.FieldMask{Paths: []string{
-			"bar",
-		}},
+		fieldMask: ttnpb.FieldMask("bar"),
 	}, info, handler)
 	if a.So(err, should.BeError) {
 		a.So(errors.IsInvalidArgument(err), should.BeTrue)
@@ -213,7 +201,7 @@ func (ss *ss) Context() context.Context {
 	return ss.ctx
 }
 
-func (ss *ss) RecvMsg(_ interface{}) error {
+func (*ss) RecvMsg(any) error {
 	return nil
 }
 
@@ -239,7 +227,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 
 	intercept := StreamServerInterceptor()
 
-	err := intercept(nil, &ss{ctx: ctx}, info, func(_ interface{}, stream grpc.ServerStream) error {
+	err := intercept(nil, &ss{ctx: ctx}, info, func(_ any, stream grpc.ServerStream) error {
 		var subject interface{ getResult() *testSubject }
 
 		subject = &testSubject{}
@@ -257,7 +245,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 		}}
 		err = stream.RecvMsg(subject)
 		if a.So(err, should.BeError) {
-			a.So(err, should.Resemble, &testErr)
+			a.So(err, should.EqualErrorOrDefinition, testErr)
 		}
 
 		subject = &msgWithValidateContext{}
@@ -272,13 +260,11 @@ func TestStreamServerInterceptor(t *testing.T) {
 		}}
 		err = stream.RecvMsg(subject)
 		if a.So(err, should.BeError) {
-			a.So(err, should.Resemble, &testErr)
+			a.So(err, should.EqualErrorOrDefinition, testErr)
 		}
 
 		subject = &msgWithFieldMask{
-			fieldMask: types.FieldMask{Paths: []string{
-				"foo",
-			}},
+			fieldMask: ttnpb.FieldMask("foo"),
 			fieldIsZero: map[string]bool{
 				"foo.a.a": true,
 				"foo.b":   true,
@@ -288,9 +274,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 		a.So(err, should.BeNil)
 
 		subject = &msgWithFieldMask{
-			fieldMask: types.FieldMask{Paths: []string{
-				"foo.a",
-			}},
+			fieldMask: ttnpb.FieldMask("foo.a"),
 			fieldIsZero: map[string]bool{
 				"foo.a.a": true,
 			},
@@ -299,17 +283,13 @@ func TestStreamServerInterceptor(t *testing.T) {
 		a.So(err, should.BeNil)
 
 		subject = &msgWithFieldMask{
-			fieldMask: types.FieldMask{Paths: []string{
-				"foo.a.b",
-			}},
+			fieldMask: ttnpb.FieldMask("foo.a.b"),
 		}
 		err = stream.RecvMsg(subject)
 		a.So(err, should.BeNil)
 
 		subject = &msgWithFieldMask{
-			fieldMask: types.FieldMask{Paths: []string{
-				"foo",
-			}},
+			fieldMask: ttnpb.FieldMask("foo"),
 			fieldIsZero: map[string]bool{
 				"foo.a.a": false,
 				"foo.b":   true,
@@ -321,9 +301,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 		}
 
 		subject = &msgWithFieldMask{
-			fieldMask: types.FieldMask{Paths: []string{
-				"foo",
-			}},
+			fieldMask: ttnpb.FieldMask("foo"),
 			fieldIsZero: map[string]bool{
 				"foo.a.a": false,
 				"foo.b":   true,
@@ -335,9 +313,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 		}
 
 		subject = &msgWithFieldMask{
-			fieldMask: types.FieldMask{Paths: []string{
-				"bar",
-			}},
+			fieldMask: ttnpb.FieldMask("bar"),
 		}
 		err = stream.RecvMsg(subject)
 		if a.So(err, should.BeError) {

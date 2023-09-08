@@ -28,7 +28,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
@@ -43,10 +42,9 @@ type Manager struct {
 	viper        *viper.Viper
 	flags        *pflag.FlagSet
 	replacer     *strings.Replacer
-	defaults     interface{}
+	defaults     any
 	defaultPaths []string
 	configFlag   string
-	dataDirFlag  string
 }
 
 // Flags to be used in the command.
@@ -87,16 +85,19 @@ func (m *Manager) EnvironmentForKey(key string) string {
 }
 
 // Get returns the current value of the given config key.
-func (m *Manager) Get(key string) interface{} {
+func (m *Manager) Get(key string) any {
 	return m.viper.Get(key)
 }
 
 // Option is the type of an option for the manager.
 type Option func(m *Manager)
 
+// WithDeprecatedFlag marks a flag as deprecated with the given message.
 func WithDeprecatedFlag(name, usageMessage string) Option {
 	return func(m *Manager) {
-		m.flags.MarkDeprecated(name, usageMessage)
+		if err := m.flags.MarkDeprecated(name, usageMessage); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -107,37 +108,46 @@ var DefaultOptions = []Option{
 }
 
 // Initialize a new config manager with the given name and defaults.
-// defaults should be a struct wiath fields that define the possible config flags by setting the struct tags.
+//
+// The defaults should be a struct with fields that define the possible config
+// flags by setting the struct tags.
+//
 // Possible struct tags are:
 //
-//     `name:"<name>"`                Defines the name of the config flag, in the environment, on the command line and in the config files.
-//     `shorthand:"<n>"`              Defines a shorthand name for use on the command line.
-//     `description:"<description>"`  Add a description that will be printed in the command's help message.
-//     `file-only:"<true|false>"`     Denotes wether or not to attempt to parse this variable from the command line and environment or only from the
-//                                    config file. This can be used to allow complicated types to exist in the config file but not on the command line.
+//   - `name:"<name>"`: Defines the name of the config flag, in the environment,
+//     on the command line and in the config files.
+//   - `shorthand:"<n>"`: Defines a shorthand name for use on the command line.
+//   - `description:"<description>"`: Add a description that will be printed in the
+//     command's help message.
+//   - `file-only:"<true|false>"` Denotes wether or not to attempt to parse this
+//     variable from the command line and environment or only from the config file.
+//     This can be used to allow complicated types to exist in the config file
+//     but not on the command line.
 //
-// The type of the struct fields also defines their type when parsing the config file, command line arguments or environment
-// variables. Currently, the following types are supported:
+// The type of the struct fields also defines their type when parsing the config
+// file, command line arguments or environment variables.
+// Currently, the following types are supported:
 //
-//     bool
-//     int, int8, int16, int32, int64
-//     uint, uint8, uint16, uint32, uint64
-//     float32, float64
-//     string
-//     time.Time                           Parsed according to the TimeFormat variable set in this package
-//     time.Duration                       Parsed by time.ParseDuration
-//     []string                            Parsed by splitting on whitespace or by passing multiple flags
-//                                           VAR="a b c" or --var a --var b --var c
-//     map[string]string                   Parsed by key=val pairs
-//                                           VAR="k=v q=r" or --var k=v --var q=r
-//     map[string][]byte                   Parsed by key=val pairs, val must be hex
-//                                           VAR="k=0x01 q=0x02" or --var k=0x01 --var q=0x02
-//     map[string][]string                 Parsed by key=val pairs where keys are repeated
-//                                           VAR="k=v1 k=v2 q=r" or --var k=v1 --var k=v2 --var q=r
-//     Configurable                        Parsed by the UnmarshalConfigString method
-//     structs with fields of these types  The nested config names will be prefixed by the name of this struct, unless it is `name:",squash"`
-//                                         in which case the names are merged into the parent struct.
-func Initialize(name, envPrefix string, defaults interface{}, opts ...Option) *Manager {
+//   - `bool`
+//   - `int`, `int8`, `int16`, `int32`, `int64`
+//   - `uint`, `uint8`, `uint16`, `uint32`, `uint64`
+//   - `float32`, `float64`
+//   - `string`
+//   - `time.Time`: Parsed according to the TimeFormat variable set in this package
+//   - `time.Duration`: Parsed by `time.ParseDuration`
+//   - `[]string`: Parsed by splitting on whitespace or by passing multiple flags
+//     VAR="a b c" or --var a --var b --var c
+//   - `map[string]string`: Parsed by key=val pairs
+//     VAR="k=v q=r" or --var k=v --var q=r
+//   - `map[string][]byte`: Parsed by key=val pairs, val must be hex
+//     VAR="k=0x01 q=0x02" or --var k=0x01 --var q=0x02
+//   - `map[string][]string`: Parsed by key=val pairs where keys are repeated
+//     VAR="k=v1 k=v2 q=r" or --var k=v1 --var k=v2 --var q=r
+//   - `Configurable`: Parsed by the UnmarshalConfigString method
+//   - structs with fields of these types: The nested config names will be prefixed
+//     by the name of this struct, unless it is `name:",squash"` in which case
+//     the names are merged into the parent struct.
+func Initialize(name, envPrefix string, defaults any, opts ...Option) *Manager {
 	m := &Manager{
 		name:      name,
 		envPrefix: envPrefix,
@@ -176,7 +186,7 @@ func Initialize(name, envPrefix string, defaults interface{}, opts ...Option) *M
 // WithConfig returns a new flagset with has the flags of the Manager as well as the additional flags defined
 // from the defaults passed along.
 // Use this to build derived flagsets with a shared base config (for instance with cobra).
-func (m *Manager) WithConfig(defaults interface{}) *pflag.FlagSet {
+func (m *Manager) WithConfig(defaults any) *pflag.FlagSet {
 	flags := pflag.NewFlagSet(m.name, pflag.ExitOnError)
 	flags.AddFlagSet(m.flags)
 
@@ -194,7 +204,7 @@ func (m *Manager) WithConfig(defaults interface{}) *pflag.FlagSet {
 
 // InitializeWithDefaults is the same as Initialize but it sets some sane default options (see DefaultOptions)
 // alongside the passed in options.
-func InitializeWithDefaults(name, envPrefix string, defaults interface{}, opts ...Option) *Manager {
+func InitializeWithDefaults(name, envPrefix string, defaults any, opts ...Option) *Manager {
 	return Initialize(name, envPrefix, defaults, append(DefaultOptions, opts...)...)
 }
 
@@ -203,8 +213,9 @@ func (m *Manager) Parse(flags ...string) error {
 	return m.flags.Parse(flags)
 }
 
-// Unmarshal unmarshals the available config keys into the result. It matches the names of fields based on the name struct tag.
-func (m *Manager) Unmarshal(result interface{}) error {
+// Unmarshal unmarshals the available config keys into the result.
+// It matches the names of fields based on the name struct tag.
+func (m *Manager) Unmarshal(result any) error {
 	d, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName:          "name",
 		ZeroFields:       true,
@@ -227,6 +238,7 @@ func (m *Manager) Unmarshal(result interface{}) error {
 			stringToADRAckLimitExponentPointerHook,
 			stringToAggregatedDutyCyclePointerHook,
 			stringToRxDelayPointerHook,
+			stringToEUI64PointerHook,
 		),
 	})
 	if err != nil {
@@ -236,7 +248,6 @@ func (m *Manager) Unmarshal(result interface{}) error {
 	return d.Decode(m.viper.AllSettings())
 }
 
-// the path must be in default paths
 func (m *Manager) isDefault(path string) bool {
 	for _, def := range m.defaultPaths {
 		if def == path {
@@ -294,7 +305,7 @@ func (m *Manager) mergeConfig(in io.Reader) error {
 // UnmarshalKey unmarshals a specific key into a destination, which must have a matching type.
 // This is useful for fields which have the `file-only:"true"` tag set and so are ignored when
 // Unmarshalling them to a struct.
-func (m *Manager) UnmarshalKey(key string, raw interface{}) error {
+func (m *Manager) UnmarshalKey(key string, raw any) error {
 	return m.viper.UnmarshalKey(key, raw)
 }
 
@@ -321,7 +332,7 @@ func isConfigurableType(t reflect.Type) bool {
 	return t.Implements(configurableI) || reflect.PtrTo(t).Implements(configurableI)
 }
 
-func (m *Manager) setDefaults(prefix string, flags *pflag.FlagSet, config interface{}) {
+func (m *Manager) setDefaults(prefix string, flags *pflag.FlagSet, config any) {
 	configValue := reflect.ValueOf(config)
 	configKind := configValue.Type().Kind()
 
@@ -416,6 +427,14 @@ func (m *Manager) setDefaults(prefix string, flags *pflag.FlagSet, config interf
 			case bool:
 				m.viper.SetDefault(name, val)
 				flags.BoolP(name, shorthand, val, description)
+
+			case *bool:
+				m.viper.SetDefault(name, val)
+				value := false
+				if val != nil && *val {
+					value = true
+				}
+				flags.BoolP(name, shorthand, value, description)
 
 			case int:
 				m.viper.SetDefault(name, val)
@@ -550,6 +569,19 @@ func (m *Manager) setDefaults(prefix string, flags *pflag.FlagSet, config interf
 				m.viper.SetDefault(name, str)
 				flags.StringP(name, shorthand, str, description)
 
+			case types.EUI64:
+				str := val.String()
+				m.viper.SetDefault(name, str)
+				flags.StringP(name, shorthand, str, description)
+
+			case *types.EUI64:
+				var str string
+				if val != nil {
+					m.viper.SetDefault(name, str)
+					str = val.String()
+				}
+				flags.StringP(name, shorthand, str, description)
+
 			case ttnpb.RxDelay:
 				m.viper.SetDefault(name, int32(val))
 				flags.Int32P(name, shorthand, int32(val), description)
@@ -558,7 +590,7 @@ func (m *Manager) setDefaults(prefix string, flags *pflag.FlagSet, config interf
 				var def string
 				if val != nil {
 					def = fmt.Sprintf("%v", int32(*val))
-					m.viper.SetDefault(name, *val)
+					m.viper.SetDefault(name, def)
 				}
 				flags.StringP(name, shorthand, def, description)
 
@@ -586,7 +618,7 @@ func (m *Manager) setDefaults(prefix string, flags *pflag.FlagSet, config interf
 				}
 				flags.StringP(name, shorthand, def, description)
 
-			case []ratelimit.Profile:
+			case []RateLimitingProfile:
 				// Can only be set in the config file. Do not add command-line options
 
 			default:

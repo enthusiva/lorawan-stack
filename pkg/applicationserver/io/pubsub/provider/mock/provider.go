@@ -48,6 +48,7 @@ type Connection struct {
 	Replace *pubsub.Topic
 
 	UplinkMessage            *pubsub.Subscription
+	UplinkNormalized         *pubsub.Subscription
 	JoinAccept               *pubsub.Subscription
 	DownlinkAck              *pubsub.Subscription
 	DownlinkNack             *pubsub.Subscription
@@ -59,9 +60,10 @@ type Connection struct {
 	ServiceData              *pubsub.Subscription
 }
 
+// ApplicationPubSubIdentifiers returns the identifiers of the connection.
 func (c *Connection) ApplicationPubSubIdentifiers() *ttnpb.ApplicationPubSubIdentifiers {
 	if pb, ok := c.Target.(*ttnpb.ApplicationPubSub); ok {
-		return &pb.ApplicationPubSubIdentifiers
+		return pb.Ids
 	}
 	return nil
 }
@@ -79,6 +81,7 @@ func (c *Connection) Shutdown(ctx context.Context) (err error) {
 		c.Replace,
 
 		c.UplinkMessage,
+		c.UplinkNormalized,
 		c.JoinAccept,
 		c.DownlinkAck,
 		c.DownlinkNack,
@@ -132,6 +135,10 @@ func (i *Impl) OpenConnection(ctx context.Context, target provider.Target, enabl
 			subscription: &conn.UplinkMessage,
 		},
 		{
+			topic:        &pc.Topics.UplinkNormalized,
+			subscription: &conn.UplinkNormalized,
+		},
+		{
 			topic:        &pc.Topics.JoinAccept,
 			subscription: &conn.JoinAccept,
 		},
@@ -180,8 +187,8 @@ func init() {
 		ShutdownCh:       make(chan *ConnectionWithError, 10),
 	}
 	for _, p := range []ttnpb.ApplicationPubSub_Provider{
-		&ttnpb.ApplicationPubSub_NATS{},
-		&ttnpb.ApplicationPubSub_MQTT{},
+		&ttnpb.ApplicationPubSub_Nats{},
+		&ttnpb.ApplicationPubSub_Mqtt{},
 	} {
 		provider.RegisterProvider(p, impl)
 	}

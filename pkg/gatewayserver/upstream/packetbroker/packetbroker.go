@@ -19,40 +19,65 @@ import (
 	"context"
 	"time"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/random"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-const publishUplinkTimeout = 3 * time.Second
+const (
+	publishUplinkTimeout = 3 * time.Second
+	updateGatewayTimeout = 5 * time.Second
+
+	DefaultUpdateGatewayInterval = 10 * time.Minute
+	DefaultUpdateGatewayJitter   = 0.2
+	DefaultOnlineTTLMargin       = 10 * time.Second
+)
+
+// Config configures the Handler.
+type Config struct {
+	UpdateInterval  time.Duration
+	UpdateJitter    float64
+	OnlineTTLMargin time.Duration
+	DevAddrPrefixes []types.DevAddrPrefix
+	GatewayRegistry GatewayRegistry
+	Cluster         Cluster
+}
+
+// GatewayRegistry is a store with gateways.
+type GatewayRegistry interface {
+	Get(ctx context.Context, req *ttnpb.GetGatewayRequest) (*ttnpb.Gateway, error)
+}
 
 // Cluster represents the interface the cluster.
 type Cluster interface {
-	GetPeerConn(ctx context.Context, role ttnpb.ClusterRole, ids ttnpb.Identifiers) (*grpc.ClientConn, error)
+	GetPeerConn(ctx context.Context, role ttnpb.ClusterRole, ids cluster.EntityIdentifiers) (*grpc.ClientConn, error)
 	WithClusterAuth() grpc.CallOption
 }
 
 // Handler is the upstream handler.
 type Handler struct {
-	ctx             context.Context
-	cluster         Cluster
-	devAddrPrefixes []types.DevAddrPrefix
+	ctx context.Context
+	Config
 }
 
 // NewHandler returns a new upstream handler.
-func NewHandler(ctx context.Context, cluster Cluster, devAddrPrefixes []types.DevAddrPrefix) *Handler {
+func NewHandler(ctx context.Context, config Config) *Handler {
 	return &Handler{
-		ctx:             ctx,
-		cluster:         cluster,
-		devAddrPrefixes: devAddrPrefixes,
+		ctx:    ctx,
+		Config: config,
 	}
 }
 
-// GetDevAddrPrefixes implements upstream.Handler.
-func (h *Handler) GetDevAddrPrefixes() []types.DevAddrPrefix {
-	return h.devAddrPrefixes
+// DevAddrPrefixes implements upstream.Handler.
+func (h *Handler) DevAddrPrefixes() []types.DevAddrPrefix {
+	return h.Config.DevAddrPrefixes
 }
 
 // Setup implements upstream.Handler.
@@ -60,31 +85,165 @@ func (h *Handler) Setup(context.Context) error {
 	return nil
 }
 
+func (h *Handler) nextUpdateGateway(onlineTTL *durationpb.Duration) <-chan time.Time {
+	d := random.Jitter(h.UpdateInterval, h.UpdateJitter)
+	if onlineTTL != nil {
+		ttl := onlineTTL.AsDuration()
+		ttl -= h.OnlineTTLMargin
+		if ttl < d {
+			d = ttl
+		}
+	}
+	return time.After(d)
+}
+
 // ConnectGateway implements upstream.Handler.
-func (h *Handler) ConnectGateway(context.Context, ttnpb.GatewayIdentifiers, *io.Connection) error {
-	return nil
+func (h *Handler) ConnectGateway(ctx context.Context, ids *ttnpb.GatewayIdentifiers, conn *io.Connection) error {
+	pbaConn, err := h.Cluster.GetPeerConn(ctx, ttnpb.ClusterRole_PACKET_BROKER_AGENT, nil)
+	if err != nil {
+		return errPacketBrokerAgentNotFound.WithCause(err)
+	}
+	pbaClient := ttnpb.NewGsPbaClient(pbaConn)
+
+	gtw := conn.Gateway()
+	antennas := make([]*ttnpb.GatewayAntenna, len(gtw.Antennas))
+	copy(antennas, gtw.Antennas)
+
+	pbIDs := &ttnpb.PacketBrokerGateway_GatewayIdentifiers{
+		GatewayId: ids.GatewayId,
+		Eui:       ids.Eui,
+	}
+
+	req := &ttnpb.UpdatePacketBrokerGatewayRequest{
+		Gateway: &ttnpb.PacketBrokerGateway{
+			Ids:                   pbIDs,
+			Antennas:              antennas,
+			FrequencyPlanIds:      gtw.FrequencyPlanIds,
+			StatusPublic:          gtw.StatusPublic,
+			LocationPublic:        gtw.LocationPublic,
+			AdministrativeContact: gtw.AdministrativeContact,
+			TechnicalContact:      gtw.TechnicalContact,
+			Online:                true,
+			RxRate:                &wrapperspb.FloatValue{Value: 0},
+			TxRate:                &wrapperspb.FloatValue{Value: 0},
+		},
+		FieldMask: ttnpb.FieldMask(
+			"administrative_contact",
+			"antennas",
+			"frequency_plan_ids",
+			"location_public",
+			"online",
+			"rx_rate",
+			"status_public",
+			"technical_contact",
+			"tx_rate",
+		),
+	}
+	updateCtx, cancel := context.WithTimeout(ctx, updateGatewayTimeout)
+	res, err := pbaClient.UpdateGateway(updateCtx, req, h.Cluster.WithClusterAuth())
+	cancel()
+	if err != nil {
+		return err
+	}
+
+	var (
+		onlineTTL                = res.OnlineTtl
+		lastCounters             = time.Now()
+		lastUplinkCount   uint64 = 0
+		lastDownlinkCount uint64 = 0
+	)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-h.nextUpdateGateway(onlineTTL):
+		}
+
+		req := &ttnpb.UpdatePacketBrokerGatewayRequest{
+			Gateway: &ttnpb.PacketBrokerGateway{
+				Ids:          pbIDs,
+				Online:       true,
+				StatusPublic: gtw.StatusPublic,
+			},
+			FieldMask: ttnpb.FieldMask("online", "status_public"),
+		}
+
+		if gtw.LocationPublic {
+			// Only update the location when it is public and when it may be updated from status messages.
+			// location_public should only be in the field mask if the location is known, so only when a location in the status.
+			// This is to avoid that the location gets reset when there is no location in the status.
+			if status, _, ok := conn.StatusStats(); ok && gtw.UpdateLocationFromStatus && len(status.GetAntennaLocations()) > 0 && status.AntennaLocations[0] != nil {
+				loc := status.AntennaLocations[0]
+				loc.Source = ttnpb.LocationSource_SOURCE_GPS
+				req.Gateway.LocationPublic = true
+				req.Gateway.Antennas = []*ttnpb.GatewayAntenna{
+					{
+						Location: loc,
+					},
+				}
+				req.FieldMask.Paths = append(req.FieldMask.GetPaths(), "antennas", "location_public")
+			}
+		} else {
+			// Explicitly disable location public so that the existing gateway location, if any, gets reset.
+			req.FieldMask.Paths = append(req.FieldMask.GetPaths(), "location_public")
+		}
+
+		now := time.Now()
+		uplinkCount, _, haveUplinkCount := conn.UpStats()
+		downlinkCount, _, haveDownlinkCount := conn.DownStats()
+		if haveUplinkCount {
+			req.Gateway.RxRate = &wrapperspb.FloatValue{
+				Value: (float32(uplinkCount) - float32(lastUplinkCount)) * float32(time.Hour) / float32(now.Sub(lastCounters)),
+			}
+			req.FieldMask.Paths = append(req.FieldMask.Paths, "rx_rate")
+			lastUplinkCount = uplinkCount
+		}
+		if haveDownlinkCount {
+			req.Gateway.TxRate = &wrapperspb.FloatValue{
+				Value: (float32(downlinkCount) - float32(lastDownlinkCount)) * float32(time.Hour) / float32(now.Sub(lastCounters)),
+			}
+			req.FieldMask.Paths = append(req.FieldMask.Paths, "tx_rate")
+			lastDownlinkCount = downlinkCount
+		}
+		lastCounters = now
+
+		pbaConn, err := h.Cluster.GetPeerConn(ctx, ttnpb.ClusterRole_PACKET_BROKER_AGENT, nil)
+		if err != nil {
+			return errPacketBrokerAgentNotFound.WithCause(err)
+		}
+
+		updateCtx, cancel := context.WithTimeout(ctx, updateGatewayTimeout)
+		res, err := ttnpb.NewGsPbaClient(pbaConn).UpdateGateway(updateCtx, req, h.Cluster.WithClusterAuth())
+		cancel()
+		if err != nil {
+			log.FromContext(ctx).WithError(err).Warn("Failed to update gateway")
+			onlineTTL = nil
+		} else {
+			onlineTTL = res.OnlineTtl
+		}
+	}
 }
 
 var errPacketBrokerAgentNotFound = errors.DefineNotFound("packet_broker_agent_not_found", "Packet Broker Agent not found")
 
 // HandleUplink implements upstream.Handler.
-func (h *Handler) HandleUplink(ctx context.Context, _ ttnpb.GatewayIdentifiers, ids ttnpb.EndDeviceIdentifiers, msg *ttnpb.GatewayUplinkMessage) error {
-	pbaConn, err := h.cluster.GetPeerConn(ctx, ttnpb.ClusterRole_PACKET_BROKER_AGENT, ids)
+func (h *Handler) HandleUplink(ctx context.Context, _ *ttnpb.GatewayIdentifiers, ids *ttnpb.EndDeviceIdentifiers, msg *ttnpb.GatewayUplinkMessage) error {
+	pbaConn, err := h.Cluster.GetPeerConn(ctx, ttnpb.ClusterRole_PACKET_BROKER_AGENT, nil)
 	if err != nil {
 		return errPacketBrokerAgentNotFound.WithCause(err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, publishUplinkTimeout)
 	defer cancel()
-	_, err = ttnpb.NewGsPbaClient(pbaConn).PublishUplink(ctx, msg, h.cluster.WithClusterAuth())
+	_, err = ttnpb.NewGsPbaClient(pbaConn).PublishUplink(ctx, msg, h.Cluster.WithClusterAuth())
 	return err
 }
 
 // HandleStatus implements upstream.Handler.
-func (h *Handler) HandleStatus(context.Context, ttnpb.GatewayIdentifiers, *ttnpb.GatewayStatus) error {
+func (h *Handler) HandleStatus(context.Context, *ttnpb.GatewayIdentifiers, *ttnpb.GatewayStatus) error {
 	return nil
 }
 
 // HandleTxAck implements upstream.Handler.
-func (h *Handler) HandleTxAck(context.Context, ttnpb.GatewayIdentifiers, *ttnpb.TxAcknowledgment) error {
+func (h *Handler) HandleTxAck(context.Context, *ttnpb.GatewayIdentifiers, *ttnpb.TxAcknowledgment) error {
 	return nil
 }

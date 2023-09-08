@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -28,13 +28,12 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/jsonpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 var (
-	selectApplicationPackageAssociationsFlags        = util.FieldMaskFlags(&ttnpb.ApplicationPackageAssociation{})
-	setApplicationPackageAssociationsFlags           = util.FieldFlags(&ttnpb.ApplicationPackageAssociation{})
-	selectApplicationPackageDefaultAssociationsFlags = util.FieldMaskFlags(&ttnpb.ApplicationPackageDefaultAssociation{})
-	setApplicationPackageDefaultAssociationsFlags    = util.FieldFlags(&ttnpb.ApplicationPackageDefaultAssociation{})
+	selectApplicationPackageAssociationsFlags        = util.NormalizedFlagSet()
+	selectApplicationPackageDefaultAssociationsFlags = util.NormalizedFlagSet()
 
 	selectAllApplicationPackageAssociationsFlags        = util.SelectAllFlagSet("application package association")
 	selectAllApplicationPackageDefaultAssociationsFlags = util.SelectAllFlagSet("application package default association")
@@ -89,18 +88,18 @@ func getApplicationPackageAssociationID(flagSet *pflag.FlagSet, args []string) (
 		fport = uint8(fport64)
 	}
 	if applicationID == "" {
-		return nil, errNoApplicationID
+		return nil, errNoApplicationID.New()
 	}
 	if deviceID == "" {
-		return nil, errNoEndDeviceID
+		return nil, errNoEndDeviceID.New()
 	}
 	if fport == 0 {
-		return nil, errNoFPort
+		return nil, errNoFPort.New()
 	}
 	return &ttnpb.ApplicationPackageAssociationIdentifiers{
-		EndDeviceIdentifiers: ttnpb.EndDeviceIdentifiers{
-			ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: applicationID},
-			DeviceID:               deviceID,
+		EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+			ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: applicationID},
+			DeviceId:       deviceID,
 		},
 		FPort: uint32(fport),
 	}, nil
@@ -130,14 +129,14 @@ func getApplicationPackageDefaultAssociationID(flagSet *pflag.FlagSet, args []st
 		fport = uint8(fport64)
 	}
 	if applicationID == "" {
-		return nil, errNoApplicationID
+		return nil, errNoApplicationID.New()
 	}
 	if fport == 0 {
-		return nil, errNoFPort
+		return nil, errNoFPort.New()
 	}
 	return &ttnpb.ApplicationPackageDefaultAssociationIdentifiers{
-		ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: applicationID},
-		FPort:                  uint32(fport),
+		ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: applicationID},
+		FPort:          uint32(fport),
 	}, nil
 }
 
@@ -196,8 +195,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationPackageRegistryClient(as).GetAssociation(ctx, &ttnpb.GetApplicationPackageAssociationRequest{
-				ApplicationPackageAssociationIdentifiers: *assocID,
-				FieldMask:                                types.FieldMask{Paths: paths},
+				Ids:       assocID,
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -230,10 +229,10 @@ var (
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
 			res, err := ttnpb.NewApplicationPackageRegistryClient(as).ListAssociations(ctx, &ttnpb.ListApplicationPackageAssociationRequest{
-				EndDeviceIdentifiers: *devID,
-				Limit:                limit,
-				Page:                 page,
-				FieldMask:            types.FieldMask{Paths: paths},
+				Ids:       devID,
+				Limit:     limit,
+				Page:      page,
+				FieldMask: ttnpb.FieldMask(paths...),
 			}, opt)
 			if err != nil {
 				return err
@@ -248,17 +247,16 @@ var (
 		Aliases: []string{"update"},
 		Short:   "Set the properties of an application package association",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			association := &ttnpb.ApplicationPackageAssociation{}
+			paths, err := association.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			assocID, err := getApplicationPackageAssociationID(cmd.Flags(), args)
 			if err != nil {
 				return err
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setApplicationPackageAssociationsFlags)
-
-			var association ttnpb.ApplicationPackageAssociation
-			if err = util.SetFields(&association, setApplicationPackageAssociationsFlags); err != nil {
-				return err
-			}
-			association.ApplicationPackageAssociationIdentifiers = *assocID
+			association.Ids = assocID
 
 			reader, err := getDataReader("data", cmd.Flags())
 			if err != nil {
@@ -266,13 +264,13 @@ var (
 					logger.WithError(err).Warn("Package data not available")
 				}
 			} else {
-				var st types.Struct
-				err := jsonpb.TTN().NewDecoder(reader).Decode(&st)
+				st := &structpb.Struct{}
+				err := jsonpb.TTN().NewDecoder(reader).Decode(st)
 				if err != nil {
 					return err
 				}
 
-				association.Data = &st
+				association.Data = st
 				paths = append(paths, "data")
 			}
 
@@ -281,8 +279,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationPackageRegistryClient(as).SetAssociation(ctx, &ttnpb.SetApplicationPackageAssociationRequest{
-				ApplicationPackageAssociation: association,
-				FieldMask:                     types.FieldMask{Paths: paths},
+				Association: association,
+				FieldMask:   ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -341,8 +339,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationPackageRegistryClient(as).GetDefaultAssociation(ctx, &ttnpb.GetApplicationPackageDefaultAssociationRequest{
-				ApplicationPackageDefaultAssociationIdentifiers: *assocID,
-				FieldMask: types.FieldMask{Paths: paths},
+				Ids:       assocID,
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -358,7 +356,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appID := getApplicationID(cmd.Flags(), args)
 			if appID == nil {
-				return errNoApplicationID
+				return errNoApplicationID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationPackageDefaultAssociationsFlags)
 			if len(paths) == 0 {
@@ -375,10 +373,10 @@ var (
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
 			res, err := ttnpb.NewApplicationPackageRegistryClient(as).ListDefaultAssociations(ctx, &ttnpb.ListApplicationPackageDefaultAssociationRequest{
-				ApplicationIdentifiers: *appID,
-				Limit:                  limit,
-				Page:                   page,
-				FieldMask:              types.FieldMask{Paths: paths},
+				Ids:       appID,
+				Limit:     limit,
+				Page:      page,
+				FieldMask: ttnpb.FieldMask(paths...),
 			}, opt)
 			if err != nil {
 				return err
@@ -393,17 +391,16 @@ var (
 		Aliases: []string{"update"},
 		Short:   "Set the properties of an application package default association",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			association := &ttnpb.ApplicationPackageDefaultAssociation{}
+			paths, err := association.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			assocID, err := getApplicationPackageDefaultAssociationID(cmd.Flags(), args)
 			if err != nil {
 				return err
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setApplicationPackageDefaultAssociationsFlags)
-
-			var association ttnpb.ApplicationPackageDefaultAssociation
-			if err = util.SetFields(&association, setApplicationPackageDefaultAssociationsFlags); err != nil {
-				return err
-			}
-			association.ApplicationPackageDefaultAssociationIdentifiers = *assocID
+			association.Ids = assocID
 
 			reader, err := getDataReader("data", cmd.Flags())
 			if err != nil {
@@ -411,13 +408,13 @@ var (
 					logger.WithError(err).Warn("Package data not available")
 				}
 			} else {
-				var st types.Struct
-				err := jsonpb.TTN().NewDecoder(reader).Decode(&st)
+				st := &structpb.Struct{}
+				err := jsonpb.TTN().NewDecoder(reader).Decode(st)
 				if err != nil {
 					return err
 				}
 
-				association.Data = &st
+				association.Data = st
 				paths = append(paths, "data")
 			}
 
@@ -426,8 +423,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewApplicationPackageRegistryClient(as).SetDefaultAssociation(ctx, &ttnpb.SetApplicationPackageDefaultAssociationRequest{
-				ApplicationPackageDefaultAssociation: association,
-				FieldMask:                            types.FieldMask{Paths: paths},
+				Default:   association,
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -461,6 +458,8 @@ var (
 )
 
 func init() {
+	ttnpb.AddSelectFlagsForApplicationPackageAssociation(selectApplicationPackageAssociationsFlags, "", false)
+	ttnpb.AddSelectFlagsForApplicationPackageDefaultAssociation(selectApplicationPackageDefaultAssociationsFlags, "", false)
 	applicationsPackagesCommand.AddCommand(applicationsPackagesListCommand)
 	applicationsPackageAssociationGetCommand.Flags().AddFlagSet(applicationPackageAssociationIDFlags())
 	applicationsPackageAssociationGetCommand.Flags().AddFlagSet(selectApplicationPackageAssociationsFlags)
@@ -472,8 +471,10 @@ func init() {
 	applicationsPackageAssociationsListCommand.Flags().AddFlagSet(selectAllApplicationPackageAssociationsFlags)
 	applicationsPackageAssociationsListCommand.Flags().AddFlagSet(paginationFlags())
 	applicationsPackagesAssociationsCommand.AddCommand(applicationsPackageAssociationsListCommand)
-	applicationsPackageAssociationSetCommand.Flags().AddFlagSet(applicationPackageAssociationIDFlags())
-	applicationsPackageAssociationSetCommand.Flags().AddFlagSet(setApplicationPackageAssociationsFlags)
+	ttnpb.AddSetFlagsForApplicationPackageAssociation(applicationsPackageAssociationSetCommand.Flags(), "", false)
+	flagsplugin.AddAlias(applicationsPackageAssociationSetCommand.Flags(), "ids.end-device-ids.application-ids.application-id", "application-id", flagsplugin.WithHidden(false))
+	flagsplugin.AddAlias(applicationsPackageAssociationSetCommand.Flags(), "ids.end-device-ids.device-id", "device-id", flagsplugin.WithHidden(false))
+	flagsplugin.AddAlias(applicationsPackageAssociationSetCommand.Flags(), "ids.f-port", "f-port", flagsplugin.WithHidden(false))
 	applicationsPackageAssociationSetCommand.Flags().AddFlagSet(dataFlags("data", "package data"))
 	applicationsPackagesAssociationsCommand.AddCommand(applicationsPackageAssociationSetCommand)
 	applicationsPackageAssociationDeleteCommand.Flags().AddFlagSet(applicationPackageAssociationIDFlags())
@@ -485,8 +486,9 @@ func init() {
 	applicationsPackageDefaultAssociationsListCommand.Flags().AddFlagSet(selectAllApplicationPackageDefaultAssociationsFlags)
 	applicationsPackageDefaultAssociationsListCommand.Flags().AddFlagSet(paginationFlags())
 	applicationsPackagesDefaultAssociationsCommand.AddCommand(applicationsPackageDefaultAssociationsListCommand)
-	applicationsPackageDefaultAssociationSetCommand.Flags().AddFlagSet(applicationPackageDefaultAssociationIDFlags())
-	applicationsPackageDefaultAssociationSetCommand.Flags().AddFlagSet(setApplicationPackageDefaultAssociationsFlags)
+	ttnpb.AddSetFlagsForApplicationPackageDefaultAssociation(applicationsPackageDefaultAssociationSetCommand.Flags(), "", false)
+	flagsplugin.AddAlias(applicationsPackageDefaultAssociationSetCommand.Flags(), "ids.application-ids.application-id", "application-id", flagsplugin.WithHidden(false))
+	flagsplugin.AddAlias(applicationsPackageDefaultAssociationSetCommand.Flags(), "ids.f-port", "f-port", flagsplugin.WithHidden(false))
 	applicationsPackageDefaultAssociationSetCommand.Flags().AddFlagSet(dataFlags("data", "package data"))
 	applicationsPackagesDefaultAssociationsCommand.AddCommand(applicationsPackageDefaultAssociationSetCommand)
 	applicationsPackageDefaultAssociationDeleteCommand.Flags().AddFlagSet(applicationPackageDefaultAssociationIDFlags())

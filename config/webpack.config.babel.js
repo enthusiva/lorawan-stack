@@ -15,21 +15,24 @@
 /* eslint-env node */
 
 import fs from 'fs'
-
 import path from 'path'
+import child_process from 'child_process'
+
 import webpack from 'webpack'
 import HtmlWebpackPlugin from 'html-webpack-plugin'
 import MiniCssExtractPlugin from 'mini-css-extract-plugin'
 import AddAssetHtmlPlugin from 'add-asset-html-webpack-plugin'
-import CleanWebpackPlugin from 'clean-webpack-plugin'
+import { CleanWebpackPlugin } from 'clean-webpack-plugin'
 import ShellPlugin from 'webpack-shell-plugin'
 import CopyWebpackPlugin from 'copy-webpack-plugin'
-import HashOutput from 'webpack-plugin-hash-output'
+import ReactRefreshWebpackPlugin from '@pmmmwh/react-refresh-webpack-plugin'
 import nib from 'nib'
 
 import pjson from '../package.json'
 
 const { version } = pjson
+const revision =
+  child_process.execSync('git rev-parse --short HEAD').toString().trim() || 'unknown revision'
 
 const {
   CONTEXT = '.',
@@ -37,16 +40,16 @@ const {
   PUBLIC_DIR = 'public',
   NODE_ENV = 'production',
   MAGE = 'tools/bin/mage',
-  SUPPORT_LOCALES = 'en',
-  DEFAULT_LOCALE = 'en',
 } = process.env
 
 const WEBPACK_IS_DEV_SERVER_BUILD = process.env.WEBPACK_IS_DEV_SERVER_BUILD === 'true'
 const WEBPACK_DEV_SERVER_DISABLE_HMR = process.env.WEBPACK_DEV_SERVER_DISABLE_HMR === 'true'
 const WEBPACK_DEV_SERVER_USE_TLS = process.env.WEBPACK_DEV_SERVER_USE_TLS === 'true'
+const WEBPACK_GENERATE_PRODUCTION_SOURCEMAPS =
+  process.env.WEBPACK_GENERATE_PRODUCTION_SOURCEMAPS === 'true'
 const TTN_LW_TLS_CERTIFICATE = process.env.TTN_LW_TLS_CERTIFICATE || './cert.pem'
 const TTN_LW_TLS_KEY = process.env.TTN_LW_TLS_KEY || './key.pem'
-const TTN_LW_TLS_ROOT_CA = process.env.TTN_LW_TLS_ROOT_CA || './cert.pem'
+const TTN_LW_TLS_ROOT_CA = process.env.TTN_LW_TLS_ROOT_CA || './ca.pem'
 
 const ASSETS_ROOT = '/assets'
 
@@ -57,13 +60,19 @@ const src = path.resolve('.', 'pkg/webui')
 const include = [src]
 const modules = [path.resolve(context, 'node_modules')]
 
-const r = SUPPORT_LOCALES.split(',').map(l => new RegExp(l.trim()))
+const supportedLocales = fs
+  .readdirSync(path.resolve(context, 'pkg/webui/locales'))
+  .filter(fn => fn.endsWith('.json'))
+  .map(fn => fn.split('.')[0])
+
+const r = supportedLocales.map(l => new RegExp(`./${l.trim()}`))
 
 const filterLocales = (context, request, callback) => {
-  if (context.endsWith('node_modules/intl/locale-data/jsonp')) {
-    const supported = r.reduce((acc, locale) => {
-      return acc || locale.test(request)
-    }, false)
+  if (
+    context.endsWith('node_modules/intl/locale-data/jsonp') ||
+    context.endsWith('node_modules/@formatjs/intl-relativetimeformat/locale-data')
+  ) {
+    const supported = r.reduce((acc, locale) => acc || locale.test(request), false)
 
     if (!supported) {
       return callback(null, `commonjs ${request}`)
@@ -100,12 +109,10 @@ const env = (obj = {}) => {
   }
 }
 
-// Export the style config for usage in the storybook config.
 export const styleConfig = {
   test: /\.(styl|css)$/,
   include,
   use: [
-    'css-hot-loader',
     {
       loader: MiniCssExtractPlugin.loader,
       options: {
@@ -115,19 +122,22 @@ export const styleConfig = {
     {
       loader: 'css-loader',
       options: {
-        camelCase: true,
-        localIdentName: env({
-          production: '[hash:base64:10]',
-          development: '[path][local]-[hash:base64:10]',
-        }),
-        modules: true,
+        modules: {
+          exportLocalsConvention: 'camelCase',
+          localIdentName: env({
+            production: '[hash:base64:10]',
+            development: '[local]-[hash:base64:4]',
+          }),
+        },
       },
     },
     {
       loader: 'stylus-loader',
       options: {
-        import: [path.resolve(context, 'pkg/webui/styles/include.styl')],
-        use: [nib()],
+        stylusOptions: {
+          import: [path.resolve(context, 'pkg/webui/styles/include.styl')],
+          use: nib(),
+        },
       },
     },
   ],
@@ -140,10 +150,6 @@ export default {
   stats: 'minimal',
   target: 'web',
   devtool: production ? false : 'eval-source-map',
-  node: {
-    fs: 'empty',
-    module: 'empty',
-  },
   resolve: {
     alias: env({
       all: {
@@ -153,17 +159,16 @@ export default {
         '@assets': path.resolve(context, 'pkg/webui/assets'),
       },
       development: {
-        'react-dom': '@hot-loader/react-dom',
         'ttn-lw': path.resolve(context, 'sdk/js/src'),
       },
     }),
   },
   devServer: {
+    devMiddleware: {
+      publicPath: `${ASSETS_ROOT}/`,
+    },
     port: 8080,
-    inline: true,
     hot: !WEBPACK_DEV_SERVER_DISABLE_HMR,
-    stats: 'minimal',
-    publicPath: `${ASSETS_ROOT}/`,
     proxy: [
       {
         context: ['/console', '/account', '/oauth', '/api', '/assets/blob'],
@@ -204,25 +209,31 @@ export default {
         },
       },
     },
-    removeAvailableModules: false,
+    removeEmptyChunks: false,
   },
   module: {
     rules: [
       {
         test: /\.js$/,
+        exclude: /node_modules/,
         loader: 'babel-loader',
         include,
         options: {
           cacheDirectory: path.resolve(context, CACHE_DIR, 'babel'),
           sourceMap: true,
           babelrc: true,
+          plugins: [
+            !WEBPACK_DEV_SERVER_DISABLE_HMR &&
+              !production &&
+              require.resolve('react-refresh/babel'),
+          ].filter(Boolean),
         },
       },
       {
         test: /\.(woff|woff2|ttf|eot|jpg|jpeg|png|svg)$/i,
-        loader: 'file-loader',
-        options: {
-          name: '[name].[hash].[ext]',
+        type: 'asset/resource',
+        generator: {
+          filename: '[name].[contenthash:20][ext]',
         },
       },
       styleConfig,
@@ -243,25 +254,20 @@ export default {
   },
   plugins: env({
     all: [
-      new HashOutput(),
-      new webpack.NamedModulesPlugin(),
-      new webpack.NamedChunksPlugin(),
       new webpack.EnvironmentPlugin({
         NODE_ENV,
         VERSION: version,
+        REVISION: revision,
       }),
       new webpack.DefinePlugin({
-        'process.predefined.DEFAULT_MESSAGES_LOCALE': JSON.stringify(DEFAULT_LOCALE),
-        'process.predefined.DEFAULT_MESSAGES': JSON.stringify({
-          ...require(`${src}/locales/${DEFAULT_LOCALE}`),
-          ...require(`${src}/locales/.backend/${DEFAULT_LOCALE}`),
-        }),
+        'process.predefined.SUPPORTED_LOCALES': JSON.stringify(supportedLocales),
       }),
       new HtmlWebpackPlugin({
         inject: false,
         filename: `manifest.yaml`,
         showErrors: false,
         template: path.resolve('config', 'manifest-template.yaml'),
+        minify: false,
       }),
       new MiniCssExtractPlugin({
         filename: env({
@@ -269,40 +275,43 @@ export default {
           production: '[name].[contenthash].css',
         }),
       }),
-      new CleanWebpackPlugin(path.resolve(CONTEXT, PUBLIC_DIR), {
-        root: context,
-        verbose: false,
+      new CleanWebpackPlugin({
         dry: WEBPACK_IS_DEV_SERVER_BUILD,
-        exclude: env({
-          production: [],
-          development: ['libs.bundle.js', 'libs.bundle.js.map'],
+        verbose: false,
+        cleanOnceBeforeBuildPatterns: env({
+          all: ['**/*'],
+          development: ['!libs.bundle.js', '!libs.bundle.js.map'],
+          production: ['!libs.*.bundle.js', '!libs.*.bundle.js.map'],
         }),
       }),
-      // Copy static assets to output directory
-      new CopyWebpackPlugin([`${src}/assets/static`]),
-    ],
-    production: [
-      new webpack.SourceMapDevToolPlugin({
-        filename: '[file].map',
-        exclude: /^(?!(console|oauth).*$).*/,
+      new CopyWebpackPlugin({
+        patterns: [{ from: `${src}/assets/static` }],
       }),
-    ],
-    development: [
-      new webpack.HotModuleReplacementPlugin(),
       new webpack.DllReferencePlugin({
         context,
         manifest: path.resolve(context, CACHE_DIR, 'dll.json'),
       }),
-      new webpack.WatchIgnorePlugin([
-        /node_modules/,
-        /locales/,
-        new RegExp(path.resolve(context, PUBLIC_DIR)),
-      ]),
       new AddAssetHtmlPlugin({
-        filepath: path.resolve(context, PUBLIC_DIR, 'libs.bundle.js'),
+        glob: path.resolve(context, PUBLIC_DIR, 'libs*bundle.js'),
+      }),
+    ],
+    production: [
+      ...(WEBPACK_GENERATE_PRODUCTION_SOURCEMAPS
+        ? [
+            new webpack.SourceMapDevToolPlugin({
+              filename: '[file].map',
+              exclude: /^(?!(console|oauth).*$).*/,
+            }),
+          ]
+        : []),
+    ],
+    development: [
+      ...(!WEBPACK_DEV_SERVER_DISABLE_HMR ? [new ReactRefreshWebpackPlugin()] : []),
+      new webpack.WatchIgnorePlugin({
+        paths: [/node_modules/, /locales/, path.resolve(context, PUBLIC_DIR)],
       }),
       new ShellPlugin({
-        onBuildExit: [`${MAGE} js:translations`],
+        onBuildExit: [`${MAGE} js:extractLocaleFiles`],
       }),
     ],
   }),

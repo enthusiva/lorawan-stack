@@ -17,6 +17,7 @@ package udp
 import (
 	"encoding/json"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/datarate"
 )
 
@@ -30,23 +31,62 @@ type Data struct {
 
 // RxPacket contains a Rx message
 type RxPacket struct {
-	Time *CompactTime `json:"time,omitempty"` // UTC time of pkt Rx, us precision, ISO 8601 'compact' format
-	Tmms *uint64      `json:"tmms,omitempty"` // GPS time of pkt Rx, number of milliseconds since 06.Jan.1980
-	Tmst uint32       `json:"tmst"`           // Internal timestamp of "Rx finished" event (32b unsigned)
-	Freq float64      `json:"freq"`           // Rx central frequency in MHz (unsigned float, Hz precision)
-	Chan uint8        `json:"chan"`           // Concentrator "IF" channel used for Rx (unsigned integer)
-	RFCh uint8        `json:"rfch"`           // Concentrator "RF chain" used for Rx (unsigned integer)
-	Stat int8         `json:"stat"`           // CRC status: 1 = OK, -1 = fail, 0 = no CRC
-	Modu string       `json:"modu"`           // Modulation identifier "LORA" or "FSK"
-	DatR datarate.DR  `json:"datr"`           // LoRa datarate or FSK datarate
-	CodR string       `json:"codr"`           // LoRa ECC coding rate identifier
-	RSSI int16        `json:"rssi"`           // RSSI in dBm (signed integer, 1 dB precision)
-	LSNR float64      `json:"lsnr"`           // Lora SNR ratio in dB (signed float, 0.1 dB precision)
-	Size uint16       `json:"size"`           // RF packet payload size in bytes (unsigned integer)
-	Data string       `json:"data"`           // Base64 encoded RF packet payload, padded
-	RSig []RSig       `json:"rsig"`           // Received signal information, per antenna (Optional)
-	Brd  uint         `json:"brd"`            // Concentrator board used for Rx (unsigned integer)
-	Aesk uint         `json:"aesk"`           // AES key index used for encrypting fine timestamps (unsigned integer)
+	Time  *CompactTime `json:"time,omitempty"`  // UTC time of pkt Rx, us precision, ISO 8601 'compact' format
+	Tmms  *uint64      `json:"tmms,omitempty"`  // GPS time of pkt Rx, number of milliseconds since 06.Jan.1980
+	Tmst  uint32       `json:"tmst"`            // Internal timestamp of "Rx finished" event (32b unsigned)
+	FTime *uint32      `json:"ftime,omitempty"` // Fine timestamp, ns precision [0..999999999] (Optional)
+	Freq  float64      `json:"freq"`            // Rx central frequency in MHz (unsigned float, Hz precision)
+	Chan  uint8        `json:"chan"`            // Concentrator "IF" channel used for Rx (unsigned integer)
+	RFCh  uint8        `json:"rfch"`            // Concentrator "RF chain" used for Rx (unsigned integer)
+	Stat  int8         `json:"stat"`            // CRC status: 1 = OK, -1 = fail, 0 = no CRC
+	Modu  string       `json:"modu"`            // Modulation identifier "LORA", "FSK" or "LR-FHSS"
+	DatR  datarate.DR  `json:"datr"`            // LoRa datarate, FSK datarate or LR-FHSS datarate
+	CodR  string       `json:"codr"`            // LoRa or LR-FHSS ECC coding rate identifier
+	Hpw   uint32       `json:"hpw,omitempty"`   // Hopping width; a number describing the number of steps of the LR-FHSS grid
+	RSSI  int16        `json:"rssi"`            // RSSI in dBm (signed integer, 1 dB precision)
+	LSNR  float64      `json:"lsnr"`            // Lora SNR ratio in dB (signed float, 0.1 dB precision)
+	FOff  *int32       `json:"foff,omitempty"`  // Frequency offset in Hz [-125kHz..+125Khz] (Optional)
+	Size  uint16       `json:"size"`            // RF packet payload size in bytes (unsigned integer)
+	Data  string       `json:"data"`            // Base64 encoded RF packet payload, padded
+	RSig  []RSig       `json:"rsig"`            // Received signal information, per antenna (Optional)
+	Brd   uint         `json:"brd"`             // Concentrator board used for Rx (unsigned integer)
+	Aesk  uint         `json:"aesk"`            // AES key index used for encrypting fine timestamps (unsigned integer)
+}
+
+// reduceLRFHSSCodingRate reduces the coding rate fraction returned by the packet forwarder.
+// The packet forwarder will render the coding rates used by LR-FHSS in their `4/x` form, even
+// though the real coding rates are irreducible fractions.
+func reduceLRFHSSCodingRate(cr string) string {
+	switch cr {
+	case "4/6":
+		return "2/3"
+	case "4/8":
+		return "1/2"
+	case "2/6":
+		return "1/3"
+	default:
+		return cr
+	}
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (p *RxPacket) UnmarshalJSON(data []byte) error {
+	type Alias RxPacket
+	aux := struct {
+		*Alias
+	}{
+		Alias: (*Alias)(p),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	switch mod := p.DatR.DataRate.GetModulation().(type) {
+	case *ttnpb.DataRate_Lora:
+		mod.Lora.CodingRate = p.CodR
+	case *ttnpb.DataRate_Lrfhss:
+		mod.Lrfhss.CodingRate = reduceLRFHSSCodingRate(p.CodR)
+	}
+	return nil
 }
 
 // RSig contains the metadata associated with the received signal
@@ -56,10 +96,11 @@ type RSig struct {
 	RSSIC  int     `json:"rssic"`  // RSSI in dBm of the channel (signed integer, 1 dB precision)
 	RSSIS  *int    `json:"rssis"`  // RSSI in dBm of the signal (signed integer, 1 dB precision) (Optional)
 	RSSISD *uint   `json:"rssisd"` // Standard deviation of RSSI during preamble (unsigned integer) (Optional)
-	LSNR   float64 `json:"lsnr"`   // Lora SNR ratio in dB (signed float, 0.1 dB precision)
+	LSNR   float64 `json:"lsnr"`   // Lora SNR ratio in dB (signed float, 0.1 dB precision), TBD for LR-FHSS
 	ETime  string  `json:"etime"`  // Encrypted fine timestamp, ns precision [0..999999999] (Optional)
 	FTime  *uint32 `json:"ftime"`  // Fine timestamp, ns precision [0..999999999] (Optional)
 	FOff   int32   `json:"foff"`   // Frequency offset in Hz [-125kHz..+125Khz] (Optional)
+	Fdri   int32   `json:"fdri"`   // Frequency drift in Hz between start and end of a LR-FHSS packet (signed)
 }
 
 // TxPacket contains a Tx message
@@ -95,6 +136,11 @@ func (p *TxPacket) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	switch mod := p.DatR.DataRate.GetModulation().(type) {
+	case *ttnpb.DataRate_Lora:
+		mod.Lora.CodingRate = p.CodR
+	default:
+	}
 	return nil
 }
 
@@ -111,14 +157,19 @@ type Stat struct {
 	ACKR float64       `json:"ackr"`           // Percentage of upstream datagrams that were acknowledged
 	DWNb uint32        `json:"dwnb"`           // Number of downlink datagrams received (unsigned integer)
 	TxNb uint32        `json:"txnb"`           // Number of packets emitted (unsigned integer)
-	LMOK *uint32       `json:"lmok,omitempty"` // Number of packets received from link testing mote, with CRC OK (unsigned inteter)
+	LMOK *uint32       `json:"lmok,omitempty"` // Number of packets received from link testing mote, with CRC OK (unsigned integer)
 	LMST *uint32       `json:"lmst,omitempty"` // Sequence number of the first packet received from link testing mote (unsigned integer)
 	LMNW *uint32       `json:"lmnw,omitempty"` // Sequence number of the last packet received from link testing mote (unsigned integer)
 	LPPS *uint32       `json:"lpps,omitempty"` // Number of lost PPS pulses (unsigned integer)
 	Temp *float32      `json:"temp,omitempty"` // Temperature of the Gateway (signed float)
 	FPGA *uint32       `json:"fpga,omitempty"` // Version of Gateway FPGA (unsigned integer)
-	DSP  *uint32       `json:"dsp,omitempty"`  // Version of Gateway DSP software (unsigned interger)
+	DSP  *uint32       `json:"dsp,omitempty"`  // Version of Gateway DSP software (unsigned integer)
 	HAL  *string       `json:"hal,omitempty"`  // Version of Gateway driver (format X.X.X)
+	HVer *struct {
+		FPGA *uint32 `json:"fpga,omitempty"` // Version of FPGA (unsigned integer)
+		DSP0 *uint32 `json:"dsp0,omitempty"` // Version of DSP 0 software (unsigned integer)
+		DSP1 *uint32 `json:"dsp1,omitempty"` // Version of DSP 1 software (unsigned integer)
+	} `json:"hver,omitempty"` // Gateway hardware versions
 }
 
 // TxError is returned in the TxPacketAck

@@ -22,26 +22,28 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/gogo/protobuf/proto"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mock"
 	. "go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mqtt"
+	mockis "go.thethings.network/lorawan-stack/v3/pkg/identityserver/mock"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
-	registeredGatewayID  = ttnpb.GatewayIdentifiers{GatewayID: "test-gateway"}
+	registeredGatewayID  = &ttnpb.GatewayIdentifiers{GatewayId: "test-gateway"}
 	registeredGatewayUID = unique.ID(test.Context(), registeredGatewayID)
 	registeredGatewayKey = "test-key"
 
@@ -55,8 +57,10 @@ func TestAuthentication(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	is, isAddr := mock.NewIS(ctx)
-	is.Add(ctx, registeredGatewayID, registeredGatewayKey)
+	is, isAddr, closeIS := mockis.New(ctx)
+	defer closeIS()
+	testGtw := mockis.DefaultGateway(registeredGatewayID, false, false)
+	is.GatewayRegistry().Add(ctx, registeredGatewayID, registeredGatewayKey, testGtw, testRights...)
 
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
@@ -67,14 +71,17 @@ func TestAuthentication(t *testing.T) {
 			Cluster: cluster.Config{
 				IdentityServer: isAddr,
 			},
+			FrequencyPlans: config.FrequencyPlansConfig{
+				ConfigSource: "static",
+				Static:       test.StaticFrequencyPlans,
+			},
 		},
 	})
-	c.FrequencyPlans = frequencyplans.NewStore(test.FrequencyPlansFetcher)
 	componenttest.StartComponent(t, c)
 	defer c.Close()
 	mustHavePeer(ctx, c, ttnpb.ClusterRole_ENTITY_REGISTRY)
 
-	gs := mock.NewServer(c)
+	gs := mock.NewServer(c, is)
 	lis, err := net.Listen("tcp", ":0")
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
@@ -133,8 +140,10 @@ func TestTraffic(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	is, isAddr := mock.NewIS(ctx)
-	is.Add(ctx, registeredGatewayID, registeredGatewayKey)
+	is, isAddr, closeIS := mockis.New(ctx)
+	defer closeIS()
+	testGtw := mockis.DefaultGateway(registeredGatewayID, false, false)
+	is.GatewayRegistry().Add(ctx, registeredGatewayID, registeredGatewayKey, testGtw, testRights...)
 
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
@@ -145,14 +154,17 @@ func TestTraffic(t *testing.T) {
 			Cluster: cluster.Config{
 				IdentityServer: isAddr,
 			},
+			FrequencyPlans: config.FrequencyPlansConfig{
+				ConfigSource: "static",
+				Static:       test.StaticFrequencyPlans,
+			},
 		},
 	})
-	c.FrequencyPlans = frequencyplans.NewStore(test.FrequencyPlansFetcher)
 	componenttest.StartComponent(t, c)
 	defer c.Close()
 	mustHavePeer(ctx, c, ttnpb.ClusterRole_ENTITY_REGISTRY)
 
-	gs := mock.NewServer(c)
+	gs := mock.NewServer(c, is)
 	lis, err := net.Listen("tcp", ":0")
 	if !a.So(err, should.BeNil) {
 		t.FailNow()
@@ -183,13 +195,17 @@ func TestTraffic(t *testing.T) {
 	t.Run("Upstream", func(t *testing.T) {
 		for _, tc := range []struct {
 			Topic   string
-			Message proto.Marshaler
+			Message proto.Message
 			OK      bool
 		}{
 			{
 				Topic: fmt.Sprintf("v3/%v/up", registeredGatewayUID),
 				Message: &ttnpb.UplinkMessage{
 					RawPayload: []byte{0x01},
+					Settings: &ttnpb.TxSettings{
+						DataRate:  &ttnpb.DataRate{Modulation: &ttnpb.DataRate_Lora{Lora: &ttnpb.LoRaDataRate{}}},
+						Frequency: 868000000,
+					},
 				},
 				OK: true,
 			},
@@ -217,7 +233,8 @@ func TestTraffic(t *testing.T) {
 			{
 				Topic: fmt.Sprintf("v3/%v/status", registeredGatewayUID),
 				Message: &ttnpb.GatewayStatus{
-					IP: []string{"1.1.1.1"},
+					Time: timestamppb.Now(),
+					Ip:   []string{"1.1.1.1"},
 				},
 				OK: true,
 			},
@@ -231,21 +248,21 @@ func TestTraffic(t *testing.T) {
 			{
 				Topic: fmt.Sprintf("v3/%v/status", "invalid-gateway"),
 				Message: &ttnpb.GatewayStatus{
-					IP: []string{"2.2.2.2"},
+					Ip: []string{"2.2.2.2"},
 				},
 				OK: false, // invalid gateway ID
 			},
 			{
 				Topic: "invalid/format",
 				Message: &ttnpb.GatewayStatus{
-					IP: []string{"3.3.3.3"},
+					Ip: []string{"3.3.3.3"},
 				},
 				OK: false, // invalid topic format
 			},
 		} {
 			tcok := t.Run(tc.Topic, func(t *testing.T) {
 				a := assertions.New(t)
-				buf, err := tc.Message.Marshal()
+				buf, err := proto.Marshal(tc.Message)
 				a.So(err, should.BeNil)
 				token := client.Publish(tc.Topic, 1, false, buf)
 				if !token.WaitTimeout(timeout) {
@@ -257,9 +274,10 @@ func TestTraffic(t *testing.T) {
 				select {
 				case up := <-conn.Up():
 					if tc.OK {
-						a.So(time.Since(up.ReceivedAt), should.BeLessThan, timeout)
-						up.ReceivedAt = time.Time{}
-						a.So(up.UplinkMessage, should.Resemble, tc.Message)
+						a.So(time.Since(*ttnpb.StdTime(up.Message.ReceivedAt)), should.BeLessThan, timeout)
+						expected := ttnpb.Clone(tc.Message).(*ttnpb.UplinkMessage)
+						expected.ReceivedAt = up.Message.ReceivedAt
+						a.So(up.Message, should.Resemble, expected)
 					} else {
 						t.Fatalf("Did not expect uplink message, but have %v", up)
 					}
@@ -301,10 +319,11 @@ func TestTraffic(t *testing.T) {
 				Path: &ttnpb.DownlinkPath{
 					Path: &ttnpb.DownlinkPath_UplinkToken{
 						UplinkToken: io.MustUplinkToken(
-							ttnpb.GatewayAntennaIdentifiers{GatewayIdentifiers: registeredGatewayID},
+							&ttnpb.GatewayAntennaIdentifiers{GatewayIds: registeredGatewayID},
 							100,
 							100000,
 							time.Unix(0, 100*1000),
+							nil,
 						),
 					},
 				},
@@ -312,14 +331,30 @@ func TestTraffic(t *testing.T) {
 					RawPayload: []byte{0x01},
 					Settings: &ttnpb.DownlinkMessage_Request{
 						Request: &ttnpb.TxRequest{
-							Class:            ttnpb.CLASS_A,
-							Priority:         ttnpb.TxSchedulePriority_NORMAL,
-							Rx1Delay:         ttnpb.RX_DELAY_1,
-							Rx1DataRateIndex: 5,
-							Rx1Frequency:     868100000,
-							Rx2DataRateIndex: 0,
-							Rx2Frequency:     869525000,
-							FrequencyPlanID:  test.EUFrequencyPlanID,
+							Class:    ttnpb.Class_CLASS_A,
+							Priority: ttnpb.TxSchedulePriority_NORMAL,
+							Rx1Delay: ttnpb.RxDelay_RX_DELAY_1,
+							Rx1DataRate: &ttnpb.DataRate{
+								Modulation: &ttnpb.DataRate_Lora{
+									Lora: &ttnpb.LoRaDataRate{
+										SpreadingFactor: 7,
+										Bandwidth:       125000,
+										CodingRate:      band.Cr4_5,
+									},
+								},
+							},
+							Rx1Frequency: 868100000,
+							Rx2DataRate: &ttnpb.DataRate{
+								Modulation: &ttnpb.DataRate_Lora{
+									Lora: &ttnpb.LoRaDataRate{
+										SpreadingFactor: 12,
+										Bandwidth:       125000,
+										CodingRate:      band.Cr4_5,
+									},
+								},
+							},
+							Rx2Frequency:    869525000,
+							FrequencyPlanId: test.EUFrequencyPlanID,
 						},
 					},
 				},
@@ -330,10 +365,11 @@ func TestTraffic(t *testing.T) {
 				Path: &ttnpb.DownlinkPath{
 					Path: &ttnpb.DownlinkPath_UplinkToken{
 						UplinkToken: io.MustUplinkToken(
-							ttnpb.GatewayAntennaIdentifiers{GatewayIdentifiers: registeredGatewayID},
+							&ttnpb.GatewayAntennaIdentifiers{GatewayIds: registeredGatewayID},
 							100,
 							100000,
 							time.Unix(0, 100*1000),
+							nil,
 						),
 					},
 				},
@@ -341,16 +377,16 @@ func TestTraffic(t *testing.T) {
 					RawPayload: []byte{0x01},
 					Settings: &ttnpb.DownlinkMessage_Scheduled{
 						Scheduled: &ttnpb.TxSettings{
-							DataRate: ttnpb.DataRate{
-								Modulation: &ttnpb.DataRate_LoRa{
-									LoRa: &ttnpb.LoRaDataRate{
+							DataRate: &ttnpb.DataRate{
+								Modulation: &ttnpb.DataRate_Lora{
+									Lora: &ttnpb.LoRaDataRate{
 										Bandwidth:       125000,
 										SpreadingFactor: 7,
+										CodingRate:      band.Cr4_5,
 									},
 								},
 							},
-							CodingRate: "4/5",
-							Frequency:  869525000,
+							Frequency: 869525000,
 						},
 					},
 				},
@@ -361,10 +397,11 @@ func TestTraffic(t *testing.T) {
 				Path: &ttnpb.DownlinkPath{
 					Path: &ttnpb.DownlinkPath_UplinkToken{
 						UplinkToken: io.MustUplinkToken(
-							ttnpb.GatewayAntennaIdentifiers{GatewayIdentifiers: registeredGatewayID},
+							&ttnpb.GatewayAntennaIdentifiers{GatewayIds: registeredGatewayID},
 							100,
 							100000,
 							time.Unix(0, 100*1000),
+							nil,
 						),
 					},
 				},
@@ -380,7 +417,7 @@ func TestTraffic(t *testing.T) {
 				downCh := make(chan *ttnpb.DownlinkMessage)
 				handler := func(_ mqtt.Client, msg mqtt.Message) {
 					down := &ttnpb.GatewayDown{}
-					err := down.Unmarshal(msg.Payload())
+					err := proto.Unmarshal(msg.Payload(), down)
 					a.So(err, should.BeNil)
 					downCh <- down.DownlinkMessage
 				}
@@ -392,7 +429,7 @@ func TestTraffic(t *testing.T) {
 					t.FailNow()
 				}
 
-				_, err := conn.ScheduleDown(tc.Path, tc.Message)
+				_, _, _, err := conn.ScheduleDown(tc.Path, tc.Message)
 				if err != nil && (tc.ErrorAssertion == nil || !a.So(tc.ErrorAssertion(err), should.BeTrue)) {
 					t.Fatalf("Unexpected error: %v", err)
 				}
@@ -401,7 +438,7 @@ func TestTraffic(t *testing.T) {
 				case down := <-downCh:
 					if tc.ErrorAssertion == nil {
 						a.So(down, should.Resemble, tc.Message)
-						cids = down.GetCorrelationIDs()
+						cids = down.GetCorrelationIds()
 					} else {
 						t.Fatalf("Unexpected message: %v", down)
 					}
@@ -414,10 +451,10 @@ func TestTraffic(t *testing.T) {
 				if tc.ErrorAssertion != nil || tc.TxAckTopic == "" {
 					return
 				}
-				buf, err := (&ttnpb.TxAcknowledgment{
-					CorrelationIDs: cids,
+				buf, err := proto.Marshal(&ttnpb.TxAcknowledgment{
+					CorrelationIds: cids,
 					Result:         ttnpb.TxAcknowledgment_SUCCESS,
-				}).Marshal()
+				})
 				if !a.So(err, should.BeNil) {
 					t.FailNow()
 				}

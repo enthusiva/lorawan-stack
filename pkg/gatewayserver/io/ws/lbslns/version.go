@@ -21,11 +21,13 @@ import (
 	"strings"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
+	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	pfconfig "go.thethings.network/lorawan-stack/v3/pkg/pfconfig/lbslns"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Version contains version information.
@@ -54,47 +56,60 @@ func (v Version) MarshalJSON() ([]byte, error) {
 // IsProduction checks the features field for "prod" and returns true if found.
 // This is then used to set debug options in the router config.
 func (v Version) IsProduction() bool {
-	if v.Features == "" {
-		return false
-	}
-	if strings.Contains(v.Features, "prod") {
-		return true
-	}
-	return false
+	return strings.Contains(v.Features, "prod")
 }
 
 // GetRouterConfig gets router config for the particular version message.
-func (f *lbsLNS) GetRouterConfig(ctx context.Context, msg []byte, bandID string, fps map[string]*frequencyplans.FrequencyPlan, receivedAt time.Time) (context.Context, []byte, *ttnpb.GatewayStatus, error) {
+func (*lbsLNS) GetRouterConfig(
+	ctx context.Context,
+	msg []byte,
+	bandID string,
+	fps map[string]*frequencyplans.FrequencyPlan,
+	antennaGain int,
+	receivedAt time.Time,
+) (context.Context, []byte, *ttnpb.GatewayStatus, error) {
 	var version Version
 	if err := json.Unmarshal(msg, &version); err != nil {
-		return nil, nil, nil, err
+		return ctx, nil, nil, err
 	}
-	cfg, err := pfconfig.GetRouterConfig(bandID, fps, version.IsProduction(), time.Now())
+	// We attempt to transfer time to all gateways by default.
+	// In the future, we should disable time transfers permanently
+	// to gateways that signal the presence of a PPS.
+	// References https://github.com/lorabasics/basicstation/issues/135.
+	ws.UpdateSessionTimeSync(ctx, true)
+	cfg, err := pfconfig.GetRouterConfig(ctx, bandID, fps, version, time.Now(), antennaGain)
 	if err != nil {
-		return nil, nil, nil, err
+		return ctx, nil, nil, err
+	}
+	// The SX1301 configuration object should not specify a bandwidth field for the FSK channel.
+	// See https://doc.sm.tc/station/tcproto.html#router-config-message under the SX1301CONF section.
+	for _, sx1301 := range cfg.SX1301Config {
+		if ch := sx1301.FSKChannel; ch != nil {
+			ch.Bandwidth = 0
+		}
 	}
 	routerCfg, err := cfg.MarshalJSON()
 	if err != nil {
-		return nil, nil, nil, err
+		return ctx, nil, nil, err
 	}
 	// TODO: Revisit these fields for v3 events (https://github.com/TheThingsNetwork/lorawan-stack/issues/2629)
 	stat := &ttnpb.GatewayStatus{
-		Time: receivedAt,
+		Time: timestamppb.New(receivedAt),
 		Versions: map[string]string{
 			"station":  version.Station,
 			"firmware": version.Firmware,
 			"package":  version.Package,
 			"platform": fmt.Sprintf("%s - Firmware %s - Protocol %d", version.Model, version.Firmware, version.Protocol),
 		},
-		Advanced: &pbtypes.Struct{
-			Fields: map[string]*pbtypes.Value{
+		Advanced: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
 				"model": {
-					Kind: &pbtypes.Value_StringValue{
+					Kind: &structpb.Value_StringValue{
 						StringValue: version.Model,
 					},
 				},
 				"features": {
-					Kind: &pbtypes.Value_StringValue{
+					Kind: &structpb.Value_StringValue{
 						StringValue: version.Features,
 					},
 				},

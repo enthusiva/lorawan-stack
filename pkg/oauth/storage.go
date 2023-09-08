@@ -22,17 +22,20 @@ import (
 	"github.com/openshift/osin"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
+	oauth_store "go.thethings.network/lorawan-stack/v3/pkg/oauth/store"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const redirectURISeparator = ";"
 
-// osinClient type is the same as ttnpb.Client, while implementing the osin.Client interface.
-type osinClient ttnpb.Client
+// osinClient type is just a pointer to ttnpb.Client, while implementing the osin.Client interface.
+type osinClient struct {
+	*ttnpb.Client
+}
 
 func (cli osinClient) GetId() string {
-	return cli.ClientIdentifiers.ClientID
+	return cli.Ids.GetClientId()
 }
 
 func (cli osinClient) GetSecret() string {
@@ -48,22 +51,21 @@ func (cli osinClient) ClientSecretMatches(secret string) bool {
 }
 
 func (cli osinClient) GetRedirectUri() string {
-	return strings.Join(cli.RedirectURIs, redirectURISeparator)
+	return strings.Join(cli.RedirectUris, redirectURISeparator)
 }
 
-func (cli osinClient) GetUserData() interface{} { return nil }
+func (osinClient) GetUserData() any { return nil }
 
 // userData is used as the UserData interface in osin structs.
 type userData struct {
-	ttnpb.UserSessionIdentifiers
+	*ttnpb.UserSessionIdentifiers
 	ID string
 }
 
 // storage wraps IS stores, while implementing the osin.Storage interface.
 type storage struct {
-	ctx     context.Context
-	clients store.ClientStore
-	oauth   store.OAuthStore
+	ctx   context.Context
+	store oauth_store.TransactionalInterface
 }
 
 func (s *storage) Clone() osin.Storage { return s }
@@ -71,77 +73,93 @@ func (s *storage) Clone() osin.Storage { return s }
 func (s *storage) Close() {}
 
 func (s *storage) GetClient(id string) (osin.Client, error) {
-	cli, err := s.clients.GetClient(
-		s.ctx,
-		&ttnpb.ClientIdentifiers{ClientID: id},
-		nil,
-	)
+	var cli *ttnpb.Client
+	err := s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) (err error) {
+		cli, err = st.GetClient(ctx, &ttnpb.ClientIdentifiers{ClientId: id}, nil)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	return osinClient(*cli), nil
+	return osinClient{cli}, nil
 }
 
 func (s *storage) SaveAuthorize(data *osin.AuthorizeData) error {
 	userSessionIDs := data.UserData.(userData).UserSessionIdentifiers
-	client := ttnpb.Client(data.Client.(osinClient))
+	client := data.Client.(osinClient).Client
 	rights := rightsFromScope(data.Scope)
-	_, err := s.oauth.Authorize(s.ctx, &ttnpb.OAuthClientAuthorization{
-		ClientIDs: client.ClientIdentifiers,
-		UserIDs:   userSessionIDs.UserIdentifiers,
-		Rights:    rights,
-	})
-	if err != nil {
+	err := s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) (err error) {
+		_, err = st.Authorize(ctx, &ttnpb.OAuthClientAuthorization{
+			ClientIds: client.GetIds(),
+			UserIds:   userSessionIDs.GetUserIds(),
+			Rights:    rights,
+		})
+		if err != nil {
+			return err
+		}
+		if data.CreatedAt.IsZero() {
+			data.CreatedAt = time.Now()
+		}
+		_, err = st.CreateAuthorizationCode(ctx, &ttnpb.OAuthAuthorizationCode{
+			ClientIds:     client.GetIds(),
+			UserIds:       userSessionIDs.GetUserIds(),
+			UserSessionId: userSessionIDs.SessionId,
+			Rights:        rights,
+			Code:          data.Code,
+			RedirectUri:   data.RedirectUri,
+			State:         data.State,
+			CreatedAt:     timestamppb.New(data.CreatedAt),
+			ExpiresAt:     timestamppb.New(data.CreatedAt.Add(time.Duration(data.ExpiresIn) * time.Second)),
+		})
 		return err
-	}
-	if data.CreatedAt.IsZero() {
-		data.CreatedAt = time.Now()
-	}
-	err = s.oauth.CreateAuthorizationCode(s.ctx, &ttnpb.OAuthAuthorizationCode{
-		ClientIDs:     client.ClientIdentifiers,
-		UserIDs:       userSessionIDs.UserIdentifiers,
-		UserSessionID: userSessionIDs.SessionID,
-		Rights:        rights,
-		Code:          data.Code,
-		RedirectURI:   data.RedirectUri,
-		State:         data.State,
-		CreatedAt:     data.CreatedAt,
-		ExpiresAt:     data.CreatedAt.Add(time.Duration(data.ExpiresIn) * time.Second),
 	})
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (s *storage) LoadAuthorize(code string) (data *osin.AuthorizeData, err error) {
-	authorizationCode, err := s.oauth.GetAuthorizationCode(s.ctx, code)
+	var (
+		authorizationCode *ttnpb.OAuthAuthorizationCode
+		client            *ttnpb.Client
+	)
+	err = s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) (err error) {
+		authorizationCode, err = st.GetAuthorizationCode(ctx, code)
+		if err != nil {
+			return err
+		}
+		client, err = st.GetClient(ctx, authorizationCode.ClientIds, nil)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.GetClient(authorizationCode.ClientIDs.ClientID)
-	if err != nil {
-		return nil, err
+	var expiresIn int32
+	if expiresAt := ttnpb.StdTime(authorizationCode.ExpiresAt); expiresAt != nil {
+		expiresIn = int32(expiresAt.Sub(*ttnpb.StdTime(authorizationCode.CreatedAt)).Seconds())
 	}
 	return &osin.AuthorizeData{
-		Client:      client,
+		Client:      osinClient{client},
 		Code:        code,
-		ExpiresIn:   int32(authorizationCode.ExpiresAt.Sub(authorizationCode.CreatedAt).Seconds()),
+		ExpiresIn:   expiresIn,
 		Scope:       rightsToScope(authorizationCode.Rights...),
-		RedirectUri: authorizationCode.RedirectURI,
+		RedirectUri: authorizationCode.RedirectUri,
 		State:       authorizationCode.State,
-		CreatedAt:   authorizationCode.CreatedAt,
+		CreatedAt:   *ttnpb.StdTime(authorizationCode.CreatedAt),
 		UserData: userData{
-			UserSessionIdentifiers: ttnpb.UserSessionIdentifiers{
-				UserIdentifiers: authorizationCode.UserIDs,
-				SessionID:       authorizationCode.UserSessionID,
+			UserSessionIdentifiers: &ttnpb.UserSessionIdentifiers{
+				UserIds:   authorizationCode.UserIds,
+				SessionId: authorizationCode.UserSessionId,
 			},
 		},
 	}, nil
 }
 
 func (s *storage) RemoveAuthorize(code string) error {
-	return s.oauth.DeleteAuthorizationCode(s.ctx, code)
+	return s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) error {
+		return st.DeleteAuthorizationCode(ctx, code)
+	})
 }
 
 var errTokenMismatch = errors.DefineInternal(
@@ -191,7 +209,7 @@ func (s *storage) SaveAccess(data *osin.AccessData) error {
 		}
 	}
 	userSessionIDs := data.UserData.(userData).UserSessionIdentifiers
-	client := ttnpb.Client(data.Client.(osinClient))
+	client := data.Client.(osinClient).Client
 	rights := rightsFromScope(data.Scope)
 	if data.CreatedAt.IsZero() {
 		data.CreatedAt = time.Now()
@@ -206,39 +224,57 @@ func (s *storage) SaveAccess(data *osin.AccessData) error {
 			data.AccessData.RefreshToken = previousID // Used for deleting the old access token
 		}
 	}
-	return s.oauth.CreateAccessToken(s.ctx, &ttnpb.OAuthAccessToken{
-		ClientIDs:     client.ClientIdentifiers,
-		UserIDs:       userSessionIDs.UserIdentifiers,
-		UserSessionID: userSessionIDs.SessionID,
-		Rights:        rights,
-		ID:            accessID,
-		AccessToken:   accessHash,
-		RefreshToken:  refreshHash,
-		CreatedAt:     data.CreatedAt,
-		ExpiresAt:     data.CreatedAt.Add(time.Duration(data.ExpiresIn) * time.Second),
-	}, previousID)
+	err = s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) error {
+		_, err := st.CreateAccessToken(ctx, &ttnpb.OAuthAccessToken{
+			ClientIds:     client.GetIds(),
+			UserIds:       userSessionIDs.GetUserIds(),
+			UserSessionId: userSessionIDs.SessionId,
+			Rights:        rights,
+			Id:            accessID,
+			AccessToken:   accessHash,
+			RefreshToken:  refreshHash,
+			CreatedAt:     timestamppb.New(data.CreatedAt),
+			ExpiresAt:     timestamppb.New(data.CreatedAt.Add(time.Duration(data.ExpiresIn) * time.Second)),
+		}, previousID)
+		return err
+	})
+	return err
 }
 
 func (s *storage) loadAccess(id string) (*osin.AccessData, error) {
-	accessToken, err := s.oauth.GetAccessToken(s.ctx, id)
+	var (
+		accessToken *ttnpb.OAuthAccessToken
+		client      *ttnpb.Client
+	)
+	err := s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) (err error) {
+		accessToken, err = st.GetAccessToken(ctx, id)
+		if err != nil {
+			return err
+		}
+		client, err = st.GetClient(ctx, accessToken.ClientIds, nil)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.GetClient(accessToken.ClientIDs.ClientID)
-	if err != nil {
-		return nil, err
+	var expiresIn int32
+	if expiresAt := ttnpb.StdTime(accessToken.ExpiresAt); expiresAt != nil {
+		expiresIn = int32(expiresAt.Sub(*ttnpb.StdTime(accessToken.CreatedAt)).Seconds())
 	}
 	return &osin.AccessData{
-		Client:       client,
+		Client:       osinClient{client},
 		AccessToken:  accessToken.AccessToken,
 		RefreshToken: accessToken.RefreshToken,
-		ExpiresIn:    int32(accessToken.ExpiresAt.Sub(accessToken.CreatedAt).Seconds()),
+		ExpiresIn:    expiresIn,
 		Scope:        rightsToScope(accessToken.Rights...),
-		CreatedAt:    accessToken.CreatedAt,
+		CreatedAt:    *ttnpb.StdTime(accessToken.CreatedAt),
 		UserData: userData{
-			UserSessionIdentifiers: ttnpb.UserSessionIdentifiers{
-				UserIdentifiers: accessToken.UserIDs,
-				SessionID:       accessToken.UserSessionID,
+			UserSessionIdentifiers: &ttnpb.UserSessionIdentifiers{
+				UserIds:   accessToken.UserIds,
+				SessionId: accessToken.UserSessionId,
 			},
 			ID: id,
 		},
@@ -254,9 +290,11 @@ func (s *storage) RemoveAccess(token string) error {
 		if tokenType != auth.AccessToken {
 			return errNoAccessToken.New()
 		}
-		return s.oauth.DeleteAccessToken(s.ctx, id)
+		token = id
 	}
-	return s.oauth.DeleteAccessToken(s.ctx, token)
+	return s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) error {
+		return st.DeleteAccessToken(ctx, token)
+	})
 }
 
 func (s *storage) LoadRefresh(token string) (*osin.AccessData, error) {
@@ -283,7 +321,9 @@ func (s *storage) RemoveRefresh(token string) error {
 		if tokenType != auth.RefreshToken {
 			return errNoRefreshToken.New()
 		}
-		return s.oauth.DeleteAccessToken(s.ctx, id)
+		token = id
 	}
-	return s.oauth.DeleteAccessToken(s.ctx, token)
+	return s.store.Transact(s.ctx, func(ctx context.Context, st oauth_store.Interface) error {
+		return st.DeleteAccessToken(ctx, token)
+	})
 }

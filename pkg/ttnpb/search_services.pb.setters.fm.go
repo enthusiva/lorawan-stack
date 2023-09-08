@@ -2,24 +2,30 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *SearchApplicationsRequest) SetFields(src *SearchApplicationsRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
+			}
 		case "id_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'id_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IDContains = src.IDContains
+				dst.IdContains = src.IdContains
 			} else {
 				var zero string
-				dst.IDContains = zero
+				dst.IdContains = zero
 			}
 		case "name_contains":
 			if len(subs) > 0 {
@@ -57,8 +63,7 @@ func (dst *SearchApplicationsRequest) SetFields(src *SearchApplicationsRequest, 
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -111,15 +116,25 @@ func (dst *SearchApplicationsRequest) SetFields(src *SearchApplicationsRequest, 
 func (dst *SearchClientsRequest) SetFields(src *SearchClientsRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
+			}
 		case "id_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'id_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IDContains = src.IDContains
+				dst.IdContains = src.IdContains
 			} else {
 				var zero string
-				dst.IDContains = zero
+				dst.IdContains = zero
 			}
 		case "name_contains":
 			if len(subs) > 0 {
@@ -166,8 +181,7 @@ func (dst *SearchClientsRequest) SetFields(src *SearchClientsRequest, paths ...s
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -220,15 +234,25 @@ func (dst *SearchClientsRequest) SetFields(src *SearchClientsRequest, paths ...s
 func (dst *SearchGatewaysRequest) SetFields(src *SearchGatewaysRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
+			}
 		case "id_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'id_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IDContains = src.IDContains
+				dst.IdContains = src.IdContains
 			} else {
 				var zero string
-				dst.IDContains = zero
+				dst.IdContains = zero
 			}
 		case "name_contains":
 			if len(subs) > 0 {
@@ -264,10 +288,10 @@ func (dst *SearchGatewaysRequest) SetFields(src *SearchGatewaysRequest, paths ..
 				return fmt.Errorf("'eui_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.EUIContains = src.EUIContains
+				dst.EuiContains = src.EuiContains
 			} else {
 				var zero string
-				dst.EUIContains = zero
+				dst.EuiContains = zero
 			}
 		case "field_mask":
 			if len(subs) > 0 {
@@ -276,8 +300,7 @@ func (dst *SearchGatewaysRequest) SetFields(src *SearchGatewaysRequest, paths ..
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -330,15 +353,25 @@ func (dst *SearchGatewaysRequest) SetFields(src *SearchGatewaysRequest, paths ..
 func (dst *SearchOrganizationsRequest) SetFields(src *SearchOrganizationsRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
+			}
 		case "id_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'id_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IDContains = src.IDContains
+				dst.IdContains = src.IdContains
 			} else {
 				var zero string
-				dst.IDContains = zero
+				dst.IdContains = zero
 			}
 		case "name_contains":
 			if len(subs) > 0 {
@@ -376,8 +409,7 @@ func (dst *SearchOrganizationsRequest) SetFields(src *SearchOrganizationsRequest
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -430,15 +462,25 @@ func (dst *SearchOrganizationsRequest) SetFields(src *SearchOrganizationsRequest
 func (dst *SearchUsersRequest) SetFields(src *SearchUsersRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
+			}
 		case "id_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'id_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IDContains = src.IDContains
+				dst.IdContains = src.IdContains
 			} else {
 				var zero string
-				dst.IDContains = zero
+				dst.IdContains = zero
 			}
 		case "name_contains":
 			if len(subs) > 0 {
@@ -485,8 +527,7 @@ func (dst *SearchUsersRequest) SetFields(src *SearchUsersRequest, paths ...strin
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -536,36 +577,269 @@ func (dst *SearchUsersRequest) SetFields(src *SearchUsersRequest, paths ...strin
 	return nil
 }
 
+func (dst *SearchAccountsRequest) SetFields(src *SearchAccountsRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
+			}
+		case "only_users":
+			if len(subs) > 0 {
+				return fmt.Errorf("'only_users' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.OnlyUsers = src.OnlyUsers
+			} else {
+				var zero bool
+				dst.OnlyUsers = zero
+			}
+
+		case "collaborator_of":
+			if len(subs) == 0 && src == nil {
+				dst.CollaboratorOf = nil
+				continue
+			} else if len(subs) == 0 {
+				dst.CollaboratorOf = src.CollaboratorOf
+				continue
+			}
+
+			subPathMap := _processPaths(subs)
+			if len(subPathMap) > 1 {
+				return fmt.Errorf("more than one field specified for oneof field '%s'", name)
+			}
+			for oneofName, oneofSubs := range subPathMap {
+				switch oneofName {
+				case "application_ids":
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.CollaboratorOf.(*SearchAccountsRequest_ApplicationIds)
+					}
+					if srcValid := srcTypeOk || src == nil || src.CollaboratorOf == nil || len(oneofSubs) == 0; !srcValid {
+						return fmt.Errorf("attempt to set oneof 'application_ids', while different oneof is set in source")
+					}
+					_, dstTypeOk := dst.CollaboratorOf.(*SearchAccountsRequest_ApplicationIds)
+					if dstValid := dstTypeOk || dst.CollaboratorOf == nil || len(oneofSubs) == 0; !dstValid {
+						return fmt.Errorf("attempt to set oneof 'application_ids', while different oneof is set in destination")
+					}
+					if len(oneofSubs) > 0 {
+						var newDst, newSrc *ApplicationIdentifiers
+						if srcTypeOk {
+							newSrc = src.CollaboratorOf.(*SearchAccountsRequest_ApplicationIds).ApplicationIds
+						}
+						if dstTypeOk {
+							newDst = dst.CollaboratorOf.(*SearchAccountsRequest_ApplicationIds).ApplicationIds
+						} else if srcTypeOk {
+							newDst = &ApplicationIdentifiers{}
+							dst.CollaboratorOf = &SearchAccountsRequest_ApplicationIds{ApplicationIds: newDst}
+						} else {
+							dst.CollaboratorOf = nil
+							continue
+						}
+						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
+							return err
+						}
+					} else {
+						if srcTypeOk {
+							dst.CollaboratorOf = src.CollaboratorOf
+						} else {
+							dst.CollaboratorOf = nil
+						}
+					}
+				case "client_ids":
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.CollaboratorOf.(*SearchAccountsRequest_ClientIds)
+					}
+					if srcValid := srcTypeOk || src == nil || src.CollaboratorOf == nil || len(oneofSubs) == 0; !srcValid {
+						return fmt.Errorf("attempt to set oneof 'client_ids', while different oneof is set in source")
+					}
+					_, dstTypeOk := dst.CollaboratorOf.(*SearchAccountsRequest_ClientIds)
+					if dstValid := dstTypeOk || dst.CollaboratorOf == nil || len(oneofSubs) == 0; !dstValid {
+						return fmt.Errorf("attempt to set oneof 'client_ids', while different oneof is set in destination")
+					}
+					if len(oneofSubs) > 0 {
+						var newDst, newSrc *ClientIdentifiers
+						if srcTypeOk {
+							newSrc = src.CollaboratorOf.(*SearchAccountsRequest_ClientIds).ClientIds
+						}
+						if dstTypeOk {
+							newDst = dst.CollaboratorOf.(*SearchAccountsRequest_ClientIds).ClientIds
+						} else if srcTypeOk {
+							newDst = &ClientIdentifiers{}
+							dst.CollaboratorOf = &SearchAccountsRequest_ClientIds{ClientIds: newDst}
+						} else {
+							dst.CollaboratorOf = nil
+							continue
+						}
+						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
+							return err
+						}
+					} else {
+						if srcTypeOk {
+							dst.CollaboratorOf = src.CollaboratorOf
+						} else {
+							dst.CollaboratorOf = nil
+						}
+					}
+				case "gateway_ids":
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.CollaboratorOf.(*SearchAccountsRequest_GatewayIds)
+					}
+					if srcValid := srcTypeOk || src == nil || src.CollaboratorOf == nil || len(oneofSubs) == 0; !srcValid {
+						return fmt.Errorf("attempt to set oneof 'gateway_ids', while different oneof is set in source")
+					}
+					_, dstTypeOk := dst.CollaboratorOf.(*SearchAccountsRequest_GatewayIds)
+					if dstValid := dstTypeOk || dst.CollaboratorOf == nil || len(oneofSubs) == 0; !dstValid {
+						return fmt.Errorf("attempt to set oneof 'gateway_ids', while different oneof is set in destination")
+					}
+					if len(oneofSubs) > 0 {
+						var newDst, newSrc *GatewayIdentifiers
+						if srcTypeOk {
+							newSrc = src.CollaboratorOf.(*SearchAccountsRequest_GatewayIds).GatewayIds
+						}
+						if dstTypeOk {
+							newDst = dst.CollaboratorOf.(*SearchAccountsRequest_GatewayIds).GatewayIds
+						} else if srcTypeOk {
+							newDst = &GatewayIdentifiers{}
+							dst.CollaboratorOf = &SearchAccountsRequest_GatewayIds{GatewayIds: newDst}
+						} else {
+							dst.CollaboratorOf = nil
+							continue
+						}
+						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
+							return err
+						}
+					} else {
+						if srcTypeOk {
+							dst.CollaboratorOf = src.CollaboratorOf
+						} else {
+							dst.CollaboratorOf = nil
+						}
+					}
+				case "organization_ids":
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.CollaboratorOf.(*SearchAccountsRequest_OrganizationIds)
+					}
+					if srcValid := srcTypeOk || src == nil || src.CollaboratorOf == nil || len(oneofSubs) == 0; !srcValid {
+						return fmt.Errorf("attempt to set oneof 'organization_ids', while different oneof is set in source")
+					}
+					_, dstTypeOk := dst.CollaboratorOf.(*SearchAccountsRequest_OrganizationIds)
+					if dstValid := dstTypeOk || dst.CollaboratorOf == nil || len(oneofSubs) == 0; !dstValid {
+						return fmt.Errorf("attempt to set oneof 'organization_ids', while different oneof is set in destination")
+					}
+					if len(oneofSubs) > 0 {
+						var newDst, newSrc *OrganizationIdentifiers
+						if srcTypeOk {
+							newSrc = src.CollaboratorOf.(*SearchAccountsRequest_OrganizationIds).OrganizationIds
+						}
+						if dstTypeOk {
+							newDst = dst.CollaboratorOf.(*SearchAccountsRequest_OrganizationIds).OrganizationIds
+						} else if srcTypeOk {
+							newDst = &OrganizationIdentifiers{}
+							dst.CollaboratorOf = &SearchAccountsRequest_OrganizationIds{OrganizationIds: newDst}
+						} else {
+							dst.CollaboratorOf = nil
+							continue
+						}
+						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
+							return err
+						}
+					} else {
+						if srcTypeOk {
+							dst.CollaboratorOf = src.CollaboratorOf
+						} else {
+							dst.CollaboratorOf = nil
+						}
+					}
+
+				default:
+					return fmt.Errorf("invalid oneof field: '%s.%s'", name, oneofName)
+				}
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *SearchAccountsResponse) SetFields(src *SearchAccountsResponse, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "account_ids":
+			if len(subs) > 0 {
+				return fmt.Errorf("'account_ids' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.AccountIds = src.AccountIds
+			} else {
+				dst.AccountIds = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
 func (dst *SearchEndDevicesRequest) SetFields(src *SearchEndDevicesRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
+			}
+		case "query":
+			if len(subs) > 0 {
+				return fmt.Errorf("'query' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Query = src.Query
+			} else {
+				var zero string
+				dst.Query = zero
 			}
 		case "id_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'id_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IDContains = src.IDContains
+				dst.IdContains = src.IdContains
 			} else {
 				var zero string
-				dst.IDContains = zero
+				dst.IdContains = zero
 			}
 		case "name_contains":
 			if len(subs) > 0 {
@@ -601,20 +875,20 @@ func (dst *SearchEndDevicesRequest) SetFields(src *SearchEndDevicesRequest, path
 				return fmt.Errorf("'dev_eui_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.DevEUIContains = src.DevEUIContains
+				dst.DevEuiContains = src.DevEuiContains
 			} else {
 				var zero string
-				dst.DevEUIContains = zero
+				dst.DevEuiContains = zero
 			}
 		case "join_eui_contains":
 			if len(subs) > 0 {
 				return fmt.Errorf("'join_eui_contains' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.JoinEUIContains = src.JoinEUIContains
+				dst.JoinEuiContains = src.JoinEuiContains
 			} else {
 				var zero string
-				dst.JoinEUIContains = zero
+				dst.JoinEuiContains = zero
 			}
 		case "dev_addr_contains":
 			if len(subs) > 0 {
@@ -633,8 +907,7 @@ func (dst *SearchEndDevicesRequest) SetFields(src *SearchEndDevicesRequest, path
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {

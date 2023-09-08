@@ -18,7 +18,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
@@ -67,10 +66,16 @@ func splitEndDeviceSetPaths(supportsJoin bool, paths ...string) (is, ns, as, js 
 	if supportsJoin {
 		js = ttnpb.AllowedFields(nonImplicitPaths, setEndDeviceToJS)
 	}
+	if len(js) > 0 {
+		// Remove Claim Authentication Code related paths from the call to the JS registry.
+		// TODO: Remove this check when CAC usage in the JS is removed.
+		// (https://github.com/TheThingsNetwork/lorawan-stack/issues/5631)
+		js = ttnpb.ExcludeFields(js, claimAuthenticationCodePaths...)
+	}
 	return
 }
 
-func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []string, continueOnError bool) (*ttnpb.EndDevice, error) {
+func getEndDevice(ids *ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []string, continueOnError bool) (*ttnpb.EndDevice, error) {
 	var res ttnpb.EndDevice
 	if len(jsPaths) > 0 {
 		if !config.JoinServerEnabled {
@@ -85,8 +90,8 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 			} else {
 				logger.WithField("paths", jsPaths).Debug("Get end device from Join Server")
 				jsRes, err := ttnpb.NewJsEndDeviceRegistryClient(js).Get(ctx, &ttnpb.GetEndDeviceRequest{
-					EndDeviceIdentifiers: ids,
-					FieldMask:            types.FieldMask{Paths: jsPaths},
+					EndDeviceIds: ids,
+					FieldMask:    ttnpb.FieldMask(jsPaths...),
 				})
 				if err != nil {
 					if !continueOnError {
@@ -94,11 +99,13 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 					}
 					logger.WithError(err).Error("Could not get end device from Join Server")
 				} else {
-					res.SetFields(jsRes, ttnpb.AllowedBottomLevelFields(jsPaths, getEndDeviceFromJS)...)
-					if res.CreatedAt.IsZero() || (!jsRes.CreatedAt.IsZero() && jsRes.CreatedAt.Before(res.CreatedAt)) {
+					if err := res.SetFields(jsRes, ttnpb.AllowedReachableBottomLevelFields(jsPaths, getEndDeviceFromJS, jsRes.FieldIsZero)...); err != nil {
+						return nil, err
+					}
+					if res.CreatedAt == nil || (jsRes.CreatedAt != nil && ttnpb.StdTime(jsRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 						res.CreatedAt = jsRes.CreatedAt
 					}
-					if jsRes.UpdatedAt.After(res.UpdatedAt) {
+					if res.UpdatedAt == nil || (jsRes.UpdatedAt != nil && ttnpb.StdTime(jsRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt))) {
 						res.UpdatedAt = jsRes.UpdatedAt
 					}
 				}
@@ -119,8 +126,8 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 			} else {
 				logger.WithField("paths", asPaths).Debug("Get end device from Application Server")
 				asRes, err := ttnpb.NewAsEndDeviceRegistryClient(as).Get(ctx, &ttnpb.GetEndDeviceRequest{
-					EndDeviceIdentifiers: ids,
-					FieldMask:            types.FieldMask{Paths: asPaths},
+					EndDeviceIds: ids,
+					FieldMask:    ttnpb.FieldMask(asPaths...),
 				})
 				if err != nil {
 					if !continueOnError {
@@ -128,11 +135,13 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 					}
 					logger.WithError(err).Error("Could not get end device from Application Server")
 				} else {
-					res.SetFields(asRes, ttnpb.AllowedBottomLevelFields(asPaths, getEndDeviceFromAS)...)
-					if res.CreatedAt.IsZero() || (!asRes.CreatedAt.IsZero() && asRes.CreatedAt.Before(res.CreatedAt)) {
+					if err := res.SetFields(asRes, ttnpb.AllowedReachableBottomLevelFields(asPaths, getEndDeviceFromAS, asRes.FieldIsZero)...); err != nil {
+						return nil, err
+					}
+					if res.CreatedAt == nil || (asRes.CreatedAt != nil && ttnpb.StdTime(asRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 						res.CreatedAt = asRes.CreatedAt
 					}
-					if asRes.UpdatedAt.After(res.UpdatedAt) {
+					if res.UpdatedAt == nil || (asRes.UpdatedAt != nil && ttnpb.StdTime(asRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt))) {
 						res.UpdatedAt = asRes.UpdatedAt
 					}
 				}
@@ -153,8 +162,8 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 			} else {
 				logger.WithField("paths", nsPaths).Debug("Get end device from Network Server")
 				nsRes, err := ttnpb.NewNsEndDeviceRegistryClient(ns).Get(ctx, &ttnpb.GetEndDeviceRequest{
-					EndDeviceIdentifiers: ids,
-					FieldMask:            types.FieldMask{Paths: nsPaths},
+					EndDeviceIds: ids,
+					FieldMask:    ttnpb.FieldMask(nsPaths...),
 				})
 				if err != nil {
 					if !continueOnError {
@@ -162,12 +171,16 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 					}
 					logger.WithError(err).Error("Could not get end device from Network Server")
 				} else {
-					res.SetFields(nsRes, "ids.dev_addr")
-					res.SetFields(nsRes, ttnpb.AllowedBottomLevelFields(nsPaths, getEndDeviceFromNS)...)
-					if res.CreatedAt.IsZero() || (!nsRes.CreatedAt.IsZero() && nsRes.CreatedAt.Before(res.CreatedAt)) {
+					if err := res.SetFields(nsRes, "ids.dev_addr"); err != nil {
+						return nil, err
+					}
+					if err := res.SetFields(nsRes, ttnpb.AllowedReachableBottomLevelFields(nsPaths, getEndDeviceFromNS, nsRes.FieldIsZero)...); err != nil {
+						return nil, err
+					}
+					if res.CreatedAt == nil || (nsRes.CreatedAt != nil && ttnpb.StdTime(nsRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 						res.CreatedAt = nsRes.CreatedAt
 					}
-					if nsRes.UpdatedAt.After(res.UpdatedAt) {
+					if res.UpdatedAt == nil || (nsRes.UpdatedAt != nil && ttnpb.StdTime(nsRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt))) {
 						res.UpdatedAt = nsRes.UpdatedAt
 					}
 				}
@@ -180,28 +193,32 @@ func getEndDevice(ids ttnpb.EndDeviceIdentifiers, nsPaths, asPaths, jsPaths []st
 
 func setEndDevice(device *ttnpb.EndDevice, isPaths, nsPaths, asPaths, jsPaths, unsetPaths []string, isCreate, touch bool) (*ttnpb.EndDevice, error) {
 	var res ttnpb.EndDevice
-	res.SetFields(device, "ids", "created_at", "updated_at")
+	if err := res.SetFields(device, "ids", "created_at", "updated_at"); err != nil {
+		return nil, err
+	}
 
 	if len(isPaths) > 0 && !isCreate {
 		is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 		if err != nil {
 			return nil, err
 		}
-		var isDevice ttnpb.EndDevice
+		isDevice := &ttnpb.EndDevice{}
 		logger.WithField("paths", isPaths).Debug("Set end device on Identity Server")
 		isDevice.SetFields(device, append(ttnpb.ExcludeFields(isPaths, unsetPaths...), "ids")...)
 		isRes, err := ttnpb.NewEndDeviceRegistryClient(is).Update(ctx, &ttnpb.UpdateEndDeviceRequest{
 			EndDevice: isDevice,
-			FieldMask: types.FieldMask{Paths: isPaths},
+			FieldMask: ttnpb.FieldMask(isPaths...),
 		})
 		if err != nil {
 			return nil, err
 		}
-		res.SetFields(isRes, isPaths...)
-		if res.CreatedAt.IsZero() || (!isRes.CreatedAt.IsZero() && isRes.CreatedAt.Before(res.CreatedAt)) {
+		if err := res.SetFields(isRes, isPaths...); err != nil {
+			return nil, err
+		}
+		if res.CreatedAt == nil || (isRes.CreatedAt != nil && ttnpb.StdTime(isRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 			res.CreatedAt = isRes.CreatedAt
 		}
-		if isRes.UpdatedAt.After(res.UpdatedAt) {
+		if res.UpdatedAt == nil || ttnpb.StdTime(isRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt)) {
 			res.UpdatedAt = isRes.UpdatedAt
 		}
 	}
@@ -213,21 +230,25 @@ func setEndDevice(device *ttnpb.EndDevice, isPaths, nsPaths, asPaths, jsPaths, u
 		if err != nil {
 			return nil, err
 		}
-		var jsDevice ttnpb.EndDevice
+		jsDevice := &ttnpb.EndDevice{}
 		logger.WithField("paths", jsPaths).Debug("Set end device on Join Server")
-		jsDevice.SetFields(device, append(ttnpb.ExcludeFields(jsPaths, unsetPaths...), "ids")...)
+		if err := jsDevice.SetFields(device, append(ttnpb.ExcludeFields(jsPaths, unsetPaths...), "ids")...); err != nil {
+			return nil, err
+		}
 		jsRes, err := ttnpb.NewJsEndDeviceRegistryClient(js).Set(ctx, &ttnpb.SetEndDeviceRequest{
 			EndDevice: jsDevice,
-			FieldMask: types.FieldMask{Paths: jsPaths},
+			FieldMask: ttnpb.FieldMask(jsPaths...),
 		})
 		if err != nil {
 			return nil, err
 		}
-		res.SetFields(jsRes, jsPaths...)
-		if res.CreatedAt.IsZero() || (!jsRes.CreatedAt.IsZero() && jsRes.CreatedAt.Before(res.CreatedAt)) {
+		if err := res.SetFields(jsRes, jsPaths...); err != nil {
+			return nil, err
+		}
+		if res.CreatedAt == nil || (jsRes.CreatedAt != nil && ttnpb.StdTime(jsRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 			res.CreatedAt = jsRes.CreatedAt
 		}
-		if jsRes.UpdatedAt.After(res.UpdatedAt) {
+		if res.UpdatedAt == nil || (jsRes.UpdatedAt != nil && ttnpb.StdTime(jsRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt))) {
 			res.UpdatedAt = jsRes.UpdatedAt
 		}
 	}
@@ -239,21 +260,25 @@ func setEndDevice(device *ttnpb.EndDevice, isPaths, nsPaths, asPaths, jsPaths, u
 		if err != nil {
 			return nil, err
 		}
-		var nsDevice ttnpb.EndDevice
+		nsDevice := &ttnpb.EndDevice{}
 		logger.WithField("paths", nsPaths).Debug("Set end device on Network Server")
-		nsDevice.SetFields(device, append(ttnpb.ExcludeFields(nsPaths, unsetPaths...), "ids")...)
+		if err := nsDevice.SetFields(device, append(ttnpb.ExcludeFields(nsPaths, unsetPaths...), "ids")...); err != nil {
+			return nil, err
+		}
 		nsRes, err := ttnpb.NewNsEndDeviceRegistryClient(ns).Set(ctx, &ttnpb.SetEndDeviceRequest{
 			EndDevice: nsDevice,
-			FieldMask: types.FieldMask{Paths: nsPaths},
+			FieldMask: ttnpb.FieldMask(nsPaths...),
 		})
 		if err != nil {
 			return nil, err
 		}
-		res.SetFields(nsRes, nsPaths...)
-		if res.CreatedAt.IsZero() || (!nsRes.CreatedAt.IsZero() && nsRes.CreatedAt.Before(res.CreatedAt)) {
+		if err := res.SetFields(nsRes, nsPaths...); err != nil {
+			return nil, err
+		}
+		if res.CreatedAt == nil || (nsRes.CreatedAt != nil && ttnpb.StdTime(nsRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 			res.CreatedAt = nsRes.CreatedAt
 		}
-		if nsRes.UpdatedAt.After(res.UpdatedAt) {
+		if res.UpdatedAt == nil || (nsRes.UpdatedAt != nil && ttnpb.StdTime(nsRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt))) {
 			res.UpdatedAt = nsRes.UpdatedAt
 		}
 	}
@@ -265,21 +290,25 @@ func setEndDevice(device *ttnpb.EndDevice, isPaths, nsPaths, asPaths, jsPaths, u
 		if err != nil {
 			return nil, err
 		}
-		var asDevice ttnpb.EndDevice
+		asDevice := &ttnpb.EndDevice{}
 		logger.WithField("paths", asPaths).Debug("Set end device on Application Server")
-		asDevice.SetFields(device, append(ttnpb.ExcludeFields(asPaths, unsetPaths...), "ids")...)
+		if err := asDevice.SetFields(device, append(ttnpb.ExcludeFields(asPaths, unsetPaths...), "ids")...); err != nil {
+			return nil, err
+		}
 		asRes, err := ttnpb.NewAsEndDeviceRegistryClient(as).Set(ctx, &ttnpb.SetEndDeviceRequest{
 			EndDevice: asDevice,
-			FieldMask: types.FieldMask{Paths: asPaths},
+			FieldMask: ttnpb.FieldMask(asPaths...),
 		})
 		if err != nil {
 			return nil, err
 		}
-		res.SetFields(asRes, asPaths...)
-		if res.CreatedAt.IsZero() || (!asRes.CreatedAt.IsZero() && asRes.CreatedAt.Before(res.CreatedAt)) {
+		if err := res.SetFields(asRes, asPaths...); err != nil {
+			return nil, err
+		}
+		if res.CreatedAt == nil || (asRes.CreatedAt != nil && ttnpb.StdTime(asRes.CreatedAt).Before(*ttnpb.StdTime(res.CreatedAt))) {
 			res.CreatedAt = asRes.CreatedAt
 		}
-		if asRes.UpdatedAt.After(res.UpdatedAt) {
+		if res.UpdatedAt == nil || (asRes.UpdatedAt != nil && ttnpb.StdTime(asRes.UpdatedAt).After(*ttnpb.StdTime(res.UpdatedAt))) {
 			res.UpdatedAt = asRes.UpdatedAt
 		}
 	}
@@ -287,7 +316,7 @@ func setEndDevice(device *ttnpb.EndDevice, isPaths, nsPaths, asPaths, jsPaths, u
 	return &res, ctx.Err()
 }
 
-func deleteEndDevice(ctx context.Context, devID *ttnpb.EndDeviceIdentifiers) error {
+func deleteEndDevice(ctx context.Context, devID *ttnpb.EndDeviceIdentifiers, skipClusterJS bool) error {
 	if config.ApplicationServerEnabled {
 		as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
 		if err != nil {
@@ -314,8 +343,8 @@ func deleteEndDevice(ctx context.Context, devID *ttnpb.EndDeviceIdentifiers) err
 		}
 	}
 
-	if config.JoinServerEnabled {
-		if devID.JoinEUI != nil && devID.DevEUI != nil {
+	if config.JoinServerEnabled && !skipClusterJS {
+		if devID.JoinEui != nil && devID.DevEui != nil {
 			js, err := api.Dial(ctx, config.JoinServerGRPCAddress)
 			if err != nil {
 				return err
@@ -356,7 +385,7 @@ func updateDeviceLocation(device *ttnpb.EndDevice, flags *pflag.FlagSet) {
 	if !ok {
 		loc = &ttnpb.Location{}
 	}
-	loc.Source = ttnpb.SOURCE_REGISTRY
+	loc.Source = ttnpb.LocationSource_SOURCE_REGISTRY
 	if flags.Changed("location.longitude") {
 		longitude, _ := flags.GetFloat64("location.longitude")
 		loc.Longitude = longitude

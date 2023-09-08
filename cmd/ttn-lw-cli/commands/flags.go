@@ -17,11 +17,11 @@ package commands
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -56,15 +56,9 @@ func getCollaborator(flagSet *pflag.FlagSet) *ttnpb.OrganizationOrUserIdentifier
 		logger.Warn("Don't set organization ID and user ID at the same time, assuming user ID")
 	}
 	if userID != "" {
-		return ttnpb.UserIdentifiers{UserID: userID}.OrganizationOrUserIdentifiers()
+		return (&ttnpb.UserIdentifiers{UserId: userID}).GetOrganizationOrUserIdentifiers()
 	}
-	return ttnpb.OrganizationIdentifiers{OrganizationID: organizationID}.OrganizationOrUserIdentifiers()
-}
-
-func attributesFlags() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-	flagSet.StringSlice("attributes", nil, "key=value")
-	return flagSet
+	return (&ttnpb.OrganizationIdentifiers{OrganizationId: organizationID}).GetOrganizationOrUserIdentifiers()
 }
 
 func forceFlags() *pflag.FlagSet {
@@ -119,8 +113,10 @@ func getRights(flagSet *pflag.FlagSet) (rights []ttnpb.Right) {
 }
 
 var (
-	errNoAPIKeyID     = errors.DefineInvalidArgument("no_api_key_id", "no API key ID set")
-	errNoAPIKeyRights = errors.DefineInvalidArgument("no_api_key_rights", "no API key rights set")
+	errNoAPIKeyID        = errors.DefineInvalidArgument("no_api_key_id", "no API key ID set")
+	errNoAPIKeyRights    = errors.DefineInvalidArgument("no_api_key_rights", "no API key rights set")
+	errExpiryDateInPast  = errors.DefineInvalidArgument("expiry_date_invalid", "expiry date is in the past")
+	errInvalidDateFormat = errors.DefineInvalidArgument("expiry_date_format_invalid", "invalid expiry date format (RFC3339: YYYY-MM-DDTHH:MM:SSZ)")
 )
 
 func getAPIKeyID(flagSet *pflag.FlagSet, args []string, i int) string {
@@ -136,21 +132,49 @@ func getAPIKeyID(flagSet *pflag.FlagSet, args []string, i int) string {
 	return apiKeyID
 }
 
-var searchFlags = func() *pflag.FlagSet {
+var apiKeyExpiryFlag = func() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
-	// NOTE: These flags need to be named with underscores, not dashes!
-	flagSet.String("id_contains", "", "")
-	flagSet.String("name_contains", "", "")
-	flagSet.String("description_contains", "", "")
-	flagSet.StringToString("attributes_contain", nil, "(key=value)")
-	flagSet.AddFlagSet(paginationFlags())
-	flagSet.AddFlagSet(orderFlags())
+	flagSet.AddFlag(flagsplugin.NewTimestampFlag("api-key-expiry", "(YYYY-MM-DDTHH:MM:SSZ)"))
 	return flagSet
 }()
 
+func getAPIKeyExpiry(flagSet *pflag.FlagSet) (*time.Time, error) {
+	expiry, _ := flagSet.GetString("api-key-expiry")
+	if expiry != "" {
+		expiryDate, err := time.Parse(time.RFC3339, expiry)
+		if err != nil {
+			return nil, errInvalidDateFormat.New()
+		}
+		if expiryDate.Before(time.Now()) {
+			return nil, errExpiryDateInPast.New()
+		}
+		return &expiryDate, nil
+	}
+	return nil, nil
+}
+
+func getAPIKeyFields(flagSet *pflag.FlagSet) ([]ttnpb.Right, *time.Time, []string, error) {
+	rights := getRights(flagSet)
+	paths := []string{}
+	if len(rights) > 0 {
+		paths = append(paths, "rights")
+	}
+	expiryDate, err := getAPIKeyExpiry(flagSet)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if flagSet.Changed("api-key-expiry") {
+		paths = append(paths, "expires_at")
+	}
+	if flagSet.Changed("name") {
+		paths = append(paths, "name")
+	}
+	return rights, expiryDate, paths, nil
+}
+
 var errNoIDs = errors.DefineInvalidArgument("no_ids", "no IDs set")
 
-func combinedIdentifiersFlags() *pflag.FlagSet {
+func entityIdentifiersSliceFlags() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 	flagSet.StringSlice("application-id", nil, "")
 	flagSet.StringSlice("client-id", nil, "")
@@ -161,7 +185,7 @@ func combinedIdentifiersFlags() *pflag.FlagSet {
 	return flagSet
 }
 
-func getCombinedIdentifiers(flagSet *pflag.FlagSet) *ttnpb.CombinedIdentifiers {
+func getEntityIdentifiersSlice(flagSet *pflag.FlagSet) []*ttnpb.EntityIdentifiers {
 	applicationIDs, _ := flagSet.GetStringSlice("application-id")
 	clientIDs, _ := flagSet.GetStringSlice("client-id")
 	deviceIDs, _ := flagSet.GetStringSlice("device-id")
@@ -169,37 +193,39 @@ func getCombinedIdentifiers(flagSet *pflag.FlagSet) *ttnpb.CombinedIdentifiers {
 	organizationIDs, _ := flagSet.GetStringSlice("organization-id")
 	userIDs, _ := flagSet.GetStringSlice("user-id")
 
-	ids := &ttnpb.CombinedIdentifiers{}
+	var ids []*ttnpb.EntityIdentifiers
+
 	if len(deviceIDs) > 0 {
 		if len(clientIDs)+len(gatewayIDs)+len(organizationIDs)+len(userIDs) > 0 {
 			logger.Warn("considering only devices")
 		}
 		for _, deviceID := range deviceIDs {
 			for _, applicationID := range applicationIDs {
-				ids.EntityIdentifiers = append(ids.EntityIdentifiers, ttnpb.EndDeviceIdentifiers{
-					ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{ApplicationID: applicationID},
-					DeviceID:               deviceID,
-				}.EntityIdentifiers())
+				ids = append(ids, (&ttnpb.EndDeviceIdentifiers{
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: applicationID},
+					DeviceId:       deviceID,
+				}).GetEntityIdentifiers())
 			}
 		}
 		return ids
 	}
 
 	for _, applicationID := range applicationIDs {
-		ids.EntityIdentifiers = append(ids.EntityIdentifiers, ttnpb.ApplicationIdentifiers{ApplicationID: applicationID}.EntityIdentifiers())
+		ids = append(ids, (&ttnpb.ApplicationIdentifiers{ApplicationId: applicationID}).GetEntityIdentifiers())
 	}
 	for _, clientID := range clientIDs {
-		ids.EntityIdentifiers = append(ids.EntityIdentifiers, ttnpb.ClientIdentifiers{ClientID: clientID}.EntityIdentifiers())
+		ids = append(ids, (&ttnpb.ClientIdentifiers{ClientId: clientID}).GetEntityIdentifiers())
 	}
 	for _, gatewayID := range gatewayIDs {
-		ids.EntityIdentifiers = append(ids.EntityIdentifiers, ttnpb.GatewayIdentifiers{GatewayID: gatewayID}.EntityIdentifiers())
+		ids = append(ids, (&ttnpb.GatewayIdentifiers{GatewayId: gatewayID}).GetEntityIdentifiers())
 	}
 	for _, organizationID := range organizationIDs {
-		ids.EntityIdentifiers = append(ids.EntityIdentifiers, ttnpb.OrganizationIdentifiers{OrganizationID: organizationID}.EntityIdentifiers())
+		ids = append(ids, (&ttnpb.OrganizationIdentifiers{OrganizationId: organizationID}).GetEntityIdentifiers())
 	}
 	for _, userID := range userIDs {
-		ids.EntityIdentifiers = append(ids.EntityIdentifiers, ttnpb.UserIdentifiers{UserID: userID}.EntityIdentifiers())
+		ids = append(ids, (&ttnpb.UserIdentifiers{UserId: userID}).GetEntityIdentifiers())
 	}
+
 	return ids
 }
 
@@ -227,7 +253,7 @@ func getDataBytes(name string, flagSet *pflag.FlagSet) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadAll(r)
+	return io.ReadAll(r)
 }
 
 func getDataReader(name string, flagSet *pflag.FlagSet) (io.Reader, error) {
@@ -269,8 +295,12 @@ func parseTime(s string, location *time.Location) (*time.Time, error) {
 	return &t, nil
 }
 
+func utcTimestampFlagName(name string) string {
+	return fmt.Sprintf("%s-utc", name)
+}
+
 func getTimestampFlags(flags *pflag.FlagSet, name string) (*time.Time, error) {
-	utcName := fmt.Sprintf("%s-utc", name)
+	utcName := utcTimestampFlagName(name)
 	if flags.Changed(utcName) {
 		s, _ := flags.GetString(utcName)
 		return parseTime(s, time.UTC)
@@ -282,6 +312,10 @@ func getTimestampFlags(flags *pflag.FlagSet, name string) (*time.Time, error) {
 	return nil, nil
 }
 
+func hasTimestampFlags(flags *pflag.FlagSet, name string) bool {
+	return flags.Changed(name) || flags.Changed(utcTimestampFlagName(name))
+}
+
 var deletedFlags = func() *pflag.FlagSet {
 	flagSet := &pflag.FlagSet{}
 	flagSet.Bool("deleted", false, "return recently deleted")
@@ -291,4 +325,41 @@ var deletedFlags = func() *pflag.FlagSet {
 func getDeleted(flagSet *pflag.FlagSet) bool {
 	deleted, _ := flagSet.GetBool("deleted")
 	return deleted
+}
+
+func fieldMaskForField(paths []string, prefix string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if strings.HasPrefix(path, prefix) {
+			out = append(out, strings.TrimPrefix(path, prefix+"."))
+		}
+	}
+	return out
+}
+
+// AddCollaboratorFlagAlias adds alias for user id and organization id in User
+func AddCollaboratorFlagAlias(flagSet *pflag.FlagSet, prefix string) {
+	flagsplugin.AddAlias(flagSet, flagsplugin.Prefix("ids.organization-ids.organization-id", prefix), "organization-id", flagsplugin.WithHidden(false))
+	flagsplugin.AddAlias(flagSet, flagsplugin.Prefix("ids.user-ids.user-id", prefix), "user-id", flagsplugin.WithHidden(false))
+}
+
+// AddGatewayAntennaIdentifierFlags adds a string slice flag for gateway antennas.
+func AddGatewayAntennaIdentifierFlags(flagSet *pflag.FlagSet, prefix string) {
+	flagSet.AddFlag(flagsplugin.NewStringSliceFlag(flagsplugin.Prefix("gateways", prefix), ""))
+}
+
+// GetGatewayAntennaIdentifiers gets a string slice value from a flag and returns a slice of gateway antenna identifiers.
+func GetGatewayAntennaIdentifiers(flagSet *pflag.FlagSet, prefix string) (antennas []*ttnpb.GatewayAntennaIdentifiers, err error) {
+	antennaStrings, changed, err := flagsplugin.GetStringSlice(flagSet, flagsplugin.Prefix("gateways", prefix))
+	if err != nil || !changed {
+		return nil, err
+	}
+	for _, id := range antennaStrings {
+		antennas = append(antennas, &ttnpb.GatewayAntennaIdentifiers{
+			GatewayIds: &ttnpb.GatewayIdentifiers{
+				GatewayId: id,
+			},
+		})
+	}
+	return antennas, nil
 }

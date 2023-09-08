@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback } from 'react'
 import { defineMessages } from 'react-intl'
-import queryString from 'query-string'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { Container, Col, Row } from 'react-grid-system'
 
 import tts from '@account/api/tts'
 
@@ -22,9 +23,11 @@ import Spinner from '@ttn-lw/components/spinner'
 import ErrorNotification from '@ttn-lw/components/error-notification'
 import Notification from '@ttn-lw/components/notification'
 import Button from '@ttn-lw/components/button'
+import PageTitle from '@ttn-lw/components/page-title'
 
 import Message from '@ttn-lw/lib/components/message'
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
+import RequireRequest from '@ttn-lw/lib/components/require-request'
 
 import style from '@account/views/front/front.styl'
 
@@ -46,10 +49,13 @@ const m = defineMessages({
 const siteName = selectApplicationSiteName()
 const siteTitle = selectApplicationSiteTitle()
 
-const Validate = ({ location }) => {
+const Validate = ({ hideTitle }) => {
   const [error, setError] = useState(undefined)
   const [success, setSuccess] = useState(undefined)
   const [fetching, setFetching] = useState(true)
+  const [searchParams] = useSearchParams()
+  const token = searchParams.get('token')
+  const reference = searchParams.get('reference')
 
   const handleError = useCallback(error => {
     setError(error)
@@ -63,13 +69,12 @@ const Validate = ({ location }) => {
     setSuccess(m.validateSuccess)
   }, [])
 
-  useEffect(() => {
-    const makeRequest = async () => {
-      const validationData = queryString.parse(location.search)
+  const makeRequest = useCallback(async () => {
+    if (token && reference) {
       try {
         await tts.ContactInfo.validate({
-          token: validationData.token,
-          id: validationData.reference,
+          token,
+          id: reference,
         })
         handleSuccess()
       } catch (error) {
@@ -80,40 +85,62 @@ const Validate = ({ location }) => {
         }
       }
     }
-    makeRequest()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [handleError, handleSuccess, reference, token])
 
+  if (!token || !reference) {
+    return <Navigate to="/" />
+  }
   return (
-    <div className={style.form}>
-      <IntlHelmet title={m.contactInfoValidation} />
-      <h1 className={style.title}>
-        {siteName}
-        <br />
-        <Message component="strong" content={m.contactInfoValidation} />
-      </h1>
-      <hr className={style.hRule} />
-      {fetching ? (
-        <Spinner after={0} faded className={style.spinner}>
-          <Message content={m.validatingAccount} />
-        </Spinner>
-      ) : (
-        <>
-          {error && <ErrorNotification small content={error} title={m.validateFail} />}
-          {success && <Notification small success content={success} title={m.validateSuccess} />}
-        </>
-      )}
-      <Button.Link
-        to="/"
-        icon="keyboard_arrow_left"
-        message={{ ...m.backToAccount, values: { siteTitle } }}
-      />
-    </div>
+    <RequireRequest requestAction={makeRequest}>
+      <div className={style.form}>
+        {!hideTitle && (
+          <>
+            <IntlHelmet title={m.contactInfoValidation} />
+            <h1 className={style.title}>
+              {siteName}
+              <br />
+              <Message component="strong" content={m.contactInfoValidation} />
+            </h1>
+            <hr className={style.hRule} />
+          </>
+        )}
+        {fetching ? (
+          <Spinner after={0} faded className={style.spinner}>
+            <Message content={m.validatingAccount} />
+          </Spinner>
+        ) : (
+          <>
+            {error && <ErrorNotification small content={error} title={m.validateFail} />}
+            {success && <Notification small success content={success} title={m.validateSuccess} />}
+          </>
+        )}
+        <Button.Link
+          to="/"
+          icon="keyboard_arrow_left"
+          message={{ ...m.backToAccount, values: { siteTitle } }}
+        />
+      </div>
+    </RequireRequest>
   )
 }
 
+const ValidateWithAuth = props => (
+  <Container>
+    <Row>
+      <Col lg={8} md={12}>
+        <PageTitle title={m.contactInfoValidation} />
+        <Validate hideTitle {...props} />
+      </Col>
+    </Row>
+  </Container>
+)
+
 Validate.propTypes = {
-  location: PropTypes.location.isRequired,
+  hideTitle: PropTypes.bool,
 }
 
-export default Validate
+Validate.defaultProps = {
+  hideTitle: false,
+}
+
+export { Validate as default, ValidateWithAuth }

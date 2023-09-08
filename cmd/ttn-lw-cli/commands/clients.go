@@ -16,9 +16,8 @@ package commands
 
 import (
 	"os"
-	"reflect"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
@@ -30,8 +29,7 @@ import (
 )
 
 var (
-	selectClientFlags = util.FieldMaskFlags(&ttnpb.Client{})
-	setClientFlags    = util.FieldFlags(&ttnpb.Client{})
+	selectClientFlags = util.NormalizedFlagSet()
 
 	selectAllClientFlags = util.SelectAllFlagSet("client")
 )
@@ -57,16 +55,8 @@ func getClientID(flagSet *pflag.FlagSet, args []string) *ttnpb.ClientIdentifiers
 	if clientID == "" {
 		return nil
 	}
-	return &ttnpb.ClientIdentifiers{ClientID: clientID}
+	return &ttnpb.ClientIdentifiers{ClientId: clientID}
 }
-
-var searchClientsFlags = func() *pflag.FlagSet {
-	flagSet := &pflag.FlagSet{}
-	flagSet.AddFlagSet(searchFlags)
-	// NOTE: These flags need to be named with underscores, not dashes!
-	util.AddField(flagSet, "state", reflect.TypeOf([]ttnpb.State{}), false)
-	return flagSet
-}()
 
 var (
 	clientsCommand = &cobra.Command{
@@ -81,20 +71,20 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths := util.SelectFieldMask(cmd.Flags(), selectClientFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ClientRegistry/List"].Allowed)
-
+			req := &ttnpb.ListClientsRequest{}
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
 				return err
 			}
-			limit, page, opt, getTotal := withPagination(cmd.Flags())
-			res, err := ttnpb.NewClientRegistryClient(is).List(ctx, &ttnpb.ListClientsRequest{
-				Collaborator: getCollaborator(cmd.Flags()),
-				FieldMask:    types.FieldMask{Paths: paths},
-				Limit:        limit,
-				Page:         page,
-				Order:        getOrder(cmd.Flags()),
-				Deleted:      getDeleted(cmd.Flags()),
-			}, opt)
+			if req.GetFieldMask() == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
+			_, _, opt, getTotal := withPagination(cmd.Flags())
+			res, err := ttnpb.NewClientRegistryClient(is).List(ctx, req, opt)
 			if err != nil {
 				return err
 			}
@@ -111,16 +101,18 @@ var (
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.EntityRegistrySearch/SearchClients"].Allowed)
 
 			req := &ttnpb.SearchClientsRequest{}
-			if err := util.SetFields(req, searchClientsFlags); err != nil {
+			_, err := req.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
 			var (
 				opt      grpc.CallOption
 				getTotal func() uint64
 			)
-			req.Limit, req.Page, opt, getTotal = withPagination(cmd.Flags())
-			req.FieldMask.Paths = paths
-			req.Deleted = getDeleted(cmd.Flags())
+			_, _, opt, getTotal = withPagination(cmd.Flags())
+			if req.FieldMask == nil {
+				req.FieldMask = ttnpb.FieldMask(paths...)
+			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -142,7 +134,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), args)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 			paths := util.SelectFieldMask(cmd.Flags(), selectClientFlags)
 			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ClientRegistry/Get"].Allowed)
@@ -152,8 +144,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewClientRegistryClient(is).Get(ctx, &ttnpb.GetClientRequest{
-				ClientIdentifiers: *cliID,
-				FieldMask:         types.FieldMask{Paths: paths},
+				ClientIds: cliID,
+				FieldMask: ttnpb.FieldMask(paths...),
 			})
 			if err != nil {
 				return err
@@ -168,30 +160,34 @@ var (
 		Short:   "Create a client",
 		RunE: asBulk(func(cmd *cobra.Command, args []string) (err error) {
 			cliID := getClientID(cmd.Flags(), args)
-			collaborator := getCollaborator(cmd.Flags())
-			if collaborator == nil {
-				return errNoCollaborator
+			collaborator := &ttnpb.OrganizationOrUserIdentifiers{}
+			_, err = collaborator.SetFromFlags(cmd.Flags(), "collaborator")
+			if err != nil {
+				return err
+			}
+			if collaborator.GetIds() == nil {
+				return errNoCollaborator.New()
 			}
 			var client ttnpb.Client
-			client.State = ttnpb.STATE_APPROVED // This may not be honored by the server.
+			client.State = ttnpb.State_STATE_APPROVED // This may not be honored by the server.
 			client.Grants = []ttnpb.GrantType{
-				ttnpb.GRANT_AUTHORIZATION_CODE,
+				ttnpb.GrantType_GRANT_AUTHORIZATION_CODE,
 			}
 			if inputDecoder != nil {
-				_, err := inputDecoder.Decode(&client)
+				err := inputDecoder.Decode(&client)
 				if err != nil {
 					return err
 				}
 			}
-			if err := util.SetFields(&client, setClientFlags); err != nil {
+			_, err = client.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
 				return err
 			}
-			client.Attributes = mergeAttributes(client.Attributes, cmd.Flags())
-			if cliID != nil && cliID.ClientID != "" {
-				client.ClientID = cliID.ClientID
+			if cliID.GetClientId() != "" {
+				client.Ids = &ttnpb.ClientIdentifiers{ClientId: cliID.GetClientId()}
 			}
-			if client.ClientID == "" {
-				return errNoClientID
+			if client.GetIds().GetClientId() == "" {
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -199,8 +195,8 @@ var (
 				return err
 			}
 			res, err := ttnpb.NewClientRegistryClient(is).Create(ctx, &ttnpb.CreateClientRequest{
-				Client:       client,
-				Collaborator: *collaborator,
+				Client:       &client,
+				Collaborator: collaborator,
 			})
 			if err != nil {
 				return err
@@ -218,21 +214,23 @@ var (
 		Aliases: []string{"update"},
 		Short:   "Set properties of a client",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cliID := getClientID(cmd.Flags(), args)
-			if cliID == nil {
-				return errNoClientID
+			client := &ttnpb.Client{}
+			paths, err := client.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
 			}
-			paths := util.UpdateFieldMask(cmd.Flags(), setClientFlags, attributesFlags())
-			if len(paths) == 0 {
+			if client.GetIds() == nil {
+				cliID := getClientID(cmd.Flags(), args)
+				if cliID == nil {
+					return errNoClientID.New()
+				}
+			}
+			rawUnsetPaths, _ := cmd.Flags().GetStringSlice("unset")
+			unsetPaths := util.NormalizePaths(rawUnsetPaths)
+			if len(paths)+len(unsetPaths) == 0 {
 				logger.Warn("No fields selected, won't update anything")
 				return nil
 			}
-			var client ttnpb.Client
-			if err := util.SetFields(&client, setClientFlags); err != nil {
-				return err
-			}
-			client.Attributes = mergeAttributes(client.Attributes, cmd.Flags())
-			client.ClientIdentifiers = *cliID
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -240,13 +238,13 @@ var (
 			}
 			res, err := ttnpb.NewClientRegistryClient(is).Update(ctx, &ttnpb.UpdateClientRequest{
 				Client:    client,
-				FieldMask: types.FieldMask{Paths: paths},
+				FieldMask: ttnpb.FieldMask(append(paths, unsetPaths...)...),
 			})
 			if err != nil {
 				return err
 			}
 
-			res.SetFields(&client, "ids")
+			res.SetFields(client, "ids")
 			return io.Write(os.Stdout, config.OutputFormat, res)
 		},
 	}
@@ -257,7 +255,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), args)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -278,7 +276,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), args)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -300,7 +298,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cliID := getClientID(cmd.Flags(), args)
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			force, err := cmd.Flags().GetBool("force")
@@ -308,7 +306,7 @@ var (
 				return err
 			}
 			if !confirmChoice(clientPurgeWarning, force) {
-				return errNoConfirmation
+				return errNoConfirmation.New()
 			}
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
 			if err != nil {
@@ -325,22 +323,22 @@ var (
 	clientsContactInfoCommand = contactInfoCommands("client", func(cmd *cobra.Command, args []string) (*ttnpb.EntityIdentifiers, error) {
 		cliID := getClientID(cmd.Flags(), args)
 		if cliID == nil {
-			return nil, errNoClientID
+			return nil, errNoClientID.New()
 		}
-		return cliID.EntityIdentifiers(), nil
+		return cliID.GetEntityIdentifiers(), nil
 	})
 )
 
 func init() {
-	clientsListCommand.Flags().AddFlagSet(collaboratorFlags())
-	clientsListCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSelectFlagsForClient(selectClientFlags, "", false)
+	ttnpb.AddSetFlagsForListClientsRequest(clientsListCommand.Flags(), "", false)
+	AddCollaboratorFlagAlias(clientsListCommand.Flags(), "collaborator")
 	clientsListCommand.Flags().AddFlagSet(selectClientFlags)
 	clientsListCommand.Flags().AddFlagSet(selectAllClientFlags)
 	clientsListCommand.Flags().AddFlagSet(paginationFlags())
 	clientsListCommand.Flags().AddFlagSet(orderFlags())
 	clientsCommand.AddCommand(clientsListCommand)
-	clientsSearchCommand.Flags().AddFlagSet(searchClientsFlags)
-	clientsSearchCommand.Flags().AddFlagSet(deletedFlags)
+	ttnpb.AddSetFlagsForSearchClientsRequest(clientsSearchCommand.Flags(), "", false)
 	clientsSearchCommand.Flags().AddFlagSet(selectClientFlags)
 	clientsSearchCommand.Flags().AddFlagSet(selectAllClientFlags)
 	clientsCommand.AddCommand(clientsSearchCommand)
@@ -348,16 +346,16 @@ func init() {
 	clientsGetCommand.Flags().AddFlagSet(selectClientFlags)
 	clientsGetCommand.Flags().AddFlagSet(selectAllClientFlags)
 	clientsCommand.AddCommand(clientsGetCommand)
-	clientsCreateCommand.Flags().AddFlagSet(clientIDFlags())
-	clientsCreateCommand.Flags().AddFlagSet(collaboratorFlags())
-	clientsCreateCommand.Flags().AddFlagSet(setClientFlags)
-	clientsCreateCommand.Flags().AddFlagSet(attributesFlags())
-	clientsCreateCommand.Flags().Lookup("state").DefValue = ttnpb.STATE_APPROVED.String()
-	clientsCreateCommand.Flags().Lookup("grants").DefValue = ttnpb.GRANT_AUTHORIZATION_CODE.String()
+	ttnpb.AddSetFlagsForClient(clientsCreateCommand.Flags(), "", false)
+	ttnpb.AddSetFlagsForOrganizationOrUserIdentifiers(clientsCreateCommand.Flags(), "collaborator", true)
+	AddCollaboratorFlagAlias(clientsCreateCommand.Flags(), "collaborator")
+	flagsplugin.AddAlias(clientsCreateCommand.Flags(), "ids.client-id", "client-id", flagsplugin.WithHidden(false))
+	clientsCreateCommand.Flags().Lookup("state").DefValue = ttnpb.State_STATE_APPROVED.String()
+	clientsCreateCommand.Flags().Lookup("grants").DefValue = ttnpb.GrantType_GRANT_AUTHORIZATION_CODE.String()
 	clientsCommand.AddCommand(clientsCreateCommand)
-	clientsSetCommand.Flags().AddFlagSet(clientIDFlags())
-	clientsSetCommand.Flags().AddFlagSet(setClientFlags)
-	clientsSetCommand.Flags().AddFlagSet(attributesFlags())
+	ttnpb.AddSetFlagsForClient(clientsSetCommand.Flags(), "", false)
+	flagsplugin.AddAlias(clientsSetCommand.Flags(), "ids.client-id", "client-id", flagsplugin.WithHidden(false))
+	clientsSetCommand.Flags().AddFlagSet(util.UnsetFlagSet())
 	clientsCommand.AddCommand(clientsSetCommand)
 	clientsDeleteCommand.Flags().AddFlagSet(clientIDFlags())
 	clientsCommand.AddCommand(clientsDeleteCommand)

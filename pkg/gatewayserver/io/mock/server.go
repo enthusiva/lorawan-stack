@@ -25,7 +25,10 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
+	mockis "go.thethings.network/lorawan-stack/v3/pkg/identityserver/mock"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 )
@@ -33,7 +36,7 @@ import (
 type server struct {
 	*component.Component
 	store          *frequencyplans.Store
-	gateways       map[string]*ttnpb.Gateway
+	identityStore  *mockis.MockDefinition
 	connections    map[string]*io.Connection
 	connectionsCh  chan *io.Connection
 	downlinkClaims sync.Map
@@ -43,49 +46,60 @@ type server struct {
 type Server interface {
 	io.Server
 
-	HasDownlinkClaim(context.Context, ttnpb.GatewayIdentifiers) bool
-	RegisterGateway(ctx context.Context, ids ttnpb.GatewayIdentifiers, gateway *ttnpb.Gateway)
-	GetConnection(ctx context.Context, ids ttnpb.GatewayIdentifiers) *io.Connection
+	HasDownlinkClaim(context.Context, *ttnpb.GatewayIdentifiers) bool
+	RegisterGateway(ctx context.Context, ids *ttnpb.GatewayIdentifiers, gateway *ttnpb.Gateway)
+	GetConnection(ctx context.Context, ids *ttnpb.GatewayIdentifiers) *io.Connection
 	Connections() <-chan *io.Connection
 }
 
 // NewServer instantiates a new Server.
-func NewServer(c *component.Component) Server {
+func NewServer(c *component.Component, is *mockis.MockDefinition) Server {
 	return &server{
 		Component:     c,
 		store:         frequencyplans.NewStore(test.FrequencyPlansFetcher),
-		gateways:      make(map[string]*ttnpb.Gateway),
+		identityStore: is,
 		connections:   make(map[string]*io.Connection),
 		connectionsCh: make(chan *io.Connection, 10),
 	}
 }
 
 // FillContext implements io.Server.
-func (s *server) FillGatewayContext(ctx context.Context, ids ttnpb.GatewayIdentifiers) (context.Context, ttnpb.GatewayIdentifiers, error) {
+func (s *server) FillGatewayContext(ctx context.Context, ids *ttnpb.GatewayIdentifiers) (context.Context, *ttnpb.GatewayIdentifiers, error) {
 	ctx = s.FillContext(ctx)
 	if ids.IsZero() {
-		return nil, ttnpb.GatewayIdentifiers{}, errors.New("the identifiers are zero")
+		return nil, nil, errors.New("the identifiers are zero")
 	}
-	if ids.GatewayID != "" {
+	if ids.GatewayId != "" {
 		return ctx, ids, nil
 	}
-	ids.GatewayID = fmt.Sprintf("eui-%v", strings.ToLower(ids.EUI.String()))
+	ids.GatewayId = fmt.Sprintf("eui-%v", strings.ToLower(types.MustEUI64(ids.Eui).String()))
 	return ctx, ids, nil
 }
 
 // Connect implements io.Server.
-func (s *server) Connect(ctx context.Context, frontend io.Frontend, ids ttnpb.GatewayIdentifiers) (*io.Connection, error) {
-	if err := rights.RequireGateway(ctx, ids, ttnpb.RIGHT_GATEWAY_LINK); err != nil {
+func (s *server) Connect(
+	ctx context.Context,
+	frontend io.Frontend,
+	ids *ttnpb.GatewayIdentifiers,
+	addr *ttnpb.GatewayRemoteAddress,
+	opts ...io.ConnectionOption,
+) (*io.Connection, error) {
+	if err := rights.RequireGateway(ctx, ids, ttnpb.Right_RIGHT_GATEWAY_LINK); err != nil {
 		return nil, err
 	}
-	gtw, ok := s.gateways[unique.ID(ctx, ids)]
-	if !ok {
+	gtw, err := s.identityStore.GatewayRegistry().Get(ctx, &ttnpb.GetGatewayRequest{GatewayIds: ids})
+	if err != nil {
 		gtw = &ttnpb.Gateway{
-			GatewayIdentifiers: ids,
-			FrequencyPlanID:    test.EUFrequencyPlanID,
+			Ids:             ids,
+			FrequencyPlanId: test.EUFrequencyPlanID,
 		}
 	}
-	conn, err := io.NewConnection(ctx, frontend, gtw, s.FrequencyPlans, true, nil)
+	fps, err := s.FrequencyPlansStore(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := io.NewConnection(ctx, frontend, gtw, fps, true, nil, addr, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +113,10 @@ func (s *server) Connect(ctx context.Context, frontend io.Frontend, ids ttnpb.Ga
 }
 
 // GetFrequencyPlans implements io.Server.
-func (s *server) GetFrequencyPlans(ctx context.Context, ids ttnpb.GatewayIdentifiers) (map[string]*frequencyplans.FrequencyPlan, error) {
+func (s *server) GetFrequencyPlans(ctx context.Context, ids *ttnpb.GatewayIdentifiers) (map[string]*frequencyplans.FrequencyPlan, error) {
 	var fpID string
-	if gtw, ok := s.gateways[unique.ID(ctx, ids)]; ok {
-		fpID = gtw.FrequencyPlanID
+	if gtw, err := s.identityStore.GatewayRegistry().Get(ctx, &ttnpb.GetGatewayRequest{GatewayIds: ids}); err == nil {
+		fpID = gtw.FrequencyPlanId
 	} else {
 		fpID = test.EUFrequencyPlanID
 	}
@@ -116,31 +130,41 @@ func (s *server) GetFrequencyPlans(ctx context.Context, ids ttnpb.GatewayIdentif
 }
 
 // ClaimDownlink implements io.Server.
-func (s *server) ClaimDownlink(ctx context.Context, ids ttnpb.GatewayIdentifiers) error {
+func (s *server) ClaimDownlink(ctx context.Context, ids *ttnpb.GatewayIdentifiers) error {
 	s.downlinkClaims.Store(unique.ID(ctx, ids), true)
 	return nil
 }
 
+func (s *server) ValidateGatewayID(ctx context.Context, ids *ttnpb.GatewayIdentifiers) error {
+	return ids.ValidateContext(ctx)
+}
+
 // UnclaimDownlink implements io.Server.
-func (s *server) UnclaimDownlink(ctx context.Context, ids ttnpb.GatewayIdentifiers) error {
+func (s *server) UnclaimDownlink(ctx context.Context, ids *ttnpb.GatewayIdentifiers) error {
 	s.downlinkClaims.Delete(unique.ID(ctx, ids))
 	return nil
 }
 
-func (s *server) HasDownlinkClaim(ctx context.Context, ids ttnpb.GatewayIdentifiers) bool {
+// StartTask implements io.Server.
+func (s *server) StartTask(cfg *task.Config) {
+	task.DefaultStartTask(cfg)
+}
+
+func (s *server) HasDownlinkClaim(ctx context.Context, ids *ttnpb.GatewayIdentifiers) bool {
 	_, ok := s.downlinkClaims.Load(unique.ID(ctx, ids))
 	return ok
 }
 
-func (s *server) RegisterGateway(ctx context.Context, ids ttnpb.GatewayIdentifiers, gateway *ttnpb.Gateway) {
-	uid := unique.ID(ctx, ids)
-	if len(gateway.FrequencyPlanIDs) > 0 {
-		gateway.FrequencyPlanID = gateway.FrequencyPlanIDs[0]
+func (s *server) RegisterGateway(ctx context.Context, ids *ttnpb.GatewayIdentifiers, gateway *ttnpb.Gateway) {
+	if len(gateway.FrequencyPlanIds) > 0 {
+		gateway.FrequencyPlanId = gateway.FrequencyPlanIds[0]
 	}
-	s.gateways[uid] = gateway
+
+	gtwRights := []ttnpb.Right{ttnpb.Right_RIGHT_GATEWAY_INFO, ttnpb.Right_RIGHT_GATEWAY_LINK}
+	s.identityStore.GatewayRegistry().Add(ctx, ids, "default-key", gateway, gtwRights...)
 }
 
-func (s *server) GetConnection(ctx context.Context, ids ttnpb.GatewayIdentifiers) *io.Connection {
+func (s *server) GetConnection(ctx context.Context, ids *ttnpb.GatewayIdentifiers) *io.Connection {
 	return s.connections[unique.ID(ctx, ids)]
 }
 

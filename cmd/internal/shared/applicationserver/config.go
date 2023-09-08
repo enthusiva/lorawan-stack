@@ -20,6 +20,7 @@ import (
 
 	"go.thethings.network/lorawan-stack/v3/cmd/internal/shared"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver"
+	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/packages"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/web"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
@@ -43,24 +44,39 @@ var DefaultApplicationServerConfig = applicationserver.Config{
 		Templates: DefaultWebhookTemplatesConfig,
 		Target:    "direct",
 		Timeout:   5 * time.Second,
-		QueueSize: 16,
-		Workers:   16,
+		QueueSize: 1024,
+		Workers:   1024,
 		Downlinks: web.DownlinksConfig{PublicAddress: shared.DefaultPublicURL + "/api/v3"},
 	},
-	EndDeviceFetcher: applicationserver.EndDeviceFetcherConfig{
-		Timeout: 5 * time.Second,
-		Cache: applicationserver.EndDeviceFetcherCacheConfig{
-			Enable: true,
-			TTL:    5 * time.Minute,
-		},
-		CircuitBreaker: applicationserver.EndDeviceFetcherCircuitBreakerConfig{
-			Enable:    true,
-			Threshold: 10,
-			Timeout:   15 * time.Minute,
+	EndDeviceMetadataStorage: applicationserver.EndDeviceMetadataStorageConfig{
+		Location: applicationserver.EndDeviceLocationStorageConfig{
+			Timeout: 5 * time.Second,
+			Cache: applicationserver.EndDeviceLocationStorageCacheConfig{
+				Enable:             true,
+				MinRefreshInterval: 15 * time.Minute,
+				MaxRefreshInterval: 4 * time.Hour,
+				TTL:                14 * 24 * time.Hour,
+			},
 		},
 	},
 	Distribution: applicationserver.DistributionConfig{
 		Timeout: time.Minute,
+		Local: applicationserver.LocalDistributorConfig{
+			Broadcast: applicationserver.DistributorConfig{
+				SubscriptionBlocks:    true,
+				SubscriptionQueueSize: -1,
+			},
+			Individual: applicationserver.DistributorConfig{
+				SubscriptionBlocks:    false,
+				SubscriptionQueueSize: io.DefaultBufferSize,
+			},
+		},
+		Global: applicationserver.GlobalDistributorConfig{
+			Individual: applicationserver.DistributorConfig{
+				SubscriptionBlocks:    false,
+				SubscriptionQueueSize: io.DefaultBufferSize,
+			},
+		},
 	},
 	PubSub: applicationserver.PubSubConfig{
 		Providers: map[string]string{
@@ -70,7 +86,21 @@ var DefaultApplicationServerConfig = applicationserver.Config{
 	},
 	Packages: applicationserver.ApplicationPackagesConfig{
 		Config: packages.Config{
-			Workers: 16,
+			Workers: 1024,
+			Timeout: 10 * time.Second,
+		},
+	},
+	Formatters: applicationserver.FormattersConfig{
+		MaxParameterLength: 40960,
+	},
+	DeviceLastSeen: applicationserver.LastSeenConfig{
+		BatchSize:     1000,
+		FlushInterval: 10 * time.Second,
+	},
+	Downlinks: applicationserver.DownlinksConfig{
+		ConfirmationConfig: applicationserver.ConfirmationConfig{
+			DefaultRetryAttempts: 8,
+			MaxRetryAttempts:     32,
 		},
 	},
 }

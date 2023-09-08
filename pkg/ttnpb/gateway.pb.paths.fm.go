@@ -57,23 +57,6 @@ var GatewayRadioFieldPathsTopLevel = []string{
 	"rssi_offset",
 	"tx_configuration",
 }
-var GatewayVersionFieldPathsNested = []string{
-	"clock_source",
-	"ids",
-	"ids.brand_id",
-	"ids.firmware_version",
-	"ids.hardware_version",
-	"ids.model_id",
-	"photos",
-	"radios",
-}
-
-var GatewayVersionFieldPathsTopLevel = []string{
-	"clock_source",
-	"ids",
-	"photos",
-	"radios",
-}
 var GatewayClaimAuthenticationCodeFieldPathsNested = []string{
 	"secret",
 	"secret.key_id",
@@ -88,6 +71,13 @@ var GatewayClaimAuthenticationCodeFieldPathsTopLevel = []string{
 	"valid_to",
 }
 var GatewayFieldPathsNested = []string{
+	"administrative_contact",
+	"administrative_contact.ids",
+	"administrative_contact.ids.organization_ids",
+	"administrative_contact.ids.organization_ids.organization_id",
+	"administrative_contact.ids.user_ids",
+	"administrative_contact.ids.user_ids.email",
+	"administrative_contact.ids.user_ids.user_id",
 	"antennas",
 	"attributes",
 	"auto_update",
@@ -101,6 +91,7 @@ var GatewayFieldPathsNested = []string{
 	"created_at",
 	"deleted_at",
 	"description",
+	"disable_packet_broker_forwarding",
 	"downlink_path_constraint",
 	"enforce_duty_cycle",
 	"frequency_plan_id",
@@ -113,6 +104,8 @@ var GatewayFieldPathsNested = []string{
 	"lbs_lns_secret.key_id",
 	"lbs_lns_secret.value",
 	"location_public",
+	"lrfhss",
+	"lrfhss.supported",
 	"name",
 	"require_authenticated_connection",
 	"schedule_anytime_delay",
@@ -122,6 +115,13 @@ var GatewayFieldPathsNested = []string{
 	"target_cups_key.key_id",
 	"target_cups_key.value",
 	"target_cups_uri",
+	"technical_contact",
+	"technical_contact.ids",
+	"technical_contact.ids.organization_ids",
+	"technical_contact.ids.organization_ids.organization_id",
+	"technical_contact.ids.user_ids",
+	"technical_contact.ids.user_ids.email",
+	"technical_contact.ids.user_ids.user_id",
 	"update_channel",
 	"update_location_from_status",
 	"updated_at",
@@ -133,6 +133,7 @@ var GatewayFieldPathsNested = []string{
 }
 
 var GatewayFieldPathsTopLevel = []string{
+	"administrative_contact",
 	"antennas",
 	"attributes",
 	"auto_update",
@@ -141,6 +142,7 @@ var GatewayFieldPathsTopLevel = []string{
 	"created_at",
 	"deleted_at",
 	"description",
+	"disable_packet_broker_forwarding",
 	"downlink_path_constraint",
 	"enforce_duty_cycle",
 	"frequency_plan_id",
@@ -149,6 +151,7 @@ var GatewayFieldPathsTopLevel = []string{
 	"ids",
 	"lbs_lns_secret",
 	"location_public",
+	"lrfhss",
 	"name",
 	"require_authenticated_connection",
 	"schedule_anytime_delay",
@@ -156,6 +159,7 @@ var GatewayFieldPathsTopLevel = []string{
 	"status_public",
 	"target_cups_key",
 	"target_cups_uri",
+	"technical_contact",
 	"update_channel",
 	"update_location_from_status",
 	"updated_at",
@@ -218,6 +222,13 @@ var CreateGatewayRequestFieldPathsNested = []string{
 	"collaborator.ids.user_ids.email",
 	"collaborator.ids.user_ids.user_id",
 	"gateway",
+	"gateway.administrative_contact",
+	"gateway.administrative_contact.ids",
+	"gateway.administrative_contact.ids.organization_ids",
+	"gateway.administrative_contact.ids.organization_ids.organization_id",
+	"gateway.administrative_contact.ids.user_ids",
+	"gateway.administrative_contact.ids.user_ids.email",
+	"gateway.administrative_contact.ids.user_ids.user_id",
 	"gateway.antennas",
 	"gateway.attributes",
 	"gateway.auto_update",
@@ -231,6 +242,7 @@ var CreateGatewayRequestFieldPathsNested = []string{
 	"gateway.created_at",
 	"gateway.deleted_at",
 	"gateway.description",
+	"gateway.disable_packet_broker_forwarding",
 	"gateway.downlink_path_constraint",
 	"gateway.enforce_duty_cycle",
 	"gateway.frequency_plan_id",
@@ -243,6 +255,8 @@ var CreateGatewayRequestFieldPathsNested = []string{
 	"gateway.lbs_lns_secret.key_id",
 	"gateway.lbs_lns_secret.value",
 	"gateway.location_public",
+	"gateway.lrfhss",
+	"gateway.lrfhss.supported",
 	"gateway.name",
 	"gateway.require_authenticated_connection",
 	"gateway.schedule_anytime_delay",
@@ -252,6 +266,13 @@ var CreateGatewayRequestFieldPathsNested = []string{
 	"gateway.target_cups_key.key_id",
 	"gateway.target_cups_key.value",
 	"gateway.target_cups_uri",
+	"gateway.technical_contact",
+	"gateway.technical_contact.ids",
+	"gateway.technical_contact.ids.organization_ids",
+	"gateway.technical_contact.ids.organization_ids.organization_id",
+	"gateway.technical_contact.ids.user_ids",
+	"gateway.technical_contact.ids.user_ids.email",
+	"gateway.technical_contact.ids.user_ids.user_id",
 	"gateway.update_channel",
 	"gateway.update_location_from_status",
 	"gateway.updated_at",
@@ -269,6 +290,13 @@ var CreateGatewayRequestFieldPathsTopLevel = []string{
 var UpdateGatewayRequestFieldPathsNested = []string{
 	"field_mask",
 	"gateway",
+	"gateway.administrative_contact",
+	"gateway.administrative_contact.ids",
+	"gateway.administrative_contact.ids.organization_ids",
+	"gateway.administrative_contact.ids.organization_ids.organization_id",
+	"gateway.administrative_contact.ids.user_ids",
+	"gateway.administrative_contact.ids.user_ids.email",
+	"gateway.administrative_contact.ids.user_ids.user_id",
 	"gateway.antennas",
 	"gateway.attributes",
 	"gateway.auto_update",
@@ -282,6 +310,7 @@ var UpdateGatewayRequestFieldPathsNested = []string{
 	"gateway.created_at",
 	"gateway.deleted_at",
 	"gateway.description",
+	"gateway.disable_packet_broker_forwarding",
 	"gateway.downlink_path_constraint",
 	"gateway.enforce_duty_cycle",
 	"gateway.frequency_plan_id",
@@ -294,6 +323,8 @@ var UpdateGatewayRequestFieldPathsNested = []string{
 	"gateway.lbs_lns_secret.key_id",
 	"gateway.lbs_lns_secret.value",
 	"gateway.location_public",
+	"gateway.lrfhss",
+	"gateway.lrfhss.supported",
 	"gateway.name",
 	"gateway.require_authenticated_connection",
 	"gateway.schedule_anytime_delay",
@@ -303,6 +334,13 @@ var UpdateGatewayRequestFieldPathsNested = []string{
 	"gateway.target_cups_key.key_id",
 	"gateway.target_cups_key.value",
 	"gateway.target_cups_uri",
+	"gateway.technical_contact",
+	"gateway.technical_contact.ids",
+	"gateway.technical_contact.ids.organization_ids",
+	"gateway.technical_contact.ids.organization_ids.organization_id",
+	"gateway.technical_contact.ids.user_ids",
+	"gateway.technical_contact.ids.user_ids.email",
+	"gateway.technical_contact.ids.user_ids.user_id",
 	"gateway.update_channel",
 	"gateway.update_location_from_status",
 	"gateway.updated_at",
@@ -322,12 +360,14 @@ var ListGatewayAPIKeysRequestFieldPathsNested = []string{
 	"gateway_ids.eui",
 	"gateway_ids.gateway_id",
 	"limit",
+	"order",
 	"page",
 }
 
 var ListGatewayAPIKeysRequestFieldPathsTopLevel = []string{
 	"gateway_ids",
 	"limit",
+	"order",
 	"page",
 }
 var GetGatewayAPIKeyRequestFieldPathsNested = []string{
@@ -342,6 +382,7 @@ var GetGatewayAPIKeyRequestFieldPathsTopLevel = []string{
 	"key_id",
 }
 var CreateGatewayAPIKeyRequestFieldPathsNested = []string{
+	"expires_at",
 	"gateway_ids",
 	"gateway_ids.eui",
 	"gateway_ids.gateway_id",
@@ -350,6 +391,7 @@ var CreateGatewayAPIKeyRequestFieldPathsNested = []string{
 }
 
 var CreateGatewayAPIKeyRequestFieldPathsTopLevel = []string{
+	"expires_at",
 	"gateway_ids",
 	"name",
 	"rights",
@@ -357,11 +399,13 @@ var CreateGatewayAPIKeyRequestFieldPathsTopLevel = []string{
 var UpdateGatewayAPIKeyRequestFieldPathsNested = []string{
 	"api_key",
 	"api_key.created_at",
+	"api_key.expires_at",
 	"api_key.id",
 	"api_key.key",
 	"api_key.name",
 	"api_key.rights",
 	"api_key.updated_at",
+	"field_mask",
 	"gateway_ids",
 	"gateway_ids.eui",
 	"gateway_ids.gateway_id",
@@ -369,19 +413,33 @@ var UpdateGatewayAPIKeyRequestFieldPathsNested = []string{
 
 var UpdateGatewayAPIKeyRequestFieldPathsTopLevel = []string{
 	"api_key",
+	"field_mask",
 	"gateway_ids",
+}
+var DeleteGatewayAPIKeyRequestFieldPathsNested = []string{
+	"gateway_ids",
+	"gateway_ids.eui",
+	"gateway_ids.gateway_id",
+	"key_id",
+}
+
+var DeleteGatewayAPIKeyRequestFieldPathsTopLevel = []string{
+	"gateway_ids",
+	"key_id",
 }
 var ListGatewayCollaboratorsRequestFieldPathsNested = []string{
 	"gateway_ids",
 	"gateway_ids.eui",
 	"gateway_ids.gateway_id",
 	"limit",
+	"order",
 	"page",
 }
 
 var ListGatewayCollaboratorsRequestFieldPathsTopLevel = []string{
 	"gateway_ids",
 	"limit",
+	"order",
 	"page",
 }
 var GetGatewayCollaboratorRequestFieldPathsNested = []string{
@@ -420,6 +478,23 @@ var SetGatewayCollaboratorRequestFieldPathsTopLevel = []string{
 	"collaborator",
 	"gateway_ids",
 }
+var DeleteGatewayCollaboratorRequestFieldPathsNested = []string{
+	"collaborator_ids",
+	"collaborator_ids.ids",
+	"collaborator_ids.ids.organization_ids",
+	"collaborator_ids.ids.organization_ids.organization_id",
+	"collaborator_ids.ids.user_ids",
+	"collaborator_ids.ids.user_ids.email",
+	"collaborator_ids.ids.user_ids.user_id",
+	"gateway_ids",
+	"gateway_ids.eui",
+	"gateway_ids.gateway_id",
+}
+
+var DeleteGatewayCollaboratorRequestFieldPathsTopLevel = []string{
+	"collaborator_ids",
+	"gateway_ids",
+}
 var GatewayAntennaFieldPathsNested = []string{
 	"attributes",
 	"gain",
@@ -429,12 +504,14 @@ var GatewayAntennaFieldPathsNested = []string{
 	"location.latitude",
 	"location.longitude",
 	"location.source",
+	"placement",
 }
 
 var GatewayAntennaFieldPathsTopLevel = []string{
 	"attributes",
 	"gain",
 	"location",
+	"placement",
 }
 var GatewayStatusFieldPathsNested = []string{
 	"advanced",
@@ -455,9 +532,19 @@ var GatewayStatusFieldPathsTopLevel = []string{
 	"time",
 	"versions",
 }
+var GatewayRemoteAddressFieldPathsNested = []string{
+	"ip",
+}
+
+var GatewayRemoteAddressFieldPathsTopLevel = []string{
+	"ip",
+}
 var GatewayConnectionStatsFieldPathsNested = []string{
 	"connected_at",
+	"disconnected_at",
 	"downlink_count",
+	"gateway_remote_address",
+	"gateway_remote_address.ip",
 	"last_downlink_received_at",
 	"last_status",
 	"last_status.advanced",
@@ -468,6 +555,7 @@ var GatewayConnectionStatsFieldPathsNested = []string{
 	"last_status.time",
 	"last_status.versions",
 	"last_status_received_at",
+	"last_tx_acknowledgment_received_at",
 	"last_uplink_received_at",
 	"protocol",
 	"round_trip_times",
@@ -476,19 +564,24 @@ var GatewayConnectionStatsFieldPathsNested = []string{
 	"round_trip_times.median",
 	"round_trip_times.min",
 	"sub_bands",
+	"tx_acknowledgment_count",
 	"uplink_count",
 }
 
 var GatewayConnectionStatsFieldPathsTopLevel = []string{
 	"connected_at",
+	"disconnected_at",
 	"downlink_count",
+	"gateway_remote_address",
 	"last_downlink_received_at",
 	"last_status",
 	"last_status_received_at",
+	"last_tx_acknowledgment_received_at",
 	"last_uplink_received_at",
 	"protocol",
 	"round_trip_times",
 	"sub_bands",
+	"tx_acknowledgment_count",
 	"uplink_count",
 }
 var GatewayRadio_TxConfigurationFieldPathsNested = []string{
@@ -501,6 +594,13 @@ var GatewayRadio_TxConfigurationFieldPathsTopLevel = []string{
 	"max_frequency",
 	"min_frequency",
 	"notch_frequency",
+}
+var Gateway_LRFHSSFieldPathsNested = []string{
+	"supported",
+}
+
+var Gateway_LRFHSSFieldPathsTopLevel = []string{
+	"supported",
 }
 var GatewayConnectionStats_RoundTripTimesFieldPathsNested = []string{
 	"count",

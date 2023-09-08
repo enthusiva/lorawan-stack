@@ -17,13 +17,13 @@ package mqtt
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	paho_mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/pubsub/provider"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -31,8 +31,7 @@ import (
 	"gocloud.dev/pubsub"
 )
 
-type allEnabled struct {
-}
+type allEnabled struct{}
 
 // Enabled implements provider.Enabler.
 func (e *allEnabled) Enabled(context.Context, ttnpb.ApplicationPubSub_Provider) error {
@@ -43,15 +42,15 @@ func TestOpenConnection(t *testing.T) {
 	a := assertions.New(t)
 	ctx := test.Context()
 
-	ca, err := ioutil.ReadFile("testdata/rootCA.pem")
+	ca, err := os.ReadFile("testdata/rootCA.pem")
 	a.So(err, should.BeNil)
-	clientCert, err := ioutil.ReadFile("testdata/clientcert.pem")
+	clientCert, err := os.ReadFile("testdata/clientcert.pem")
 	a.So(err, should.BeNil)
-	clientKey, err := ioutil.ReadFile("testdata/clientkey.pem")
+	clientKey, err := os.ReadFile("testdata/clientkey.pem")
 	a.So(err, should.BeNil)
-	serverCert, err := ioutil.ReadFile("testdata/servercert.pem")
+	serverCert, err := os.ReadFile("testdata/servercert.pem")
 	a.So(err, should.BeNil)
-	serverKey, err := ioutil.ReadFile("testdata/serverkey.pem")
+	serverKey, err := os.ReadFile("testdata/serverkey.pem")
 	a.So(err, should.BeNil)
 
 	clientTLSConfig, err := createTLSConfig(ca, clientCert, clientKey)
@@ -67,14 +66,14 @@ func TestOpenConnection(t *testing.T) {
 	defer tlsLis.Close()
 
 	pb := &ttnpb.ApplicationPubSub{
-		ApplicationPubSubIdentifiers: ttnpb.ApplicationPubSubIdentifiers{
-			ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-				ApplicationID: "app1",
+		Ids: &ttnpb.ApplicationPubSubIdentifiers{
+			ApplicationIds: &ttnpb.ApplicationIdentifiers{
+				ApplicationId: "app1",
 			},
-			PubSubID: "ps1",
+			PubSubId: "ps1",
 		},
-		Provider: &ttnpb.ApplicationPubSub_MQTT{
-			MQTT: &ttnpb.ApplicationPubSub_MQTTProvider{},
+		Provider: &ttnpb.ApplicationPubSub_Mqtt{
+			Mqtt: &ttnpb.ApplicationPubSub_MQTTProvider{},
 		},
 		BaseTopic: "app1/ps1",
 		DownlinkPush: &ttnpb.ApplicationPubSub_Message{
@@ -116,7 +115,7 @@ func TestOpenConnection(t *testing.T) {
 	}
 
 	impl, err := provider.GetProvider(&ttnpb.ApplicationPubSub{
-		Provider: &ttnpb.ApplicationPubSub_MQTT{},
+		Provider: &ttnpb.ApplicationPubSub_Mqtt{},
 	})
 	a.So(impl, should.NotBeNil)
 	a.So(err, should.BeNil)
@@ -136,11 +135,11 @@ func TestOpenConnection(t *testing.T) {
 	}{
 		{
 			name: "TCP",
-			provider: &ttnpb.ApplicationPubSub_MQTT{
-				MQTT: &ttnpb.ApplicationPubSub_MQTTProvider{
-					ServerURL:    fmt.Sprintf("tcp://%v", lis.Addr()),
-					SubscribeQoS: ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
-					PublishQoS:   ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
+			provider: &ttnpb.ApplicationPubSub_Mqtt{
+				Mqtt: &ttnpb.ApplicationPubSub_MQTTProvider{
+					ServerUrl:    fmt.Sprintf("tcp://%v", lis.Addr()),
+					SubscribeQos: ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
+					PublishQos:   ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
 				},
 			},
 			createClient: func(t *testing.T, a *assertions.Assertion) paho_mqtt.Client {
@@ -160,16 +159,16 @@ func TestOpenConnection(t *testing.T) {
 		},
 		{
 			name: "TCP+TLS",
-			provider: &ttnpb.ApplicationPubSub_MQTT{
-				MQTT: &ttnpb.ApplicationPubSub_MQTTProvider{
-					ServerURL:    fmt.Sprintf("tcps://%v", tlsLis.Addr()),
-					SubscribeQoS: ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
-					PublishQoS:   ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
+			provider: &ttnpb.ApplicationPubSub_Mqtt{
+				Mqtt: &ttnpb.ApplicationPubSub_MQTTProvider{
+					ServerUrl:    fmt.Sprintf("tcps://%v", tlsLis.Addr()),
+					SubscribeQos: ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
+					PublishQos:   ttnpb.ApplicationPubSub_MQTTProvider_AT_LEAST_ONCE,
 
-					UseTLS:        true,
-					TLSCA:         ca,
-					TLSClientCert: clientCert,
-					TLSClientKey:  clientKey,
+					UseTls:        true,
+					TlsCa:         ca,
+					TlsClientCert: clientCert,
+					TlsClientKey:  clientKey,
 				},
 			},
 			createClient: func(t *testing.T, a *assertions.Assertion) paho_mqtt.Client {

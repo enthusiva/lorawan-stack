@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto/cryptoutil"
@@ -41,8 +41,8 @@ var (
 	ErrInternal = errors.DefineInternal("test_internal", "test error")
 	ErrNotFound = errors.DefineNotFound("test_not_found", "test error")
 
-	DefaultApplicationIdentifiers = ttnpb.ApplicationIdentifiers{
-		ApplicationID: DefaultApplicationID,
+	DefaultApplicationIdentifiers = &ttnpb.ApplicationIdentifiers{
+		ApplicationId: DefaultApplicationID,
 	}
 
 	DefaultJoinEUI = types.EUI64{0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
@@ -72,36 +72,36 @@ var (
 	DefaultSNwkSIntKey = crypto.DeriveSNwkSIntKey(DefaultNwkKey, DefaultJoinNonce, DefaultJoinEUI, DefaultDevNonce)
 
 	DefaultAppSKeyEnvelope = &ttnpb.KeyEnvelope{
-		Key: &DefaultAppSKey,
+		Key: DefaultAppSKey.Bytes(),
 	}
 	DefaultFNwkSIntKeyEnvelope = &ttnpb.KeyEnvelope{
-		Key: &DefaultFNwkSIntKey,
+		Key: DefaultFNwkSIntKey.Bytes(),
 	}
 	DefaultNwkSEncKeyEnvelope = &ttnpb.KeyEnvelope{
-		Key: &DefaultNwkSEncKey,
+		Key: DefaultNwkSEncKey.Bytes(),
 	}
 	DefaultSNwkSIntKeyEnvelope = &ttnpb.KeyEnvelope{
-		Key: &DefaultSNwkSIntKey,
+		Key: DefaultSNwkSIntKey.Bytes(),
 	}
 
-	DefaultAppSKeyEnvelopeWrapped     = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultAppSKey, DefaultKEKLabel, DefaultKEK)).(*ttnpb.KeyEnvelope)
-	DefaultFNwkSIntKeyEnvelopeWrapped = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultFNwkSIntKey, DefaultKEKLabel, DefaultKEK)).(*ttnpb.KeyEnvelope)
-	DefaultNwkSEncKeyEnvelopeWrapped  = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultNwkSEncKey, DefaultKEKLabel, DefaultKEK)).(*ttnpb.KeyEnvelope)
-	DefaultSNwkSIntKeyEnvelopeWrapped = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultSNwkSIntKey, DefaultKEKLabel, DefaultKEK)).(*ttnpb.KeyEnvelope)
+	DefaultAppSKeyEnvelopeWrapped     = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultAppSKey, DefaultKEKLabel, DefaultKEK))
+	DefaultFNwkSIntKeyEnvelopeWrapped = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultFNwkSIntKey, DefaultKEKLabel, DefaultKEK))
+	DefaultNwkSEncKeyEnvelopeWrapped  = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultNwkSEncKey, DefaultKEKLabel, DefaultKEK))
+	DefaultSNwkSIntKeyEnvelopeWrapped = Must(cryptoutil.WrapAES128KeyWithKEK(Context(), DefaultSNwkSIntKey, DefaultKEKLabel, DefaultKEK))
 
 	DefaultAppSKeyWrapped     = DefaultAppSKeyEnvelopeWrapped.EncryptedKey
 	DefaultFNwkSIntKeyWrapped = DefaultFNwkSIntKeyEnvelopeWrapped.EncryptedKey
 	DefaultNwkSEncKeyWrapped  = DefaultNwkSEncKeyEnvelopeWrapped.EncryptedKey
 	DefaultSNwkSIntKeyWrapped = DefaultSNwkSIntKeyEnvelopeWrapped.EncryptedKey
 
-	DefaultNetID   = Must(types.NewNetID(2, []byte{0x00, 0x42, 0xff})).(types.NetID)
-	DefaultDevAddr = Must(types.NewDevAddr(DefaultNetID, []byte{0x00, 0x02, 0xff, 0xff})).(types.DevAddr)
+	DefaultNetID   = Must(types.NewNetID(2, []byte{0x00, 0x42, 0xff}))
+	DefaultDevAddr = Must(types.NewDevAddr(DefaultNetID, []byte{0x00, 0x02, 0xff, 0xff}))
 
 	DefaultLegacyAppSKey = crypto.DeriveLegacyAppSKey(DefaultNwkKey, DefaultJoinNonce, DefaultNetID, DefaultDevNonce)
 	DefaultLegacyNwkSKey = crypto.DeriveLegacyNwkSKey(DefaultNwkKey, DefaultJoinNonce, DefaultNetID, DefaultDevNonce)
 
-	DefaultMACVersion      = ttnpb.MAC_V1_1
-	DefaultPHYVersion      = ttnpb.PHY_V1_1_REV_B
+	DefaultMACVersion      = ttnpb.MACVersion_MAC_V1_1
+	DefaultPHYVersion      = ttnpb.PHYVersion_RP001_V1_1_REV_B
 	DefaultFrequencyPlanID = EUFrequencyPlanID
 )
 

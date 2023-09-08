@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import api from '@console/api'
+import tts from '@console/api/tts'
+import { entitySdkServiceMap } from '@console/constants/entities'
 
 import createRequestLogic from '@ttn-lw/lib/store/logics/create-request-logic'
 
 import * as apiKeys from '@console/store/actions/api-keys'
 
-const validParentTypes = ['application', 'gateway', 'organization', 'users']
+const validParentTypes = Object.keys(entitySdkServiceMap)
 
 const parentTypeValidator = ({ action }, allow) => {
   if (!validParentTypes.includes(action.payload.parentType)) {
@@ -36,9 +37,14 @@ const getApiKeysLogic = createRequestLogic({
     const {
       parentType,
       parentId,
-      params: { page, limit },
+      params: { page, limit, order },
     } = action.payload
-    const data = await api[parentType].apiKeys.list(parentId, { limit, page })
+    const data = await tts[entitySdkServiceMap[parentType]].ApiKeys.getAll(parentId, {
+      limit,
+      page,
+      order,
+    })
+
     return { parentType, entities: data.api_keys, totalCount: data.totalCount }
   },
 })
@@ -48,8 +54,32 @@ const getApiKeyLogic = createRequestLogic({
   validate: parentTypeValidator,
   process: async ({ action }) => {
     const { parentType, parentId, keyId } = action.payload
-    return api[parentType].apiKeys.get(parentId, keyId)
+
+    return await tts[entitySdkServiceMap[parentType]].ApiKeys.getById(parentId, keyId)
   },
 })
 
-export default [getApiKeyLogic, getApiKeysLogic]
+const createApplicationApiKeyLogic = createRequestLogic({
+  type: apiKeys.CREATE_APP_API_KEY,
+  process: async ({ action }) => {
+    const { id, key } = action.payload
+
+    return await tts.Applications.ApiKeys.create(id, key)
+  },
+})
+
+const createGatewayApiKeyLogic = createRequestLogic({
+  type: apiKeys.CREATE_GATEWAY_API_KEY,
+  process: async ({ action }) => {
+    const { gatewayId, key } = action.payload
+
+    return await tts.Gateways.ApiKeys.create(gatewayId, key)
+  },
+})
+
+export default [
+  getApiKeyLogic,
+  getApiKeysLogic,
+  createApplicationApiKeyLogic,
+  createGatewayApiKeyLogic,
+]

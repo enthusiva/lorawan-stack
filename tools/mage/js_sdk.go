@@ -17,6 +17,7 @@ package ttnmage
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/magefile/mage/mg"
@@ -50,6 +51,14 @@ func (k JsSDK) Deps() error {
 	}
 	if mg.Verbose() {
 		fmt.Println("Installing JS SDK dependencies")
+	}
+	mg.Deps(Js.deps)
+
+	// On initial installs, the dependency installation will cause the SDK itself
+	// to be installed in an unbuilt state. In that case we need to remove the
+	// module altogether so it can be properly reinstalled later.
+	if _, err := os.Stat(filepath.Join("node_modules", "ttn-lw", "dist")); os.IsNotExist(err) {
+		sh.Rm(filepath.Join("node_modules", "ttn-lw"))
 	}
 	return k.runYarnV("install", "--no-progress", "--production=false")
 }
@@ -179,7 +188,7 @@ func (k JsSDK) AllowedFieldMaskPaths() error {
 func (k JsSDK) DeviceFieldMasks() error {
 	ok, err := target.Path(
 		filepath.Join("sdk", "js", "generated", "device-entity-map.json"),
-		filepath.Join("sdk", "js", "generated", "device-field-masks.json"),
+		filepath.Join("sdk", "js", "generated", "allowed-field-mask-paths.json"),
 	)
 	if err != nil {
 		return targetError(err)

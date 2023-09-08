@@ -24,7 +24,7 @@ import (
 
 var (
 	CacheTTL           = (1 << 6) * test.Delay
-	DefaultMACSettings = DefaultConfig.DefaultMACSettings.Parse()
+	DefaultMACSettings = test.Must(DefaultConfig.DefaultMACSettings.Parse())
 )
 
 type TaskPopFuncResponse struct {

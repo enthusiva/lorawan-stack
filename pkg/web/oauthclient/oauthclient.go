@@ -20,7 +20,7 @@ import (
 	"net/url"
 	"strings"
 
-	echo "github.com/labstack/echo/v4"
+	"github.com/gorilla/schema"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"golang.org/x/oauth2"
@@ -29,12 +29,12 @@ import (
 // OAuthClient is the OAuth client component.
 type OAuthClient struct {
 	component       *component.Component
-	rootURL         string
 	config          Config
-	oauth           OAuth2ConfigProvider
+	oauthConfig     OAuth2ConfigProvider
 	nextKey         string
 	callback        Callback
 	authCodeURLOpts OAuth2AuthCodeURLOptionsProvider
+	schemaDecoder   *schema.Decoder
 }
 
 var errNoOAuthConfig = errors.DefineInvalidArgument("no_oauth_config", "no OAuth configuration found for the OAuth client")
@@ -66,12 +66,15 @@ func (oc *OAuthClient) withHTTPClient(ctx context.Context) (context.Context, err
 // New returns a new OAuth client instance.
 func New(c *component.Component, config Config, opts ...Option) (*OAuthClient, error) {
 	oc := &OAuthClient{
-		component: c,
-		config:    config,
-		nextKey:   "next",
+		component:     c,
+		config:        config,
+		nextKey:       "next",
+		schemaDecoder: schema.NewDecoder(),
 	}
+	oc.schemaDecoder.IgnoreUnknownKeys(true)
+
 	oc.callback = oc.defaultCallback
-	oc.oauth = oc.defaultOAuth
+	oc.oauthConfig = oc.defaultOAuthConfig
 	oc.authCodeURLOpts = oc.defaultAuthCodeURLOptions
 
 	for _, opt := range opts {
@@ -95,8 +98,8 @@ func (oc *OAuthClient) configFromContext(ctx context.Context) *Config {
 	return &oc.config
 }
 
-func (oc *OAuthClient) defaultOAuth(c echo.Context) (*oauth2.Config, error) {
-	config := oc.configFromContext(c.Request().Context())
+func (oc *OAuthClient) defaultOAuthConfig(ctx context.Context) (*oauth2.Config, error) {
+	config := oc.configFromContext(ctx)
 
 	authorizeURL := config.AuthorizeURL
 	redirectURL := fmt.Sprintf("%s/oauth/callback", strings.TrimSuffix(config.RootURL, "/"))

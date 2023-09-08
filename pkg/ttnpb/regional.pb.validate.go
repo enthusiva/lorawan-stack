@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _regional_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on ConcentratorConfig with the rules
 // defined in the proto definition for this message. If any rules are
@@ -69,7 +66,7 @@ func (m *ConcentratorConfig) ValidateFields(paths ...string) error {
 
 		case "lora_standard_channel":
 
-			if v, ok := interface{}(m.GetLoRaStandardChannel()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetLoraStandardChannel()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ConcentratorConfigValidationError{
 						field:  "lora_standard_channel",
@@ -81,7 +78,7 @@ func (m *ConcentratorConfig) ValidateFields(paths ...string) error {
 
 		case "fsk_channel":
 
-			if v, ok := interface{}(m.GetFSKChannel()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFskChannel()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ConcentratorConfigValidationError{
 						field:  "fsk_channel",
@@ -93,7 +90,7 @@ func (m *ConcentratorConfig) ValidateFields(paths ...string) error {
 
 		case "lbt":
 
-			if v, ok := interface{}(m.GetLBT()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetLbt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ConcentratorConfigValidationError{
 						field:  "lbt",
@@ -478,12 +475,12 @@ func (m *ConcentratorConfig_LBTConfiguration) ValidateFields(paths ...string) er
 		_ = subs
 		switch name {
 		case "rssi_target":
-			// no validation rules for RSSITarget
+			// no validation rules for RssiTarget
 		case "rssi_offset":
-			// no validation rules for RSSIOffset
+			// no validation rules for RssiOffset
 		case "scan_time":
 
-			if v, ok := interface{}(&m.ScanTime).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetScanTime()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ConcentratorConfig_LBTConfigurationValidationError{
 						field:  "scan_time",

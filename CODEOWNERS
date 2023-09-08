@@ -1,94 +1,97 @@
 # Root
-/ @johanstokking @htdvisser
+/** @johanstokking @adriansmares
 /CODEOWNERS @johanstokking
 /LICENSE @johanstokking
+/CHANGELOG.md
 
 # Clear common folders
 /pkg
 
 # Dependencies
-/go.mod @johanstokking @htdvisser @rvolosatovs
-/go.sum @johanstokking @htdvisser @rvolosatovs
-/package.json @bafonins @kschiffer @asmulko
-/yarn.lock @bafonins @kschiffer @asmulko
-/sdk/js/package.json @bafonins @kschiffer @asmulko
-/sdk/js/yarn.lock @bafonins @kschiffer @asmulko
+/go.mod @johanstokking @adriansmares
+/go.sum @johanstokking @adriansmares
+/package.json @kschiffer @ryaplots
+/yarn.lock @kschiffer @ryaplots @mjamescompton
+/sdk/js/package.json @kschiffer @ryaplots @mjamescompton
+/sdk/js/yarn.lock @kschiffer @ryaplots @mjamescompton
 
 # Build pipeline and tooling
-/Makefile @htdvisser @rvolosatovs @johanstokking
-/tools @htdvisser @rvolosatovs @johanstokking
-/.github/workflows @htdvisser @rvolosatovs @johanstokking
-/config @bafonins @kschiffer @asmulko
-/config/stack @benolayinka @neoaggelos
-/cypress @bafonins @kschiffer @asmulko
+/Makefile @adriansmares
+/tools @adriansmares
+/.github/workflows @adriansmares
+/config @kschiffer @ryaplots @mjamescompton
+/config/stack @benolayinka @KrishnaIyer
+/cypress @kschiffer @ryaplots @mjamescompton
 
 # API, configuration, CLI and storage compatibility
-/api @johanstokking @htdvisser @rvolosatovs
-/cmd @johanstokking @htdvisser @rvolosatovs
-/pkg/**/config.go @johanstokking @htdvisser @rvolosatovs
-/pkg/**/registry.go @johanstokking @htdvisser @rvolosatovs
-/pkg/config/shared.go @johanstokking @htdvisser @rvolosatovs
-/pkg/gogoproto @johanstokking @htdvisser @rvolosatovs
-/pkg/goproto @johanstokking @htdvisser @rvolosatovs
-/pkg/identityserver/store @johanstokking @htdvisser @rvolosatovs
-/pkg/jsonpb @johanstokking @htdvisser @rvolosatovs
-/pkg/ttnpb @johanstokking @htdvisser @rvolosatovs
+/api/*.proto @johanstokking @adriansmares
+/cmd @adriansmares
+/pkg/**/config.go @adriansmares
+/pkg/**/registry.go @adriansmares
+/pkg/config/shared.go @adriansmares
+/pkg/goproto @johanstokking @adriansmares
+/pkg/identityserver/store @johanstokking @adriansmares
+/pkg/jsonpb @johanstokking @adriansmares
+/pkg/ttnpb @johanstokking @adriansmares
 
 # Security
-/pkg/auth @johanstokking @htdvisser
-/pkg/crypto @johanstokking @htdvisser @rvolosatovs
+/pkg/auth @johanstokking @adriansmares
+/pkg/crypto @johanstokking @adriansmares
 
 # Shared components
-/pkg/band @johanstokking @htdvisser @rvolosatovs @KrishnaIyer
-/pkg/cluster @htdvisser @johanstokking @adriansmares
-/pkg/component @johanstokking @htdvisser
-/pkg/errors @johanstokking @htdvisser
-/pkg/events @htdvisser @rvolosatovs @adriansmares
-/pkg/frequencyplans @johanstokking @htdvisser @rvolosatovs @KrishnaIyer
-/pkg/interop @johanstokking @rvolosatovs @adriansmares
-/pkg/rpcmiddleware @htdvisser @johanstokking @adriansmares
-/pkg/rpcserver @htdvisser @johanstokking @adriansmares
-/pkg/types @johanstokking @htdvisser @rvolosatovs
-/pkg/web @bafonins @kschiffer @asmulko
-/pkg/webmiddleware @htdvisser @bafonins @kschiffer
-/pkg/webui @bafonins @kschiffer @asmulko
-/pkg/ratelimit @johanstokking @htdvisser @neoaggelos
+/pkg/band @johanstokking @KrishnaIyer
+/pkg/cluster @johanstokking @adriansmares
+/pkg/component @johanstokking @adriansmares
+/pkg/errors @johanstokking @adriansmares
+/pkg/events @adriansmares
+/pkg/frequencyplans @johanstokking @KrishnaIyer
+/pkg/interop @johanstokking @adriansmares
+/pkg/rpcmiddleware @johanstokking @adriansmares
+/pkg/rpcserver @johanstokking @adriansmares
+/pkg/types @johanstokking
+/pkg/web @kschiffer @ryaplots @mjamescompton
+/pkg/webmiddleware @KrishnaIyer @kschiffer
+/pkg/webui @kschiffer @ryaplots @mjamescompton
+/pkg/ratelimit @johanstokking @KrishnaIyer
 
 # Subsystems
 
-/pkg/identityserver @htdvisser @bafonins @kschiffer
-/pkg/email @htdvisser @bafonins @kschiffer
-/pkg/oauth @htdvisser @bafonins @kschiffer
-/pkg/account @htdvisser @bafonins @kschiffer
-/pkg/web/oauthclient @htdvisser @bafonins @kschiffer
+/pkg/identityserver @adriansmares @nicholaspcr
+/pkg/email @kschiffer @nicholaspcr
+/pkg/oauth @kschiffer @nicholaspcr
+/pkg/account @kschiffer @nicholaspcr
+/pkg/web/oauthclient @kschiffer @nicholaspcr
 
 /pkg/gatewayserver @johanstokking @KrishnaIyer @adriansmares
-/pkg/gatewayconfigurationserver @rvolosatovs @KrishnaIyer @htdvisser
-/pkg/pfconfig @rvolosatovs @KrishnaIyer
-/pkg/basicstation @KrishnaIyer @htdvisser
+/pkg/gatewayconfigurationserver @KrishnaIyer @adriansmares
+/pkg/pfconfig @KrishnaIyer @adriansmares
+/pkg/basicstation @KrishnaIyer @adriansmares
 
-/pkg/networkserver @johanstokking @rvolosatovs @adriansmares
-/pkg/encoding/lorawan @rvolosatovs @johanstokking @adriansmares
+/pkg/networkserver @johanstokking @adriansmares
+/pkg/specification/macspec @johanstokking @adriansmares
+/pkg/encoding/lorawan @johanstokking @adriansmares
 
 /pkg/applicationserver @johanstokking @adriansmares @KrishnaIyer
 /pkg/messageprocessors @johanstokking @adriansmares @KrishnaIyer
 /pkg/scripting @johanstokking @adriansmares @KrishnaIyer
 
-/pkg/joinserver @johanstokking @rvolosatovs @adriansmares
+/pkg/joinserver @johanstokking @adriansmares
 
-/pkg/console @bafonins @kschiffer @asmulko
+/pkg/console @kschiffer @ryaplots @mjamescompton
 
 /pkg/packetbrokeragent @johanstokking @adriansmares
 
-/pkg/devicetemplateconverter @johanstokking @adriansmares @neoaggelos
-/pkg/devicetemplates @johanstokking @adriansmares @neoaggelos
-/pkg/qrcode @johanstokking @adriansmares @neoaggelos
-/pkg/qrcodegenerator @johanstokking @adriansmares @neoaggelos
+/pkg/devicetemplateconverter @adriansmares @KrishnaIyer
+/pkg/devicetemplates @adriansmares @KrishnaIyer
+/pkg/qrcode @adriansmares @KrishnaIyer
+/pkg/qrcodegenerator @adriansmares @KrishnaIyer
 
-/pkg/devicerepository @johanstokking @neoaggelos
+/pkg/deviceclaimingserver @nicholaspcr @KrishnaIyer
+
+/pkg/devicerepository @adriansmares @KrishnaIyer
 
 # SDKs
-/sdk/js @bafonins @kschiffer @asmulko
+/sdk/js @kschiffer @ryaplots @mjamescompton
 
 # Clear generated code
 /api/api.md

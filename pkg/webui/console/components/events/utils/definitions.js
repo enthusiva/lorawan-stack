@@ -13,15 +13,17 @@
 // limitations under the License.
 
 import DownlinkMessage from '../previews/downlink-message'
-import UplinkMessage from '../previews/uplink-message'
+import GatewayUplinkMessage from '../previews/gateway-uplink-message'
 import ApplicationDownlink from '../previews/application-downlink'
 import ApplicationUplink from '../previews/application-uplink'
+import ApplicationUplinkNormalized from '../previews/application-uplink-normalized'
 import ApplicationUp from '../previews/application-up'
 import ApplicationLocation from '../previews/application-location'
 import JoinRequest from '../previews/join-request'
 import JoinResponse from '../previews/join-response'
 import GatewayStatus from '../previews/gateway-status'
 import ErrorDetails from '../previews/error-details'
+import Value from '../previews/value'
 
 export const eventIconMap = [
   {
@@ -54,7 +56,7 @@ export const eventIconMap = [
   },
   {
     test: /^gs\.down(\.[a-z0-9](?:[-_]?[a-z0-9]){2,})+$/,
-    icon: 'event_uplink',
+    icon: 'event_downlink',
   },
   {
     test: /^gs.gateway.connect$/,
@@ -97,18 +99,21 @@ export const eventIconMap = [
 export const dataTypeMap = {
   ApplicationDownlink,
   ApplicationUplink,
+  ApplicationUplinkNormalized,
   ApplicationUp,
   ApplicationLocation,
   DownlinkMessage,
-  UplinkMessage,
+  GatewayUplinkMessage,
   JoinRequest,
   JoinResponse,
   ErrorDetails,
   GatewayStatus,
+  Value,
 }
 
 export const applicationUpMessages = [
   'uplink_message',
+  'uplink_normalized',
   'join_accept',
   'downlink_ack',
   'downlink_nack',

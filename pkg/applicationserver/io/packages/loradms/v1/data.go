@@ -18,47 +18,23 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type packageData struct {
-	token     string
-	serverURL *url.URL
-
+	token          string
+	serverURL      *url.URL
+	fPortSet       map[uint32]struct{}
 	useTLVEncoding *bool
 }
 
 const (
 	tokenField          = "token"
 	serverURLField      = "server_url"
+	fPortSetField       = "f_port_set"
 	useTLVEncodingField = "use_tlv_encoding"
 )
-
-func (d *packageData) toStruct() *types.Struct {
-	var st types.Struct
-	st.Fields = make(map[string]*types.Value)
-	st.Fields[tokenField] = &types.Value{
-		Kind: &types.Value_StringValue{
-			StringValue: d.token,
-		},
-	}
-	if d.serverURL != nil {
-		st.Fields[serverURLField] = &types.Value{
-			Kind: &types.Value_StringValue{
-				StringValue: d.serverURL.String(),
-			},
-		}
-	}
-	if d.useTLVEncoding != nil {
-		st.Fields[useTLVEncodingField] = &types.Value{
-			Kind: &types.Value_BoolValue{
-				BoolValue: *d.useTLVEncoding,
-			},
-		}
-	}
-	return &st
-}
 
 func (d *packageData) GetUseTLVEncoding() bool {
 	if d == nil || d.useTLVEncoding == nil {
@@ -72,13 +48,13 @@ var (
 	errInvalidFieldType = errors.DefineCorruption("invalid_field_type", "field `{field}` has the wrong type `{type}`")
 )
 
-func (d *packageData) fromStruct(st *types.Struct) (err error) {
+func (d *packageData) fromStruct(st *structpb.Struct) (err error) {
 	fields := st.GetFields()
 	value, ok := fields[tokenField]
 	if !ok {
 		return errFieldNotFound.WithAttributes("field", tokenField)
 	}
-	stringValue, ok := value.GetKind().(*types.Value_StringValue)
+	stringValue, ok := value.GetKind().(*structpb.Value_StringValue)
 	if !ok {
 		return errInvalidFieldType.WithAttributes(
 			"field", tokenField,
@@ -88,7 +64,7 @@ func (d *packageData) fromStruct(st *types.Struct) (err error) {
 	d.token = stringValue.StringValue
 	value, ok = fields[serverURLField]
 	if ok {
-		stringValue, ok := value.GetKind().(*types.Value_StringValue)
+		stringValue, ok := value.GetKind().(*structpb.Value_StringValue)
 		if !ok {
 			return errInvalidFieldType.WithAttributes(
 				"field", serverURLField,
@@ -101,7 +77,7 @@ func (d *packageData) fromStruct(st *types.Struct) (err error) {
 	}
 	value, ok = fields[useTLVEncodingField]
 	if ok {
-		boolValue, ok := value.GetKind().(*types.Value_BoolValue)
+		boolValue, ok := value.GetKind().(*structpb.Value_BoolValue)
 		if !ok {
 			return errInvalidFieldType.WithAttributes(
 				"field", useTLVEncodingField,
@@ -109,6 +85,28 @@ func (d *packageData) fromStruct(st *types.Struct) (err error) {
 			)
 		}
 		d.useTLVEncoding = &boolValue.BoolValue
+	}
+	value, ok = fields[fPortSetField]
+	if ok {
+		listValue, ok := value.GetKind().(*structpb.Value_ListValue)
+		if !ok {
+			return errInvalidFieldType.WithAttributes(
+				"field", fPortSetField,
+				"type", fmt.Sprintf("%T", value.GetKind()),
+			)
+		}
+		listValues := listValue.ListValue.GetValues()
+		d.fPortSet = make(map[uint32]struct{}, len(listValues))
+		for _, v := range listValues {
+			numberValue, ok := v.GetKind().(*structpb.Value_NumberValue)
+			if !ok {
+				return errInvalidFieldType.WithAttributes(
+					"field", fPortSetField,
+					"type", fmt.Sprintf("%T", v.GetKind()),
+				)
+			}
+			d.fPortSet[uint32(numberValue.NumberValue)] = struct{}{}
+		}
 	}
 	return nil
 }

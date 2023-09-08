@@ -16,22 +16,22 @@ Binary | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_512 | [9]
 Binary | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_64 | [6]
 Binary | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8 | [3]
 Binary | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8192 | [13]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1 {} 0} | [0]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1024 {} 0} | [10]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_128 {} 0} | [7]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16 {} 0} | [4]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16384 {} 0} | [14]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2 {} 0} | [1]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2048 {} 0} | [11]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_256 {} 0} | [8]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32 {} 0} | [5]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32768 {} 0} | [15]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4 {} 0} | [2]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4096 {} 0} | [12]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_512 {} 0} | [9]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_64 {} 0} | [6]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8 {} 0} | [3]
-Binary | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8192 {} 0} | [13]
+Binary | ttnpb.ADRAckDelayExponentValue |  | [0]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_1024 | [10]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_128 | [7]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16 | [4]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16384 | [14]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2 | [1]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2048 | [11]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_256 | [8]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32 | [5]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32768 | [15]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4 | [2]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4096 | [12]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_512 | [9]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_64 | [6]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8 | [3]
+Binary | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8192 | [13]
 Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1 | [0]
 Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1024 | [10]
 Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_128 | [7]
@@ -48,22 +48,22 @@ Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_512 | [9]
 Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_64 | [6]
 Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8 | [3]
 Binary | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8192 | [13]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1 {} 0} | [0]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1024 {} 0} | [10]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_128 {} 0} | [7]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16 {} 0} | [4]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16384 {} 0} | [14]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2 {} 0} | [1]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2048 {} 0} | [11]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_256 {} 0} | [8]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32 {} 0} | [5]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32768 {} 0} | [15]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4 {} 0} | [2]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4096 {} 0} | [12]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_512 {} 0} | [9]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_64 {} 0} | [6]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8 {} 0} | [3]
-Binary | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8192 {} 0} | [13]
+Binary | ttnpb.ADRAckLimitExponentValue |  | [0]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_1024 | [10]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_128 | [7]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16 | [4]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16384 | [14]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2 | [1]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2048 | [11]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_256 | [8]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32 | [5]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32768 | [15]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4 | [2]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4096 | [12]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_512 | [9]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_64 | [6]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8 | [3]
+Binary | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8192 | [13]
 Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1 | [0]
 Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1024 | [10]
 Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_128 | [7]
@@ -80,75 +80,75 @@ Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_512 | [9]
 Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_64 | [6]
 Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8 | [3]
 Binary | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8192 | [13]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1 {} 0} | [0]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1024 {} 0} | [10]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_128 {} 0} | [7]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16 {} 0} | [4]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16384 {} 0} | [14]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2 {} 0} | [1]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2048 {} 0} | [11]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_256 {} 0} | [8]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32 {} 0} | [5]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32768 {} 0} | [15]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4 {} 0} | [2]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4096 {} 0} | [12]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_512 {} 0} | [9]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_64 {} 0} | [6]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8 {} 0} | [3]
-Binary | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8192 {} 0} | [13]
+Binary | ttnpb.AggregatedDutyCycleValue |  | [0]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_1024 | [10]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_128 | [7]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16 | [4]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16384 | [14]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2 | [1]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2048 | [11]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_256 | [8]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32 | [5]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32768 | [15]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4 | [2]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4096 | [12]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_512 | [9]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_64 | [6]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8 | [3]
+Binary | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8192 | [13]
 Binary | ttnpb.CFListType | CHANNEL_MASKS | [1]
 Binary | ttnpb.CFListType | FREQUENCIES | [0]
 Binary | ttnpb.Class | CLASS_A | [0]
 Binary | ttnpb.Class | CLASS_B | [1]
 Binary | ttnpb.Class | CLASS_C | [2]
-Binary | ttnpb.DataRateIndex | 0 | [0]
-Binary | ttnpb.DataRateIndex | 1 | [1]
-Binary | ttnpb.DataRateIndex | 10 | [10]
-Binary | ttnpb.DataRateIndex | 11 | [11]
-Binary | ttnpb.DataRateIndex | 12 | [12]
-Binary | ttnpb.DataRateIndex | 13 | [13]
-Binary | ttnpb.DataRateIndex | 14 | [14]
-Binary | ttnpb.DataRateIndex | 15 | [15]
-Binary | ttnpb.DataRateIndex | 2 | [2]
-Binary | ttnpb.DataRateIndex | 3 | [3]
-Binary | ttnpb.DataRateIndex | 4 | [4]
-Binary | ttnpb.DataRateIndex | 5 | [5]
-Binary | ttnpb.DataRateIndex | 6 | [6]
-Binary | ttnpb.DataRateIndex | 7 | [7]
-Binary | ttnpb.DataRateIndex | 8 | [8]
-Binary | ttnpb.DataRateIndex | 9 | [9]
-Binary | ttnpb.DataRateIndexValue | {0 {} 0} | [0]
-Binary | ttnpb.DataRateIndexValue | {1 {} 0} | [1]
-Binary | ttnpb.DataRateIndexValue | {10 {} 0} | [10]
-Binary | ttnpb.DataRateIndexValue | {11 {} 0} | [11]
-Binary | ttnpb.DataRateIndexValue | {12 {} 0} | [12]
-Binary | ttnpb.DataRateIndexValue | {13 {} 0} | [13]
-Binary | ttnpb.DataRateIndexValue | {14 {} 0} | [14]
-Binary | ttnpb.DataRateIndexValue | {15 {} 0} | [15]
-Binary | ttnpb.DataRateIndexValue | {2 {} 0} | [2]
-Binary | ttnpb.DataRateIndexValue | {3 {} 0} | [3]
-Binary | ttnpb.DataRateIndexValue | {4 {} 0} | [4]
-Binary | ttnpb.DataRateIndexValue | {5 {} 0} | [5]
-Binary | ttnpb.DataRateIndexValue | {6 {} 0} | [6]
-Binary | ttnpb.DataRateIndexValue | {7 {} 0} | [7]
-Binary | ttnpb.DataRateIndexValue | {8 {} 0} | [8]
-Binary | ttnpb.DataRateIndexValue | {9 {} 0} | [9]
-Binary | ttnpb.DataRateOffset | 0 | [0]
-Binary | ttnpb.DataRateOffset | 1 | [1]
-Binary | ttnpb.DataRateOffset | 2 | [2]
-Binary | ttnpb.DataRateOffset | 3 | [3]
-Binary | ttnpb.DataRateOffset | 4 | [4]
-Binary | ttnpb.DataRateOffset | 5 | [5]
-Binary | ttnpb.DataRateOffset | 6 | [6]
-Binary | ttnpb.DataRateOffset | 7 | [7]
-Binary | ttnpb.DataRateOffsetValue | {0 {} 0} | [0]
-Binary | ttnpb.DataRateOffsetValue | {1 {} 0} | [1]
-Binary | ttnpb.DataRateOffsetValue | {2 {} 0} | [2]
-Binary | ttnpb.DataRateOffsetValue | {3 {} 0} | [3]
-Binary | ttnpb.DataRateOffsetValue | {4 {} 0} | [4]
-Binary | ttnpb.DataRateOffsetValue | {5 {} 0} | [5]
-Binary | ttnpb.DataRateOffsetValue | {6 {} 0} | [6]
-Binary | ttnpb.DataRateOffsetValue | {7 {} 0} | [7]
+Binary | ttnpb.DataRateIndex | DATA_RATE_0 | [0]
+Binary | ttnpb.DataRateIndex | DATA_RATE_1 | [1]
+Binary | ttnpb.DataRateIndex | DATA_RATE_10 | [10]
+Binary | ttnpb.DataRateIndex | DATA_RATE_11 | [11]
+Binary | ttnpb.DataRateIndex | DATA_RATE_12 | [12]
+Binary | ttnpb.DataRateIndex | DATA_RATE_13 | [13]
+Binary | ttnpb.DataRateIndex | DATA_RATE_14 | [14]
+Binary | ttnpb.DataRateIndex | DATA_RATE_15 | [15]
+Binary | ttnpb.DataRateIndex | DATA_RATE_2 | [2]
+Binary | ttnpb.DataRateIndex | DATA_RATE_3 | [3]
+Binary | ttnpb.DataRateIndex | DATA_RATE_4 | [4]
+Binary | ttnpb.DataRateIndex | DATA_RATE_5 | [5]
+Binary | ttnpb.DataRateIndex | DATA_RATE_6 | [6]
+Binary | ttnpb.DataRateIndex | DATA_RATE_7 | [7]
+Binary | ttnpb.DataRateIndex | DATA_RATE_8 | [8]
+Binary | ttnpb.DataRateIndex | DATA_RATE_9 | [9]
+Binary | ttnpb.DataRateIndexValue |  | [0]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_1 | [1]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_10 | [10]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_11 | [11]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_12 | [12]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_13 | [13]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_14 | [14]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_15 | [15]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_2 | [2]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_3 | [3]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_4 | [4]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_5 | [5]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_6 | [6]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_7 | [7]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_8 | [8]
+Binary | ttnpb.DataRateIndexValue | value:DATA_RATE_9 | [9]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_0 | [0]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_1 | [1]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_2 | [2]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_3 | [3]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_4 | [4]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_5 | [5]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_6 | [6]
+Binary | ttnpb.DataRateOffset | DATA_RATE_OFFSET_7 | [7]
+Binary | ttnpb.DataRateOffsetValue |  | [0]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_1 | [1]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_2 | [2]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_3 | [3]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_4 | [4]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_5 | [5]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_6 | [6]
+Binary | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_7 | [7]
 Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_10 | [1]
 Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_12 | [2]
 Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_13 | [3]
@@ -165,6 +165,26 @@ Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_30 | [13]
 Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_33 | [14]
 Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_36 | [15]
 Binary | ttnpb.DeviceEIRP | DEVICE_EIRP_8 | [0]
+Binary | ttnpb.DeviceEIRPValue |  | [0]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_10 | [1]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_12 | [2]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_13 | [3]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_14 | [4]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_16 | [5]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_18 | [6]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_20 | [7]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_21 | [8]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_24 | [9]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_26 | [10]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_27 | [11]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_29 | [12]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_30 | [13]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_33 | [14]
+Binary | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_36 | [15]
+Binary | ttnpb.JoinRequestType | JOIN | [255]
+Binary | ttnpb.JoinRequestType | REJOIN_CONTEXT | [0]
+Binary | ttnpb.JoinRequestType | REJOIN_KEYS | [2]
+Binary | ttnpb.JoinRequestType | REJOIN_SESSION | [1]
 Binary | ttnpb.MACCommandIdentifier | CID_ADR_PARAM_SETUP | [12]
 Binary | ttnpb.MACCommandIdentifier | CID_BEACON_FREQ | [19]
 Binary | ttnpb.MACCommandIdentifier | CID_BEACON_TIMING | [18]
@@ -186,13 +206,13 @@ Binary | ttnpb.MACCommandIdentifier | CID_RFU_0 | [0]
 Binary | ttnpb.MACCommandIdentifier | CID_RX_PARAM_SETUP | [5]
 Binary | ttnpb.MACCommandIdentifier | CID_RX_TIMING_SETUP | [8]
 Binary | ttnpb.MACCommandIdentifier | CID_TX_PARAM_SETUP | [9]
-Binary | ttnpb.MACVersion | 1.0.0 | [1]
-Binary | ttnpb.MACVersion | 1.0.1 | [2]
-Binary | ttnpb.MACVersion | 1.0.2 | [3]
-Binary | ttnpb.MACVersion | 1.0.3 | [5]
-Binary | ttnpb.MACVersion | 1.0.4 | [6]
-Binary | ttnpb.MACVersion | 1.1.0 | [4]
-Binary | ttnpb.MACVersion | unknown | [0]
+Binary | ttnpb.MACVersion | MAC_UNKNOWN | [0]
+Binary | ttnpb.MACVersion | MAC_V1_0 | [1]
+Binary | ttnpb.MACVersion | MAC_V1_0_1 | [2]
+Binary | ttnpb.MACVersion | MAC_V1_0_2 | [3]
+Binary | ttnpb.MACVersion | MAC_V1_0_3 | [5]
+Binary | ttnpb.MACVersion | MAC_V1_0_4 | [6]
+Binary | ttnpb.MACVersion | MAC_V1_1 | [4]
 Binary | ttnpb.MType | CONFIRMED_DOWN | [5]
 Binary | ttnpb.MType | CONFIRMED_UP | [4]
 Binary | ttnpb.MType | JOIN_ACCEPT | [1]
@@ -218,14 +238,19 @@ Binary | ttnpb.Minor | MINOR_RFU_6 | [6]
 Binary | ttnpb.Minor | MINOR_RFU_7 | [7]
 Binary | ttnpb.Minor | MINOR_RFU_8 | [8]
 Binary | ttnpb.Minor | MINOR_RFU_9 | [9]
-Binary | ttnpb.PHYVersion | 1.0.0 | [1]
-Binary | ttnpb.PHYVersion | 1.0.1 | [2]
-Binary | ttnpb.PHYVersion | 1.0.2-a | [3]
-Binary | ttnpb.PHYVersion | 1.0.2-b | [4]
-Binary | ttnpb.PHYVersion | 1.0.3-a | [7]
-Binary | ttnpb.PHYVersion | 1.1.0-a | [5]
-Binary | ttnpb.PHYVersion | 1.1.0-b | [6]
-Binary | ttnpb.PHYVersion | unknown | [0]
+Binary | ttnpb.PHYVersion | PHY_UNKNOWN | [0]
+Binary | ttnpb.PHYVersion | PHY_V1_0 | [1]
+Binary | ttnpb.PHYVersion | PHY_V1_0_1 | [2]
+Binary | ttnpb.PHYVersion | PHY_V1_0_2_REV_A | [3]
+Binary | ttnpb.PHYVersion | PHY_V1_0_2_REV_B | [4]
+Binary | ttnpb.PHYVersion | PHY_V1_0_3_REV_A | [7]
+Binary | ttnpb.PHYVersion | PHY_V1_1_REV_A | [5]
+Binary | ttnpb.PHYVersion | PHY_V1_1_REV_B | [6]
+Binary | ttnpb.PHYVersion | RP002_V1_0_0 | [8]
+Binary | ttnpb.PHYVersion | RP002_V1_0_1 | [9]
+Binary | ttnpb.PHYVersion | RP002_V1_0_2 | [10]
+Binary | ttnpb.PHYVersion | RP002_V1_0_3 | [11]
+Binary | ttnpb.PHYVersion | RP002_V1_0_4 | [12]
 Binary | ttnpb.PingSlotPeriod | PING_EVERY_128S | [7]
 Binary | ttnpb.PingSlotPeriod | PING_EVERY_16S | [4]
 Binary | ttnpb.PingSlotPeriod | PING_EVERY_1S | [0]
@@ -234,14 +259,14 @@ Binary | ttnpb.PingSlotPeriod | PING_EVERY_32S | [5]
 Binary | ttnpb.PingSlotPeriod | PING_EVERY_4S | [2]
 Binary | ttnpb.PingSlotPeriod | PING_EVERY_64S | [6]
 Binary | ttnpb.PingSlotPeriod | PING_EVERY_8S | [3]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_128S {} 0} | [7]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_16S {} 0} | [4]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_1S {} 0} | [0]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_2S {} 0} | [1]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_32S {} 0} | [5]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_4S {} 0} | [2]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_64S {} 0} | [6]
-Binary | ttnpb.PingSlotPeriodValue | {PING_EVERY_8S {} 0} | [3]
+Binary | ttnpb.PingSlotPeriodValue |  | [0]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_128S | [7]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_16S | [4]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_2S | [1]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_32S | [5]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_4S | [2]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_64S | [6]
+Binary | ttnpb.PingSlotPeriodValue | value:PING_EVERY_8S | [3]
 Binary | ttnpb.RejoinCountExponent | REJOIN_COUNT_1024 | [6]
 Binary | ttnpb.RejoinCountExponent | REJOIN_COUNT_128 | [3]
 Binary | ttnpb.RejoinCountExponent | REJOIN_COUNT_131072 | [13]
@@ -266,6 +291,9 @@ Binary | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_4 | [4]
 Binary | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_5 | [5]
 Binary | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_6 | [6]
 Binary | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_7 | [7]
+Binary | ttnpb.RejoinRequestType | CONTEXT | [0]
+Binary | ttnpb.RejoinRequestType | KEYS | [2]
+Binary | ttnpb.RejoinRequestType | SESSION | [1]
 Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_0 | [0]
 Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_1 | [1]
 Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_10 | [10]
@@ -282,41 +310,38 @@ Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_6 | [6]
 Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_7 | [7]
 Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_8 | [8]
 Binary | ttnpb.RejoinTimeExponent | REJOIN_TIME_9 | [9]
-Binary | ttnpb.RejoinType | CONTEXT | [0]
-Binary | ttnpb.RejoinType | KEYS | [2]
-Binary | ttnpb.RejoinType | SESSION | [1]
-Binary | ttnpb.RxDelay | 0 | [0]
-Binary | ttnpb.RxDelay | 1 | [1]
-Binary | ttnpb.RxDelay | 10 | [10]
-Binary | ttnpb.RxDelay | 11 | [11]
-Binary | ttnpb.RxDelay | 12 | [12]
-Binary | ttnpb.RxDelay | 13 | [13]
-Binary | ttnpb.RxDelay | 14 | [14]
-Binary | ttnpb.RxDelay | 15 | [15]
-Binary | ttnpb.RxDelay | 2 | [2]
-Binary | ttnpb.RxDelay | 3 | [3]
-Binary | ttnpb.RxDelay | 4 | [4]
-Binary | ttnpb.RxDelay | 5 | [5]
-Binary | ttnpb.RxDelay | 6 | [6]
-Binary | ttnpb.RxDelay | 7 | [7]
-Binary | ttnpb.RxDelay | 8 | [8]
-Binary | ttnpb.RxDelay | 9 | [9]
-Binary | ttnpb.RxDelayValue | {0 {} 0} | [0]
-Binary | ttnpb.RxDelayValue | {1 {} 0} | [1]
-Binary | ttnpb.RxDelayValue | {10 {} 0} | [10]
-Binary | ttnpb.RxDelayValue | {11 {} 0} | [11]
-Binary | ttnpb.RxDelayValue | {12 {} 0} | [12]
-Binary | ttnpb.RxDelayValue | {13 {} 0} | [13]
-Binary | ttnpb.RxDelayValue | {14 {} 0} | [14]
-Binary | ttnpb.RxDelayValue | {15 {} 0} | [15]
-Binary | ttnpb.RxDelayValue | {2 {} 0} | [2]
-Binary | ttnpb.RxDelayValue | {3 {} 0} | [3]
-Binary | ttnpb.RxDelayValue | {4 {} 0} | [4]
-Binary | ttnpb.RxDelayValue | {5 {} 0} | [5]
-Binary | ttnpb.RxDelayValue | {6 {} 0} | [6]
-Binary | ttnpb.RxDelayValue | {7 {} 0} | [7]
-Binary | ttnpb.RxDelayValue | {8 {} 0} | [8]
-Binary | ttnpb.RxDelayValue | {9 {} 0} | [9]
+Binary | ttnpb.RxDelay | RX_DELAY_0 | [0]
+Binary | ttnpb.RxDelay | RX_DELAY_1 | [1]
+Binary | ttnpb.RxDelay | RX_DELAY_10 | [10]
+Binary | ttnpb.RxDelay | RX_DELAY_11 | [11]
+Binary | ttnpb.RxDelay | RX_DELAY_12 | [12]
+Binary | ttnpb.RxDelay | RX_DELAY_13 | [13]
+Binary | ttnpb.RxDelay | RX_DELAY_14 | [14]
+Binary | ttnpb.RxDelay | RX_DELAY_15 | [15]
+Binary | ttnpb.RxDelay | RX_DELAY_2 | [2]
+Binary | ttnpb.RxDelay | RX_DELAY_3 | [3]
+Binary | ttnpb.RxDelay | RX_DELAY_4 | [4]
+Binary | ttnpb.RxDelay | RX_DELAY_5 | [5]
+Binary | ttnpb.RxDelay | RX_DELAY_6 | [6]
+Binary | ttnpb.RxDelay | RX_DELAY_7 | [7]
+Binary | ttnpb.RxDelay | RX_DELAY_8 | [8]
+Binary | ttnpb.RxDelay | RX_DELAY_9 | [9]
+Binary | ttnpb.RxDelayValue |  | [0]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_1 | [1]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_10 | [10]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_11 | [11]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_12 | [12]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_13 | [13]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_14 | [14]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_15 | [15]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_2 | [2]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_3 | [3]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_4 | [4]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_5 | [5]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_6 | [6]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_7 | [7]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_8 | [8]
+Binary | ttnpb.RxDelayValue | value:RX_DELAY_9 | [9]
 Binary | ttnpb.TxSchedulePriority | ABOVE_NORMAL | [4]
 Binary | ttnpb.TxSchedulePriority | BELOW_NORMAL | [2]
 Binary | ttnpb.TxSchedulePriority | HIGH | [5]
@@ -340,22 +365,22 @@ JSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_512 | "ADR_ACK_DELAY_512"
 JSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_64 | "ADR_ACK_DELAY_64"
 JSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8 | "ADR_ACK_DELAY_8"
 JSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8192 | "ADR_ACK_DELAY_8192"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1 {} 0} | "ADR_ACK_DELAY_1"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1024 {} 0} | "ADR_ACK_DELAY_1024"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_128 {} 0} | "ADR_ACK_DELAY_128"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16 {} 0} | "ADR_ACK_DELAY_16"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16384 {} 0} | "ADR_ACK_DELAY_16384"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2 {} 0} | "ADR_ACK_DELAY_2"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2048 {} 0} | "ADR_ACK_DELAY_2048"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_256 {} 0} | "ADR_ACK_DELAY_256"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32 {} 0} | "ADR_ACK_DELAY_32"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32768 {} 0} | "ADR_ACK_DELAY_32768"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4 {} 0} | "ADR_ACK_DELAY_4"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4096 {} 0} | "ADR_ACK_DELAY_4096"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_512 {} 0} | "ADR_ACK_DELAY_512"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_64 {} 0} | "ADR_ACK_DELAY_64"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8 {} 0} | "ADR_ACK_DELAY_8"
-JSON | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8192 {} 0} | "ADR_ACK_DELAY_8192"
+JSON | ttnpb.ADRAckDelayExponentValue |  | "ADR_ACK_DELAY_1"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_1024 | "ADR_ACK_DELAY_1024"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_128 | "ADR_ACK_DELAY_128"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16 | "ADR_ACK_DELAY_16"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16384 | "ADR_ACK_DELAY_16384"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2 | "ADR_ACK_DELAY_2"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2048 | "ADR_ACK_DELAY_2048"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_256 | "ADR_ACK_DELAY_256"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32 | "ADR_ACK_DELAY_32"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32768 | "ADR_ACK_DELAY_32768"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4 | "ADR_ACK_DELAY_4"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4096 | "ADR_ACK_DELAY_4096"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_512 | "ADR_ACK_DELAY_512"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_64 | "ADR_ACK_DELAY_64"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8 | "ADR_ACK_DELAY_8"
+JSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8192 | "ADR_ACK_DELAY_8192"
 JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1 | "ADR_ACK_LIMIT_1"
 JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1024 | "ADR_ACK_LIMIT_1024"
 JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_128 | "ADR_ACK_LIMIT_128"
@@ -372,22 +397,22 @@ JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_512 | "ADR_ACK_LIMIT_512"
 JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_64 | "ADR_ACK_LIMIT_64"
 JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8 | "ADR_ACK_LIMIT_8"
 JSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8192 | "ADR_ACK_LIMIT_8192"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1 {} 0} | "ADR_ACK_LIMIT_1"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1024 {} 0} | "ADR_ACK_LIMIT_1024"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_128 {} 0} | "ADR_ACK_LIMIT_128"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16 {} 0} | "ADR_ACK_LIMIT_16"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16384 {} 0} | "ADR_ACK_LIMIT_16384"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2 {} 0} | "ADR_ACK_LIMIT_2"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2048 {} 0} | "ADR_ACK_LIMIT_2048"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_256 {} 0} | "ADR_ACK_LIMIT_256"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32 {} 0} | "ADR_ACK_LIMIT_32"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32768 {} 0} | "ADR_ACK_LIMIT_32768"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4 {} 0} | "ADR_ACK_LIMIT_4"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4096 {} 0} | "ADR_ACK_LIMIT_4096"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_512 {} 0} | "ADR_ACK_LIMIT_512"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_64 {} 0} | "ADR_ACK_LIMIT_64"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8 {} 0} | "ADR_ACK_LIMIT_8"
-JSON | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8192 {} 0} | "ADR_ACK_LIMIT_8192"
+JSON | ttnpb.ADRAckLimitExponentValue |  | "ADR_ACK_LIMIT_1"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_1024 | "ADR_ACK_LIMIT_1024"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_128 | "ADR_ACK_LIMIT_128"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16 | "ADR_ACK_LIMIT_16"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16384 | "ADR_ACK_LIMIT_16384"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2 | "ADR_ACK_LIMIT_2"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2048 | "ADR_ACK_LIMIT_2048"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_256 | "ADR_ACK_LIMIT_256"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32 | "ADR_ACK_LIMIT_32"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32768 | "ADR_ACK_LIMIT_32768"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4 | "ADR_ACK_LIMIT_4"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4096 | "ADR_ACK_LIMIT_4096"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_512 | "ADR_ACK_LIMIT_512"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_64 | "ADR_ACK_LIMIT_64"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8 | "ADR_ACK_LIMIT_8"
+JSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8192 | "ADR_ACK_LIMIT_8192"
 JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1 | "DUTY_CYCLE_1"
 JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1024 | "DUTY_CYCLE_1024"
 JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_128 | "DUTY_CYCLE_128"
@@ -404,77 +429,77 @@ JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_512 | "DUTY_CYCLE_512"
 JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_64 | "DUTY_CYCLE_64"
 JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8 | "DUTY_CYCLE_8"
 JSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8192 | "DUTY_CYCLE_8192"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1 {} 0} | "DUTY_CYCLE_1"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1024 {} 0} | "DUTY_CYCLE_1024"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_128 {} 0} | "DUTY_CYCLE_128"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16 {} 0} | "DUTY_CYCLE_16"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16384 {} 0} | "DUTY_CYCLE_16384"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2 {} 0} | "DUTY_CYCLE_2"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2048 {} 0} | "DUTY_CYCLE_2048"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_256 {} 0} | "DUTY_CYCLE_256"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32 {} 0} | "DUTY_CYCLE_32"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32768 {} 0} | "DUTY_CYCLE_32768"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4 {} 0} | "DUTY_CYCLE_4"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4096 {} 0} | "DUTY_CYCLE_4096"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_512 {} 0} | "DUTY_CYCLE_512"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_64 {} 0} | "DUTY_CYCLE_64"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8 {} 0} | "DUTY_CYCLE_8"
-JSON | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8192 {} 0} | "DUTY_CYCLE_8192"
-JSON | ttnpb.BoolValue | {false {} 0} | false
-JSON | ttnpb.BoolValue | {true {} 0} | true
+JSON | ttnpb.AggregatedDutyCycleValue |  | "DUTY_CYCLE_1"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_1024 | "DUTY_CYCLE_1024"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_128 | "DUTY_CYCLE_128"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16 | "DUTY_CYCLE_16"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16384 | "DUTY_CYCLE_16384"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2 | "DUTY_CYCLE_2"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2048 | "DUTY_CYCLE_2048"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_256 | "DUTY_CYCLE_256"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32 | "DUTY_CYCLE_32"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32768 | "DUTY_CYCLE_32768"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4 | "DUTY_CYCLE_4"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4096 | "DUTY_CYCLE_4096"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_512 | "DUTY_CYCLE_512"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_64 | "DUTY_CYCLE_64"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8 | "DUTY_CYCLE_8"
+JSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8192 | "DUTY_CYCLE_8192"
+JSON | ttnpb.BoolValue |  | false
+JSON | ttnpb.BoolValue | value:true | true
 JSON | ttnpb.CFListType | CHANNEL_MASKS | "CHANNEL_MASKS"
 JSON | ttnpb.CFListType | FREQUENCIES | "FREQUENCIES"
 JSON | ttnpb.Class | CLASS_A | "CLASS_A"
 JSON | ttnpb.Class | CLASS_B | "CLASS_B"
 JSON | ttnpb.Class | CLASS_C | "CLASS_C"
-JSON | ttnpb.DataRateIndex | 0 | 0
-JSON | ttnpb.DataRateIndex | 1 | 1
-JSON | ttnpb.DataRateIndex | 10 | 10
-JSON | ttnpb.DataRateIndex | 11 | 11
-JSON | ttnpb.DataRateIndex | 12 | 12
-JSON | ttnpb.DataRateIndex | 13 | 13
-JSON | ttnpb.DataRateIndex | 14 | 14
-JSON | ttnpb.DataRateIndex | 15 | 15
-JSON | ttnpb.DataRateIndex | 2 | 2
-JSON | ttnpb.DataRateIndex | 3 | 3
-JSON | ttnpb.DataRateIndex | 4 | 4
-JSON | ttnpb.DataRateIndex | 5 | 5
-JSON | ttnpb.DataRateIndex | 6 | 6
-JSON | ttnpb.DataRateIndex | 7 | 7
-JSON | ttnpb.DataRateIndex | 8 | 8
-JSON | ttnpb.DataRateIndex | 9 | 9
-JSON | ttnpb.DataRateIndexValue | {0 {} 0} | 0
-JSON | ttnpb.DataRateIndexValue | {1 {} 0} | 1
-JSON | ttnpb.DataRateIndexValue | {10 {} 0} | 10
-JSON | ttnpb.DataRateIndexValue | {11 {} 0} | 11
-JSON | ttnpb.DataRateIndexValue | {12 {} 0} | 12
-JSON | ttnpb.DataRateIndexValue | {13 {} 0} | 13
-JSON | ttnpb.DataRateIndexValue | {14 {} 0} | 14
-JSON | ttnpb.DataRateIndexValue | {15 {} 0} | 15
-JSON | ttnpb.DataRateIndexValue | {2 {} 0} | 2
-JSON | ttnpb.DataRateIndexValue | {3 {} 0} | 3
-JSON | ttnpb.DataRateIndexValue | {4 {} 0} | 4
-JSON | ttnpb.DataRateIndexValue | {5 {} 0} | 5
-JSON | ttnpb.DataRateIndexValue | {6 {} 0} | 6
-JSON | ttnpb.DataRateIndexValue | {7 {} 0} | 7
-JSON | ttnpb.DataRateIndexValue | {8 {} 0} | 8
-JSON | ttnpb.DataRateIndexValue | {9 {} 0} | 9
-JSON | ttnpb.DataRateOffset | 0 | 0
-JSON | ttnpb.DataRateOffset | 1 | 1
-JSON | ttnpb.DataRateOffset | 2 | 2
-JSON | ttnpb.DataRateOffset | 3 | 3
-JSON | ttnpb.DataRateOffset | 4 | 4
-JSON | ttnpb.DataRateOffset | 5 | 5
-JSON | ttnpb.DataRateOffset | 6 | 6
-JSON | ttnpb.DataRateOffset | 7 | 7
-JSON | ttnpb.DataRateOffsetValue | {0 {} 0} | 0
-JSON | ttnpb.DataRateOffsetValue | {1 {} 0} | 1
-JSON | ttnpb.DataRateOffsetValue | {2 {} 0} | 2
-JSON | ttnpb.DataRateOffsetValue | {3 {} 0} | 3
-JSON | ttnpb.DataRateOffsetValue | {4 {} 0} | 4
-JSON | ttnpb.DataRateOffsetValue | {5 {} 0} | 5
-JSON | ttnpb.DataRateOffsetValue | {6 {} 0} | 6
-JSON | ttnpb.DataRateOffsetValue | {7 {} 0} | 7
+JSON | ttnpb.DataRateIndex | DATA_RATE_0 | 0
+JSON | ttnpb.DataRateIndex | DATA_RATE_1 | 1
+JSON | ttnpb.DataRateIndex | DATA_RATE_10 | 10
+JSON | ttnpb.DataRateIndex | DATA_RATE_11 | 11
+JSON | ttnpb.DataRateIndex | DATA_RATE_12 | 12
+JSON | ttnpb.DataRateIndex | DATA_RATE_13 | 13
+JSON | ttnpb.DataRateIndex | DATA_RATE_14 | 14
+JSON | ttnpb.DataRateIndex | DATA_RATE_15 | 15
+JSON | ttnpb.DataRateIndex | DATA_RATE_2 | 2
+JSON | ttnpb.DataRateIndex | DATA_RATE_3 | 3
+JSON | ttnpb.DataRateIndex | DATA_RATE_4 | 4
+JSON | ttnpb.DataRateIndex | DATA_RATE_5 | 5
+JSON | ttnpb.DataRateIndex | DATA_RATE_6 | 6
+JSON | ttnpb.DataRateIndex | DATA_RATE_7 | 7
+JSON | ttnpb.DataRateIndex | DATA_RATE_8 | 8
+JSON | ttnpb.DataRateIndex | DATA_RATE_9 | 9
+JSON | ttnpb.DataRateIndexValue |  | 0
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_1 | 1
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_10 | 10
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_11 | 11
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_12 | 12
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_13 | 13
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_14 | 14
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_15 | 15
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_2 | 2
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_3 | 3
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_4 | 4
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_5 | 5
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_6 | 6
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_7 | 7
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_8 | 8
+JSON | ttnpb.DataRateIndexValue | value:DATA_RATE_9 | 9
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_0 | 0
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_1 | 1
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_2 | 2
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_3 | 3
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_4 | 4
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_5 | 5
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_6 | 6
+JSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_7 | 7
+JSON | ttnpb.DataRateOffsetValue |  | 0
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_1 | 1
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_2 | 2
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_3 | 3
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_4 | 4
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_5 | 5
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_6 | 6
+JSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_7 | 7
 JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_10 | "DEVICE_EIRP_10"
 JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_12 | "DEVICE_EIRP_12"
 JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_13 | "DEVICE_EIRP_13"
@@ -491,9 +516,44 @@ JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_30 | "DEVICE_EIRP_30"
 JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_33 | "DEVICE_EIRP_33"
 JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_36 | "DEVICE_EIRP_36"
 JSON | ttnpb.DeviceEIRP | DEVICE_EIRP_8 | "DEVICE_EIRP_8"
-JSON | ttnpb.FrequencyValue | {100000 {} 0} | "100000"
-JSON | ttnpb.FrequencyValue | {2000000 {} 0} | "2000000"
-JSON | ttnpb.FrequencyValue | {30000000 {} 0} | "30000000"
+JSON | ttnpb.DeviceEIRPValue |  | "DEVICE_EIRP_8"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_10 | "DEVICE_EIRP_10"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_12 | "DEVICE_EIRP_12"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_13 | "DEVICE_EIRP_13"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_14 | "DEVICE_EIRP_14"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_16 | "DEVICE_EIRP_16"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_18 | "DEVICE_EIRP_18"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_20 | "DEVICE_EIRP_20"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_21 | "DEVICE_EIRP_21"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_24 | "DEVICE_EIRP_24"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_26 | "DEVICE_EIRP_26"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_27 | "DEVICE_EIRP_27"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_29 | "DEVICE_EIRP_29"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_30 | "DEVICE_EIRP_30"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_33 | "DEVICE_EIRP_33"
+JSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_36 | "DEVICE_EIRP_36"
+JSON | ttnpb.FrequencyValue | value:100000 | "100000"
+JSON | ttnpb.FrequencyValue | value:2000000 | "2000000"
+JSON | ttnpb.FrequencyValue | value:30000000 | "30000000"
+JSON | ttnpb.GatewayAntennaPlacement | INDOOR | "INDOOR"
+JSON | ttnpb.GatewayAntennaPlacement | OUTDOOR | "OUTDOOR"
+JSON | ttnpb.GatewayAntennaPlacement | PLACEMENT_UNKNOWN | "PLACEMENT_UNKNOWN"
+JSON | ttnpb.GrantType | GRANT_AUTHORIZATION_CODE | "GRANT_AUTHORIZATION_CODE"
+JSON | ttnpb.GrantType | GRANT_PASSWORD | "GRANT_PASSWORD"
+JSON | ttnpb.GrantType | GRANT_REFRESH_TOKEN | "GRANT_REFRESH_TOKEN"
+JSON | ttnpb.JoinRequestType | JOIN | "JOIN"
+JSON | ttnpb.JoinRequestType | REJOIN_CONTEXT | "REJOIN_CONTEXT"
+JSON | ttnpb.JoinRequestType | REJOIN_KEYS | "REJOIN_KEYS"
+JSON | ttnpb.JoinRequestType | REJOIN_SESSION | "REJOIN_SESSION"
+JSON | ttnpb.LocationSource | SOURCE_BT_RSSI_GEOLOCATION | "SOURCE_BT_RSSI_GEOLOCATION"
+JSON | ttnpb.LocationSource | SOURCE_COMBINED_GEOLOCATION | "SOURCE_COMBINED_GEOLOCATION"
+JSON | ttnpb.LocationSource | SOURCE_GPS | "SOURCE_GPS"
+JSON | ttnpb.LocationSource | SOURCE_IP_GEOLOCATION | "SOURCE_IP_GEOLOCATION"
+JSON | ttnpb.LocationSource | SOURCE_LORA_RSSI_GEOLOCATION | "SOURCE_LORA_RSSI_GEOLOCATION"
+JSON | ttnpb.LocationSource | SOURCE_LORA_TDOA_GEOLOCATION | "SOURCE_LORA_TDOA_GEOLOCATION"
+JSON | ttnpb.LocationSource | SOURCE_REGISTRY | "SOURCE_REGISTRY"
+JSON | ttnpb.LocationSource | SOURCE_UNKNOWN | "SOURCE_UNKNOWN"
+JSON | ttnpb.LocationSource | SOURCE_WIFI_RSSI_GEOLOCATION | "SOURCE_WIFI_RSSI_GEOLOCATION"
 JSON | ttnpb.MACCommandIdentifier | CID_ADR_PARAM_SETUP | "CID_ADR_PARAM_SETUP"
 JSON | ttnpb.MACCommandIdentifier | CID_BEACON_FREQ | "CID_BEACON_FREQ"
 JSON | ttnpb.MACCommandIdentifier | CID_BEACON_TIMING | "CID_BEACON_TIMING"
@@ -515,13 +575,13 @@ JSON | ttnpb.MACCommandIdentifier | CID_RFU_0 | "CID_RFU_0"
 JSON | ttnpb.MACCommandIdentifier | CID_RX_PARAM_SETUP | "CID_RX_PARAM_SETUP"
 JSON | ttnpb.MACCommandIdentifier | CID_RX_TIMING_SETUP | "CID_RX_TIMING_SETUP"
 JSON | ttnpb.MACCommandIdentifier | CID_TX_PARAM_SETUP | "CID_TX_PARAM_SETUP"
-JSON | ttnpb.MACVersion | 1.0.0 | "MAC_V1_0"
-JSON | ttnpb.MACVersion | 1.0.1 | "MAC_V1_0_1"
-JSON | ttnpb.MACVersion | 1.0.2 | "MAC_V1_0_2"
-JSON | ttnpb.MACVersion | 1.0.3 | "MAC_V1_0_3"
-JSON | ttnpb.MACVersion | 1.0.4 | "MAC_V1_0_4"
-JSON | ttnpb.MACVersion | 1.1.0 | "MAC_V1_1"
-JSON | ttnpb.MACVersion | unknown | "MAC_UNKNOWN"
+JSON | ttnpb.MACVersion | MAC_UNKNOWN | "MAC_UNKNOWN"
+JSON | ttnpb.MACVersion | MAC_V1_0 | "MAC_V1_0"
+JSON | ttnpb.MACVersion | MAC_V1_0_1 | "MAC_V1_0_1"
+JSON | ttnpb.MACVersion | MAC_V1_0_2 | "MAC_V1_0_2"
+JSON | ttnpb.MACVersion | MAC_V1_0_3 | "MAC_V1_0_3"
+JSON | ttnpb.MACVersion | MAC_V1_0_4 | "MAC_V1_0_4"
+JSON | ttnpb.MACVersion | MAC_V1_1 | "MAC_V1_1"
 JSON | ttnpb.MType | CONFIRMED_DOWN | "CONFIRMED_DOWN"
 JSON | ttnpb.MType | CONFIRMED_UP | "CONFIRMED_UP"
 JSON | ttnpb.MType | JOIN_ACCEPT | "JOIN_ACCEPT"
@@ -547,14 +607,19 @@ JSON | ttnpb.Minor | MINOR_RFU_6 | "MINOR_RFU_6"
 JSON | ttnpb.Minor | MINOR_RFU_7 | "MINOR_RFU_7"
 JSON | ttnpb.Minor | MINOR_RFU_8 | "MINOR_RFU_8"
 JSON | ttnpb.Minor | MINOR_RFU_9 | "MINOR_RFU_9"
-JSON | ttnpb.PHYVersion | 1.0.0 | "PHY_V1_0"
-JSON | ttnpb.PHYVersion | 1.0.1 | "PHY_V1_0_1"
-JSON | ttnpb.PHYVersion | 1.0.2-a | "PHY_V1_0_2_REV_A"
-JSON | ttnpb.PHYVersion | 1.0.2-b | "PHY_V1_0_2_REV_B"
-JSON | ttnpb.PHYVersion | 1.0.3-a | "PHY_V1_0_3_REV_A"
-JSON | ttnpb.PHYVersion | 1.1.0-a | "PHY_V1_1_REV_A"
-JSON | ttnpb.PHYVersion | 1.1.0-b | "PHY_V1_1_REV_B"
-JSON | ttnpb.PHYVersion | unknown | "PHY_UNKNOWN"
+JSON | ttnpb.PHYVersion | PHY_UNKNOWN | "PHY_UNKNOWN"
+JSON | ttnpb.PHYVersion | PHY_V1_0 | "PHY_V1_0"
+JSON | ttnpb.PHYVersion | PHY_V1_0_1 | "PHY_V1_0_1"
+JSON | ttnpb.PHYVersion | PHY_V1_0_2_REV_A | "PHY_V1_0_2_REV_A"
+JSON | ttnpb.PHYVersion | PHY_V1_0_2_REV_B | "PHY_V1_0_2_REV_B"
+JSON | ttnpb.PHYVersion | PHY_V1_0_3_REV_A | "PHY_V1_0_3_REV_A"
+JSON | ttnpb.PHYVersion | PHY_V1_1_REV_A | "PHY_V1_1_REV_A"
+JSON | ttnpb.PHYVersion | PHY_V1_1_REV_B | "PHY_V1_1_REV_B"
+JSON | ttnpb.PHYVersion | RP002_V1_0_0 | "RP002_V1_0_0"
+JSON | ttnpb.PHYVersion | RP002_V1_0_1 | "RP002_V1_0_1"
+JSON | ttnpb.PHYVersion | RP002_V1_0_2 | "RP002_V1_0_2"
+JSON | ttnpb.PHYVersion | RP002_V1_0_3 | "RP002_V1_0_3"
+JSON | ttnpb.PHYVersion | RP002_V1_0_4 | "RP002_V1_0_4"
 JSON | ttnpb.PingSlotPeriod | PING_EVERY_128S | "PING_EVERY_128S"
 JSON | ttnpb.PingSlotPeriod | PING_EVERY_16S | "PING_EVERY_16S"
 JSON | ttnpb.PingSlotPeriod | PING_EVERY_1S | "PING_EVERY_1S"
@@ -563,14 +628,14 @@ JSON | ttnpb.PingSlotPeriod | PING_EVERY_32S | "PING_EVERY_32S"
 JSON | ttnpb.PingSlotPeriod | PING_EVERY_4S | "PING_EVERY_4S"
 JSON | ttnpb.PingSlotPeriod | PING_EVERY_64S | "PING_EVERY_64S"
 JSON | ttnpb.PingSlotPeriod | PING_EVERY_8S | "PING_EVERY_8S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_128S {} 0} | "PING_EVERY_128S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_16S {} 0} | "PING_EVERY_16S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_1S {} 0} | "PING_EVERY_1S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_2S {} 0} | "PING_EVERY_2S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_32S {} 0} | "PING_EVERY_32S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_4S {} 0} | "PING_EVERY_4S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_64S {} 0} | "PING_EVERY_64S"
-JSON | ttnpb.PingSlotPeriodValue | {PING_EVERY_8S {} 0} | "PING_EVERY_8S"
+JSON | ttnpb.PingSlotPeriodValue |  | "PING_EVERY_1S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_128S | "PING_EVERY_128S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_16S | "PING_EVERY_16S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_2S | "PING_EVERY_2S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_32S | "PING_EVERY_32S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_4S | "PING_EVERY_4S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_64S | "PING_EVERY_64S"
+JSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_8S | "PING_EVERY_8S"
 JSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_1024 | "REJOIN_COUNT_1024"
 JSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_128 | "REJOIN_COUNT_128"
 JSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_131072 | "REJOIN_COUNT_131072"
@@ -595,6 +660,9 @@ JSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_4 | "REJOIN_PERIOD_4"
 JSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_5 | "REJOIN_PERIOD_5"
 JSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_6 | "REJOIN_PERIOD_6"
 JSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_7 | "REJOIN_PERIOD_7"
+JSON | ttnpb.RejoinRequestType | CONTEXT | "CONTEXT"
+JSON | ttnpb.RejoinRequestType | KEYS | "KEYS"
+JSON | ttnpb.RejoinRequestType | SESSION | "SESSION"
 JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_0 | "REJOIN_TIME_0"
 JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_1 | "REJOIN_TIME_1"
 JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_10 | "REJOIN_TIME_10"
@@ -611,41 +679,107 @@ JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_6 | "REJOIN_TIME_6"
 JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_7 | "REJOIN_TIME_7"
 JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_8 | "REJOIN_TIME_8"
 JSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_9 | "REJOIN_TIME_9"
-JSON | ttnpb.RejoinType | CONTEXT | "CONTEXT"
-JSON | ttnpb.RejoinType | KEYS | "KEYS"
-JSON | ttnpb.RejoinType | SESSION | "SESSION"
-JSON | ttnpb.RxDelay | 0 | 0
-JSON | ttnpb.RxDelay | 1 | 1
-JSON | ttnpb.RxDelay | 10 | 10
-JSON | ttnpb.RxDelay | 11 | 11
-JSON | ttnpb.RxDelay | 12 | 12
-JSON | ttnpb.RxDelay | 13 | 13
-JSON | ttnpb.RxDelay | 14 | 14
-JSON | ttnpb.RxDelay | 15 | 15
-JSON | ttnpb.RxDelay | 2 | 2
-JSON | ttnpb.RxDelay | 3 | 3
-JSON | ttnpb.RxDelay | 4 | 4
-JSON | ttnpb.RxDelay | 5 | 5
-JSON | ttnpb.RxDelay | 6 | 6
-JSON | ttnpb.RxDelay | 7 | 7
-JSON | ttnpb.RxDelay | 8 | 8
-JSON | ttnpb.RxDelay | 9 | 9
-JSON | ttnpb.RxDelayValue | {0 {} 0} | 0
-JSON | ttnpb.RxDelayValue | {1 {} 0} | 1
-JSON | ttnpb.RxDelayValue | {10 {} 0} | 10
-JSON | ttnpb.RxDelayValue | {11 {} 0} | 11
-JSON | ttnpb.RxDelayValue | {12 {} 0} | 12
-JSON | ttnpb.RxDelayValue | {13 {} 0} | 13
-JSON | ttnpb.RxDelayValue | {14 {} 0} | 14
-JSON | ttnpb.RxDelayValue | {15 {} 0} | 15
-JSON | ttnpb.RxDelayValue | {2 {} 0} | 2
-JSON | ttnpb.RxDelayValue | {3 {} 0} | 3
-JSON | ttnpb.RxDelayValue | {4 {} 0} | 4
-JSON | ttnpb.RxDelayValue | {5 {} 0} | 5
-JSON | ttnpb.RxDelayValue | {6 {} 0} | 6
-JSON | ttnpb.RxDelayValue | {7 {} 0} | 7
-JSON | ttnpb.RxDelayValue | {8 {} 0} | 8
-JSON | ttnpb.RxDelayValue | {9 {} 0} | 9
+JSON | ttnpb.Right | RIGHT_ALL | "RIGHT_ALL"
+JSON | ttnpb.Right | RIGHT_APPLICATION_ALL | "RIGHT_APPLICATION_ALL"
+JSON | ttnpb.Right | RIGHT_APPLICATION_DELETE | "RIGHT_APPLICATION_DELETE"
+JSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_READ | "RIGHT_APPLICATION_DEVICES_READ"
+JSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_READ_KEYS | "RIGHT_APPLICATION_DEVICES_READ_KEYS"
+JSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_WRITE | "RIGHT_APPLICATION_DEVICES_WRITE"
+JSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_WRITE_KEYS | "RIGHT_APPLICATION_DEVICES_WRITE_KEYS"
+JSON | ttnpb.Right | RIGHT_APPLICATION_INFO | "RIGHT_APPLICATION_INFO"
+JSON | ttnpb.Right | RIGHT_APPLICATION_LINK | "RIGHT_APPLICATION_LINK"
+JSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_API_KEYS | "RIGHT_APPLICATION_SETTINGS_API_KEYS"
+JSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_BASIC | "RIGHT_APPLICATION_SETTINGS_BASIC"
+JSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_COLLABORATORS | "RIGHT_APPLICATION_SETTINGS_COLLABORATORS"
+JSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_PACKAGES | "RIGHT_APPLICATION_SETTINGS_PACKAGES"
+JSON | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE | "RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE"
+JSON | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_READ | "RIGHT_APPLICATION_TRAFFIC_READ"
+JSON | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_UP_WRITE | "RIGHT_APPLICATION_TRAFFIC_UP_WRITE"
+JSON | ttnpb.Right | RIGHT_CLIENT_ALL | "RIGHT_CLIENT_ALL"
+JSON | ttnpb.Right | RIGHT_CLIENT_DELETE | "RIGHT_CLIENT_DELETE"
+JSON | ttnpb.Right | RIGHT_CLIENT_INFO | "RIGHT_CLIENT_INFO"
+JSON | ttnpb.Right | RIGHT_CLIENT_SETTINGS_BASIC | "RIGHT_CLIENT_SETTINGS_BASIC"
+JSON | ttnpb.Right | RIGHT_CLIENT_SETTINGS_COLLABORATORS | "RIGHT_CLIENT_SETTINGS_COLLABORATORS"
+JSON | ttnpb.Right | RIGHT_GATEWAY_ALL | "RIGHT_GATEWAY_ALL"
+JSON | ttnpb.Right | RIGHT_GATEWAY_DELETE | "RIGHT_GATEWAY_DELETE"
+JSON | ttnpb.Right | RIGHT_GATEWAY_INFO | "RIGHT_GATEWAY_INFO"
+JSON | ttnpb.Right | RIGHT_GATEWAY_LINK | "RIGHT_GATEWAY_LINK"
+JSON | ttnpb.Right | RIGHT_GATEWAY_LOCATION_READ | "RIGHT_GATEWAY_LOCATION_READ"
+JSON | ttnpb.Right | RIGHT_GATEWAY_READ_SECRETS | "RIGHT_GATEWAY_READ_SECRETS"
+JSON | ttnpb.Right | RIGHT_GATEWAY_SETTINGS_API_KEYS | "RIGHT_GATEWAY_SETTINGS_API_KEYS"
+JSON | ttnpb.Right | RIGHT_GATEWAY_SETTINGS_BASIC | "RIGHT_GATEWAY_SETTINGS_BASIC"
+JSON | ttnpb.Right | RIGHT_GATEWAY_SETTINGS_COLLABORATORS | "RIGHT_GATEWAY_SETTINGS_COLLABORATORS"
+JSON | ttnpb.Right | RIGHT_GATEWAY_STATUS_READ | "RIGHT_GATEWAY_STATUS_READ"
+JSON | ttnpb.Right | RIGHT_GATEWAY_TRAFFIC_DOWN_WRITE | "RIGHT_GATEWAY_TRAFFIC_DOWN_WRITE"
+JSON | ttnpb.Right | RIGHT_GATEWAY_TRAFFIC_READ | "RIGHT_GATEWAY_TRAFFIC_READ"
+JSON | ttnpb.Right | RIGHT_GATEWAY_WRITE_SECRETS | "RIGHT_GATEWAY_WRITE_SECRETS"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_ADD_AS_COLLABORATOR | "RIGHT_ORGANIZATION_ADD_AS_COLLABORATOR"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_ALL | "RIGHT_ORGANIZATION_ALL"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_APPLICATIONS_CREATE | "RIGHT_ORGANIZATION_APPLICATIONS_CREATE"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_APPLICATIONS_LIST | "RIGHT_ORGANIZATION_APPLICATIONS_LIST"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_CLIENTS_CREATE | "RIGHT_ORGANIZATION_CLIENTS_CREATE"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_CLIENTS_LIST | "RIGHT_ORGANIZATION_CLIENTS_LIST"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_DELETE | "RIGHT_ORGANIZATION_DELETE"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_GATEWAYS_CREATE | "RIGHT_ORGANIZATION_GATEWAYS_CREATE"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_GATEWAYS_LIST | "RIGHT_ORGANIZATION_GATEWAYS_LIST"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_INFO | "RIGHT_ORGANIZATION_INFO"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_SETTINGS_API_KEYS | "RIGHT_ORGANIZATION_SETTINGS_API_KEYS"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_SETTINGS_BASIC | "RIGHT_ORGANIZATION_SETTINGS_BASIC"
+JSON | ttnpb.Right | RIGHT_ORGANIZATION_SETTINGS_MEMBERS | "RIGHT_ORGANIZATION_SETTINGS_MEMBERS"
+JSON | ttnpb.Right | RIGHT_SEND_INVITES | "RIGHT_SEND_INVITES"
+JSON | ttnpb.Right | RIGHT_USER_ALL | "RIGHT_USER_ALL"
+JSON | ttnpb.Right | RIGHT_USER_APPLICATIONS_CREATE | "RIGHT_USER_APPLICATIONS_CREATE"
+JSON | ttnpb.Right | RIGHT_USER_APPLICATIONS_LIST | "RIGHT_USER_APPLICATIONS_LIST"
+JSON | ttnpb.Right | RIGHT_USER_AUTHORIZED_CLIENTS | "RIGHT_USER_AUTHORIZED_CLIENTS"
+JSON | ttnpb.Right | RIGHT_USER_CLIENTS_CREATE | "RIGHT_USER_CLIENTS_CREATE"
+JSON | ttnpb.Right | RIGHT_USER_CLIENTS_LIST | "RIGHT_USER_CLIENTS_LIST"
+JSON | ttnpb.Right | RIGHT_USER_DELETE | "RIGHT_USER_DELETE"
+JSON | ttnpb.Right | RIGHT_USER_GATEWAYS_CREATE | "RIGHT_USER_GATEWAYS_CREATE"
+JSON | ttnpb.Right | RIGHT_USER_GATEWAYS_LIST | "RIGHT_USER_GATEWAYS_LIST"
+JSON | ttnpb.Right | RIGHT_USER_INFO | "RIGHT_USER_INFO"
+JSON | ttnpb.Right | RIGHT_USER_NOTIFICATIONS_READ | "RIGHT_USER_NOTIFICATIONS_READ"
+JSON | ttnpb.Right | RIGHT_USER_ORGANIZATIONS_CREATE | "RIGHT_USER_ORGANIZATIONS_CREATE"
+JSON | ttnpb.Right | RIGHT_USER_ORGANIZATIONS_LIST | "RIGHT_USER_ORGANIZATIONS_LIST"
+JSON | ttnpb.Right | RIGHT_USER_SETTINGS_API_KEYS | "RIGHT_USER_SETTINGS_API_KEYS"
+JSON | ttnpb.Right | RIGHT_USER_SETTINGS_BASIC | "RIGHT_USER_SETTINGS_BASIC"
+JSON | ttnpb.Right | right_invalid | "right_invalid"
+JSON | ttnpb.RxDelay | RX_DELAY_0 | 0
+JSON | ttnpb.RxDelay | RX_DELAY_1 | 1
+JSON | ttnpb.RxDelay | RX_DELAY_10 | 10
+JSON | ttnpb.RxDelay | RX_DELAY_11 | 11
+JSON | ttnpb.RxDelay | RX_DELAY_12 | 12
+JSON | ttnpb.RxDelay | RX_DELAY_13 | 13
+JSON | ttnpb.RxDelay | RX_DELAY_14 | 14
+JSON | ttnpb.RxDelay | RX_DELAY_15 | 15
+JSON | ttnpb.RxDelay | RX_DELAY_2 | 2
+JSON | ttnpb.RxDelay | RX_DELAY_3 | 3
+JSON | ttnpb.RxDelay | RX_DELAY_4 | 4
+JSON | ttnpb.RxDelay | RX_DELAY_5 | 5
+JSON | ttnpb.RxDelay | RX_DELAY_6 | 6
+JSON | ttnpb.RxDelay | RX_DELAY_7 | 7
+JSON | ttnpb.RxDelay | RX_DELAY_8 | 8
+JSON | ttnpb.RxDelay | RX_DELAY_9 | 9
+JSON | ttnpb.RxDelayValue |  | 0
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_1 | 1
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_10 | 10
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_11 | 11
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_12 | 12
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_13 | 13
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_14 | 14
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_15 | 15
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_2 | 2
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_3 | 3
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_4 | 4
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_5 | 5
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_6 | 6
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_7 | 7
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_8 | 8
+JSON | ttnpb.RxDelayValue | value:RX_DELAY_9 | 9
+JSON | ttnpb.State | STATE_APPROVED | "STATE_APPROVED"
+JSON | ttnpb.State | STATE_FLAGGED | "STATE_FLAGGED"
+JSON | ttnpb.State | STATE_REJECTED | "STATE_REJECTED"
+JSON | ttnpb.State | STATE_REQUESTED | "STATE_REQUESTED"
+JSON | ttnpb.State | STATE_SUSPENDED | "STATE_SUSPENDED"
 JSON | ttnpb.TxSchedulePriority | ABOVE_NORMAL | "ABOVE_NORMAL"
 JSON | ttnpb.TxSchedulePriority | BELOW_NORMAL | "BELOW_NORMAL"
 JSON | ttnpb.TxSchedulePriority | HIGH | "HIGH"
@@ -653,201 +787,452 @@ JSON | ttnpb.TxSchedulePriority | HIGHEST | "HIGHEST"
 JSON | ttnpb.TxSchedulePriority | LOW | "LOW"
 JSON | ttnpb.TxSchedulePriority | LOWEST | "LOWEST"
 JSON | ttnpb.TxSchedulePriority | NORMAL | "NORMAL"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_1 | "ADR_ACK_DELAY_1"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_1024 | "ADR_ACK_DELAY_1024"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_128 | "ADR_ACK_DELAY_128"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_16 | "ADR_ACK_DELAY_16"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_16384 | "ADR_ACK_DELAY_16384"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_2 | "ADR_ACK_DELAY_2"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_2048 | "ADR_ACK_DELAY_2048"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_256 | "ADR_ACK_DELAY_256"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_32 | "ADR_ACK_DELAY_32"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_32768 | "ADR_ACK_DELAY_32768"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_4 | "ADR_ACK_DELAY_4"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_4096 | "ADR_ACK_DELAY_4096"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_512 | "ADR_ACK_DELAY_512"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_64 | "ADR_ACK_DELAY_64"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8 | "ADR_ACK_DELAY_8"
-JSONPB | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8192 | "ADR_ACK_DELAY_8192"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1 {} 0} | "ADR_ACK_DELAY_1"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1024 {} 0} | "ADR_ACK_DELAY_1024"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_128 {} 0} | "ADR_ACK_DELAY_128"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16 {} 0} | "ADR_ACK_DELAY_16"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16384 {} 0} | "ADR_ACK_DELAY_16384"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2 {} 0} | "ADR_ACK_DELAY_2"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2048 {} 0} | "ADR_ACK_DELAY_2048"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_256 {} 0} | "ADR_ACK_DELAY_256"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32 {} 0} | "ADR_ACK_DELAY_32"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32768 {} 0} | "ADR_ACK_DELAY_32768"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4 {} 0} | "ADR_ACK_DELAY_4"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4096 {} 0} | "ADR_ACK_DELAY_4096"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_512 {} 0} | "ADR_ACK_DELAY_512"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_64 {} 0} | "ADR_ACK_DELAY_64"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8 {} 0} | "ADR_ACK_DELAY_8"
-JSONPB | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8192 {} 0} | "ADR_ACK_DELAY_8192"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1 | "ADR_ACK_LIMIT_1"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1024 | "ADR_ACK_LIMIT_1024"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_128 | "ADR_ACK_LIMIT_128"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_16 | "ADR_ACK_LIMIT_16"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_16384 | "ADR_ACK_LIMIT_16384"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_2 | "ADR_ACK_LIMIT_2"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_2048 | "ADR_ACK_LIMIT_2048"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_256 | "ADR_ACK_LIMIT_256"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_32 | "ADR_ACK_LIMIT_32"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_32768 | "ADR_ACK_LIMIT_32768"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_4 | "ADR_ACK_LIMIT_4"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_4096 | "ADR_ACK_LIMIT_4096"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_512 | "ADR_ACK_LIMIT_512"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_64 | "ADR_ACK_LIMIT_64"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8 | "ADR_ACK_LIMIT_8"
-JSONPB | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8192 | "ADR_ACK_LIMIT_8192"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1 {} 0} | "ADR_ACK_LIMIT_1"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1024 {} 0} | "ADR_ACK_LIMIT_1024"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_128 {} 0} | "ADR_ACK_LIMIT_128"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16 {} 0} | "ADR_ACK_LIMIT_16"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16384 {} 0} | "ADR_ACK_LIMIT_16384"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2 {} 0} | "ADR_ACK_LIMIT_2"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2048 {} 0} | "ADR_ACK_LIMIT_2048"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_256 {} 0} | "ADR_ACK_LIMIT_256"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32 {} 0} | "ADR_ACK_LIMIT_32"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32768 {} 0} | "ADR_ACK_LIMIT_32768"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4 {} 0} | "ADR_ACK_LIMIT_4"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4096 {} 0} | "ADR_ACK_LIMIT_4096"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_512 {} 0} | "ADR_ACK_LIMIT_512"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_64 {} 0} | "ADR_ACK_LIMIT_64"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8 {} 0} | "ADR_ACK_LIMIT_8"
-JSONPB | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8192 {} 0} | "ADR_ACK_LIMIT_8192"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1 | "DUTY_CYCLE_1"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1024 | "DUTY_CYCLE_1024"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_128 | "DUTY_CYCLE_128"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_16 | "DUTY_CYCLE_16"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_16384 | "DUTY_CYCLE_16384"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_2 | "DUTY_CYCLE_2"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_2048 | "DUTY_CYCLE_2048"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_256 | "DUTY_CYCLE_256"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_32 | "DUTY_CYCLE_32"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_32768 | "DUTY_CYCLE_32768"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_4 | "DUTY_CYCLE_4"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_4096 | "DUTY_CYCLE_4096"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_512 | "DUTY_CYCLE_512"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_64 | "DUTY_CYCLE_64"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8 | "DUTY_CYCLE_8"
-JSONPB | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8192 | "DUTY_CYCLE_8192"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1 {} 0} | "DUTY_CYCLE_1"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1024 {} 0} | "DUTY_CYCLE_1024"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_128 {} 0} | "DUTY_CYCLE_128"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16 {} 0} | "DUTY_CYCLE_16"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16384 {} 0} | "DUTY_CYCLE_16384"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2 {} 0} | "DUTY_CYCLE_2"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2048 {} 0} | "DUTY_CYCLE_2048"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_256 {} 0} | "DUTY_CYCLE_256"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32 {} 0} | "DUTY_CYCLE_32"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32768 {} 0} | "DUTY_CYCLE_32768"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4 {} 0} | "DUTY_CYCLE_4"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4096 {} 0} | "DUTY_CYCLE_4096"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_512 {} 0} | "DUTY_CYCLE_512"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_64 {} 0} | "DUTY_CYCLE_64"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8 {} 0} | "DUTY_CYCLE_8"
-JSONPB | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8192 {} 0} | "DUTY_CYCLE_8192"
-JSONPB | ttnpb.DataRateIndex | 0 | 0
-JSONPB | ttnpb.DataRateIndex | 1 | 1
-JSONPB | ttnpb.DataRateIndex | 10 | 10
-JSONPB | ttnpb.DataRateIndex | 11 | 11
-JSONPB | ttnpb.DataRateIndex | 12 | 12
-JSONPB | ttnpb.DataRateIndex | 13 | 13
-JSONPB | ttnpb.DataRateIndex | 14 | 14
-JSONPB | ttnpb.DataRateIndex | 15 | 15
-JSONPB | ttnpb.DataRateIndex | 2 | 2
-JSONPB | ttnpb.DataRateIndex | 3 | 3
-JSONPB | ttnpb.DataRateIndex | 4 | 4
-JSONPB | ttnpb.DataRateIndex | 5 | 5
-JSONPB | ttnpb.DataRateIndex | 6 | 6
-JSONPB | ttnpb.DataRateIndex | 7 | 7
-JSONPB | ttnpb.DataRateIndex | 8 | 8
-JSONPB | ttnpb.DataRateIndex | 9 | 9
-JSONPB | ttnpb.DataRateIndexValue | {0 {} 0} | 0
-JSONPB | ttnpb.DataRateIndexValue | {1 {} 0} | 1
-JSONPB | ttnpb.DataRateIndexValue | {10 {} 0} | 10
-JSONPB | ttnpb.DataRateIndexValue | {11 {} 0} | 11
-JSONPB | ttnpb.DataRateIndexValue | {12 {} 0} | 12
-JSONPB | ttnpb.DataRateIndexValue | {13 {} 0} | 13
-JSONPB | ttnpb.DataRateIndexValue | {14 {} 0} | 14
-JSONPB | ttnpb.DataRateIndexValue | {15 {} 0} | 15
-JSONPB | ttnpb.DataRateIndexValue | {2 {} 0} | 2
-JSONPB | ttnpb.DataRateIndexValue | {3 {} 0} | 3
-JSONPB | ttnpb.DataRateIndexValue | {4 {} 0} | 4
-JSONPB | ttnpb.DataRateIndexValue | {5 {} 0} | 5
-JSONPB | ttnpb.DataRateIndexValue | {6 {} 0} | 6
-JSONPB | ttnpb.DataRateIndexValue | {7 {} 0} | 7
-JSONPB | ttnpb.DataRateIndexValue | {8 {} 0} | 8
-JSONPB | ttnpb.DataRateIndexValue | {9 {} 0} | 9
-JSONPB | ttnpb.DataRateOffset | 0 | 0
-JSONPB | ttnpb.DataRateOffset | 1 | 1
-JSONPB | ttnpb.DataRateOffset | 2 | 2
-JSONPB | ttnpb.DataRateOffset | 3 | 3
-JSONPB | ttnpb.DataRateOffset | 4 | 4
-JSONPB | ttnpb.DataRateOffset | 5 | 5
-JSONPB | ttnpb.DataRateOffset | 6 | 6
-JSONPB | ttnpb.DataRateOffset | 7 | 7
-JSONPB | ttnpb.DataRateOffsetValue | {0 {} 0} | 0
-JSONPB | ttnpb.DataRateOffsetValue | {1 {} 0} | 1
-JSONPB | ttnpb.DataRateOffsetValue | {2 {} 0} | 2
-JSONPB | ttnpb.DataRateOffsetValue | {3 {} 0} | 3
-JSONPB | ttnpb.DataRateOffsetValue | {4 {} 0} | 4
-JSONPB | ttnpb.DataRateOffsetValue | {5 {} 0} | 5
-JSONPB | ttnpb.DataRateOffsetValue | {6 {} 0} | 6
-JSONPB | ttnpb.DataRateOffsetValue | {7 {} 0} | 7
-JSONPB | ttnpb.FrequencyValue | {100000 {} 0} | "100000"
-JSONPB | ttnpb.FrequencyValue | {2000000 {} 0} | "2000000"
-JSONPB | ttnpb.FrequencyValue | {30000000 {} 0} | "30000000"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_128S | "PING_EVERY_128S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_16S | "PING_EVERY_16S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_1S | "PING_EVERY_1S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_2S | "PING_EVERY_2S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_32S | "PING_EVERY_32S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_4S | "PING_EVERY_4S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_64S | "PING_EVERY_64S"
-JSONPB | ttnpb.PingSlotPeriod | PING_EVERY_8S | "PING_EVERY_8S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_128S {} 0} | "PING_EVERY_128S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_16S {} 0} | "PING_EVERY_16S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_1S {} 0} | "PING_EVERY_1S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_2S {} 0} | "PING_EVERY_2S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_32S {} 0} | "PING_EVERY_32S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_4S {} 0} | "PING_EVERY_4S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_64S {} 0} | "PING_EVERY_64S"
-JSONPB | ttnpb.PingSlotPeriodValue | {PING_EVERY_8S {} 0} | "PING_EVERY_8S"
-JSONPB | ttnpb.RxDelay | 0 | 0
-JSONPB | ttnpb.RxDelay | 1 | 1
-JSONPB | ttnpb.RxDelay | 10 | 10
-JSONPB | ttnpb.RxDelay | 11 | 11
-JSONPB | ttnpb.RxDelay | 12 | 12
-JSONPB | ttnpb.RxDelay | 13 | 13
-JSONPB | ttnpb.RxDelay | 14 | 14
-JSONPB | ttnpb.RxDelay | 15 | 15
-JSONPB | ttnpb.RxDelay | 2 | 2
-JSONPB | ttnpb.RxDelay | 3 | 3
-JSONPB | ttnpb.RxDelay | 4 | 4
-JSONPB | ttnpb.RxDelay | 5 | 5
-JSONPB | ttnpb.RxDelay | 6 | 6
-JSONPB | ttnpb.RxDelay | 7 | 7
-JSONPB | ttnpb.RxDelay | 8 | 8
-JSONPB | ttnpb.RxDelay | 9 | 9
-JSONPB | ttnpb.RxDelayValue | {0 {} 0} | 0
-JSONPB | ttnpb.RxDelayValue | {1 {} 0} | 1
-JSONPB | ttnpb.RxDelayValue | {10 {} 0} | 10
-JSONPB | ttnpb.RxDelayValue | {11 {} 0} | 11
-JSONPB | ttnpb.RxDelayValue | {12 {} 0} | 12
-JSONPB | ttnpb.RxDelayValue | {13 {} 0} | 13
-JSONPB | ttnpb.RxDelayValue | {14 {} 0} | 14
-JSONPB | ttnpb.RxDelayValue | {15 {} 0} | 15
-JSONPB | ttnpb.RxDelayValue | {2 {} 0} | 2
-JSONPB | ttnpb.RxDelayValue | {3 {} 0} | 3
-JSONPB | ttnpb.RxDelayValue | {4 {} 0} | 4
-JSONPB | ttnpb.RxDelayValue | {5 {} 0} | 5
-JSONPB | ttnpb.RxDelayValue | {6 {} 0} | 6
-JSONPB | ttnpb.RxDelayValue | {7 {} 0} | 7
-JSONPB | ttnpb.RxDelayValue | {8 {} 0} | 8
-JSONPB | ttnpb.RxDelayValue | {9 {} 0} | 9
+JSON | ttnpb.ZeroableFrequencyValue |  | "0"
+JSON | ttnpb.ZeroableFrequencyValue | value:100000 | "100000"
+JSON | ttnpb.ZeroableFrequencyValue | value:2000000 | "2000000"
+JSON | ttnpb.ZeroableFrequencyValue | value:30000000 | "30000000"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_1 | "ADR_ACK_DELAY_1"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_1024 | "ADR_ACK_DELAY_1024"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_128 | "ADR_ACK_DELAY_128"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_16 | "ADR_ACK_DELAY_16"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_16384 | "ADR_ACK_DELAY_16384"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_2 | "ADR_ACK_DELAY_2"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_2048 | "ADR_ACK_DELAY_2048"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_256 | "ADR_ACK_DELAY_256"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_32 | "ADR_ACK_DELAY_32"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_32768 | "ADR_ACK_DELAY_32768"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_4 | "ADR_ACK_DELAY_4"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_4096 | "ADR_ACK_DELAY_4096"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_512 | "ADR_ACK_DELAY_512"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_64 | "ADR_ACK_DELAY_64"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8 | "ADR_ACK_DELAY_8"
+ProtoJSON | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8192 | "ADR_ACK_DELAY_8192"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue |  | "ADR_ACK_DELAY_1"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_1024 | "ADR_ACK_DELAY_1024"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_128 | "ADR_ACK_DELAY_128"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16 | "ADR_ACK_DELAY_16"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16384 | "ADR_ACK_DELAY_16384"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2 | "ADR_ACK_DELAY_2"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2048 | "ADR_ACK_DELAY_2048"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_256 | "ADR_ACK_DELAY_256"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32 | "ADR_ACK_DELAY_32"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32768 | "ADR_ACK_DELAY_32768"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4 | "ADR_ACK_DELAY_4"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4096 | "ADR_ACK_DELAY_4096"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_512 | "ADR_ACK_DELAY_512"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_64 | "ADR_ACK_DELAY_64"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8 | "ADR_ACK_DELAY_8"
+ProtoJSON | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8192 | "ADR_ACK_DELAY_8192"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1 | "ADR_ACK_LIMIT_1"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1024 | "ADR_ACK_LIMIT_1024"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_128 | "ADR_ACK_LIMIT_128"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_16 | "ADR_ACK_LIMIT_16"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_16384 | "ADR_ACK_LIMIT_16384"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_2 | "ADR_ACK_LIMIT_2"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_2048 | "ADR_ACK_LIMIT_2048"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_256 | "ADR_ACK_LIMIT_256"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_32 | "ADR_ACK_LIMIT_32"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_32768 | "ADR_ACK_LIMIT_32768"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_4 | "ADR_ACK_LIMIT_4"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_4096 | "ADR_ACK_LIMIT_4096"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_512 | "ADR_ACK_LIMIT_512"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_64 | "ADR_ACK_LIMIT_64"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8 | "ADR_ACK_LIMIT_8"
+ProtoJSON | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8192 | "ADR_ACK_LIMIT_8192"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue |  | "ADR_ACK_LIMIT_1"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_1024 | "ADR_ACK_LIMIT_1024"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_128 | "ADR_ACK_LIMIT_128"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16 | "ADR_ACK_LIMIT_16"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16384 | "ADR_ACK_LIMIT_16384"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2 | "ADR_ACK_LIMIT_2"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2048 | "ADR_ACK_LIMIT_2048"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_256 | "ADR_ACK_LIMIT_256"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32 | "ADR_ACK_LIMIT_32"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32768 | "ADR_ACK_LIMIT_32768"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4 | "ADR_ACK_LIMIT_4"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4096 | "ADR_ACK_LIMIT_4096"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_512 | "ADR_ACK_LIMIT_512"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_64 | "ADR_ACK_LIMIT_64"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8 | "ADR_ACK_LIMIT_8"
+ProtoJSON | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8192 | "ADR_ACK_LIMIT_8192"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1 | "DUTY_CYCLE_1"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1024 | "DUTY_CYCLE_1024"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_128 | "DUTY_CYCLE_128"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_16 | "DUTY_CYCLE_16"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_16384 | "DUTY_CYCLE_16384"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_2 | "DUTY_CYCLE_2"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_2048 | "DUTY_CYCLE_2048"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_256 | "DUTY_CYCLE_256"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_32 | "DUTY_CYCLE_32"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_32768 | "DUTY_CYCLE_32768"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_4 | "DUTY_CYCLE_4"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_4096 | "DUTY_CYCLE_4096"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_512 | "DUTY_CYCLE_512"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_64 | "DUTY_CYCLE_64"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8 | "DUTY_CYCLE_8"
+ProtoJSON | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8192 | "DUTY_CYCLE_8192"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue |  | "DUTY_CYCLE_1"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_1024 | "DUTY_CYCLE_1024"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_128 | "DUTY_CYCLE_128"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16 | "DUTY_CYCLE_16"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16384 | "DUTY_CYCLE_16384"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2 | "DUTY_CYCLE_2"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2048 | "DUTY_CYCLE_2048"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_256 | "DUTY_CYCLE_256"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32 | "DUTY_CYCLE_32"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32768 | "DUTY_CYCLE_32768"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4 | "DUTY_CYCLE_4"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4096 | "DUTY_CYCLE_4096"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_512 | "DUTY_CYCLE_512"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_64 | "DUTY_CYCLE_64"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8 | "DUTY_CYCLE_8"
+ProtoJSON | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8192 | "DUTY_CYCLE_8192"
+ProtoJSON | ttnpb.BoolValue |  | false
+ProtoJSON | ttnpb.BoolValue | value:true | true
+ProtoJSON | ttnpb.CFListType | CHANNEL_MASKS | "CHANNEL_MASKS"
+ProtoJSON | ttnpb.CFListType | FREQUENCIES | "FREQUENCIES"
+ProtoJSON | ttnpb.Class | CLASS_A | "CLASS_A"
+ProtoJSON | ttnpb.Class | CLASS_B | "CLASS_B"
+ProtoJSON | ttnpb.Class | CLASS_C | "CLASS_C"
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_0 | 0
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_1 | 1
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_10 | 10
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_11 | 11
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_12 | 12
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_13 | 13
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_14 | 14
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_15 | 15
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_2 | 2
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_3 | 3
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_4 | 4
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_5 | 5
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_6 | 6
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_7 | 7
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_8 | 8
+ProtoJSON | ttnpb.DataRateIndex | DATA_RATE_9 | 9
+ProtoJSON | ttnpb.DataRateIndexValue |  | 0
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_1 | 1
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_10 | 10
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_11 | 11
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_12 | 12
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_13 | 13
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_14 | 14
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_15 | 15
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_2 | 2
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_3 | 3
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_4 | 4
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_5 | 5
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_6 | 6
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_7 | 7
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_8 | 8
+ProtoJSON | ttnpb.DataRateIndexValue | value:DATA_RATE_9 | 9
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_0 | 0
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_1 | 1
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_2 | 2
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_3 | 3
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_4 | 4
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_5 | 5
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_6 | 6
+ProtoJSON | ttnpb.DataRateOffset | DATA_RATE_OFFSET_7 | 7
+ProtoJSON | ttnpb.DataRateOffsetValue |  | 0
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_1 | 1
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_2 | 2
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_3 | 3
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_4 | 4
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_5 | 5
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_6 | 6
+ProtoJSON | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_7 | 7
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_10 | "DEVICE_EIRP_10"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_12 | "DEVICE_EIRP_12"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_13 | "DEVICE_EIRP_13"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_14 | "DEVICE_EIRP_14"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_16 | "DEVICE_EIRP_16"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_18 | "DEVICE_EIRP_18"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_20 | "DEVICE_EIRP_20"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_21 | "DEVICE_EIRP_21"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_24 | "DEVICE_EIRP_24"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_26 | "DEVICE_EIRP_26"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_27 | "DEVICE_EIRP_27"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_29 | "DEVICE_EIRP_29"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_30 | "DEVICE_EIRP_30"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_33 | "DEVICE_EIRP_33"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_36 | "DEVICE_EIRP_36"
+ProtoJSON | ttnpb.DeviceEIRP | DEVICE_EIRP_8 | "DEVICE_EIRP_8"
+ProtoJSON | ttnpb.DeviceEIRPValue |  | "DEVICE_EIRP_8"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_10 | "DEVICE_EIRP_10"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_12 | "DEVICE_EIRP_12"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_13 | "DEVICE_EIRP_13"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_14 | "DEVICE_EIRP_14"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_16 | "DEVICE_EIRP_16"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_18 | "DEVICE_EIRP_18"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_20 | "DEVICE_EIRP_20"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_21 | "DEVICE_EIRP_21"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_24 | "DEVICE_EIRP_24"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_26 | "DEVICE_EIRP_26"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_27 | "DEVICE_EIRP_27"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_29 | "DEVICE_EIRP_29"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_30 | "DEVICE_EIRP_30"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_33 | "DEVICE_EIRP_33"
+ProtoJSON | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_36 | "DEVICE_EIRP_36"
+ProtoJSON | ttnpb.FrequencyValue | value:100000 | "100000"
+ProtoJSON | ttnpb.FrequencyValue | value:2000000 | "2000000"
+ProtoJSON | ttnpb.FrequencyValue | value:30000000 | "30000000"
+ProtoJSON | ttnpb.GatewayAntennaPlacement | INDOOR | "INDOOR"
+ProtoJSON | ttnpb.GatewayAntennaPlacement | OUTDOOR | "OUTDOOR"
+ProtoJSON | ttnpb.GatewayAntennaPlacement | PLACEMENT_UNKNOWN | "PLACEMENT_UNKNOWN"
+ProtoJSON | ttnpb.GrantType | GRANT_AUTHORIZATION_CODE | "GRANT_AUTHORIZATION_CODE"
+ProtoJSON | ttnpb.GrantType | GRANT_PASSWORD | "GRANT_PASSWORD"
+ProtoJSON | ttnpb.GrantType | GRANT_REFRESH_TOKEN | "GRANT_REFRESH_TOKEN"
+ProtoJSON | ttnpb.JoinRequestType | JOIN | "JOIN"
+ProtoJSON | ttnpb.JoinRequestType | REJOIN_CONTEXT | "REJOIN_CONTEXT"
+ProtoJSON | ttnpb.JoinRequestType | REJOIN_KEYS | "REJOIN_KEYS"
+ProtoJSON | ttnpb.JoinRequestType | REJOIN_SESSION | "REJOIN_SESSION"
+ProtoJSON | ttnpb.LocationSource | SOURCE_BT_RSSI_GEOLOCATION | "SOURCE_BT_RSSI_GEOLOCATION"
+ProtoJSON | ttnpb.LocationSource | SOURCE_COMBINED_GEOLOCATION | "SOURCE_COMBINED_GEOLOCATION"
+ProtoJSON | ttnpb.LocationSource | SOURCE_GPS | "SOURCE_GPS"
+ProtoJSON | ttnpb.LocationSource | SOURCE_IP_GEOLOCATION | "SOURCE_IP_GEOLOCATION"
+ProtoJSON | ttnpb.LocationSource | SOURCE_LORA_RSSI_GEOLOCATION | "SOURCE_LORA_RSSI_GEOLOCATION"
+ProtoJSON | ttnpb.LocationSource | SOURCE_LORA_TDOA_GEOLOCATION | "SOURCE_LORA_TDOA_GEOLOCATION"
+ProtoJSON | ttnpb.LocationSource | SOURCE_REGISTRY | "SOURCE_REGISTRY"
+ProtoJSON | ttnpb.LocationSource | SOURCE_UNKNOWN | "SOURCE_UNKNOWN"
+ProtoJSON | ttnpb.LocationSource | SOURCE_WIFI_RSSI_GEOLOCATION | "SOURCE_WIFI_RSSI_GEOLOCATION"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_ADR_PARAM_SETUP | "CID_ADR_PARAM_SETUP"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_BEACON_FREQ | "CID_BEACON_FREQ"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_BEACON_TIMING | "CID_BEACON_TIMING"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_DEVICE_MODE | "CID_DEVICE_MODE"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_DEVICE_TIME | "CID_DEVICE_TIME"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_DEV_STATUS | "CID_DEV_STATUS"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_DL_CHANNEL | "CID_DL_CHANNEL"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_DUTY_CYCLE | "CID_DUTY_CYCLE"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_FORCE_REJOIN | "CID_FORCE_REJOIN"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_LINK_ADR | "CID_LINK_ADR"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_LINK_CHECK | "CID_LINK_CHECK"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_NEW_CHANNEL | "CID_NEW_CHANNEL"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_PING_SLOT_CHANNEL | "CID_PING_SLOT_CHANNEL"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_PING_SLOT_INFO | "CID_PING_SLOT_INFO"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_REJOIN_PARAM_SETUP | "CID_REJOIN_PARAM_SETUP"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_REKEY | "CID_REKEY"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_RESET | "CID_RESET"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_RFU_0 | "CID_RFU_0"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_RX_PARAM_SETUP | "CID_RX_PARAM_SETUP"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_RX_TIMING_SETUP | "CID_RX_TIMING_SETUP"
+ProtoJSON | ttnpb.MACCommandIdentifier | CID_TX_PARAM_SETUP | "CID_TX_PARAM_SETUP"
+ProtoJSON | ttnpb.MACVersion | MAC_UNKNOWN | "MAC_UNKNOWN"
+ProtoJSON | ttnpb.MACVersion | MAC_V1_0 | "MAC_V1_0"
+ProtoJSON | ttnpb.MACVersion | MAC_V1_0_1 | "MAC_V1_0_1"
+ProtoJSON | ttnpb.MACVersion | MAC_V1_0_2 | "MAC_V1_0_2"
+ProtoJSON | ttnpb.MACVersion | MAC_V1_0_3 | "MAC_V1_0_3"
+ProtoJSON | ttnpb.MACVersion | MAC_V1_0_4 | "MAC_V1_0_4"
+ProtoJSON | ttnpb.MACVersion | MAC_V1_1 | "MAC_V1_1"
+ProtoJSON | ttnpb.MType | CONFIRMED_DOWN | "CONFIRMED_DOWN"
+ProtoJSON | ttnpb.MType | CONFIRMED_UP | "CONFIRMED_UP"
+ProtoJSON | ttnpb.MType | JOIN_ACCEPT | "JOIN_ACCEPT"
+ProtoJSON | ttnpb.MType | JOIN_REQUEST | "JOIN_REQUEST"
+ProtoJSON | ttnpb.MType | PROPRIETARY | "PROPRIETARY"
+ProtoJSON | ttnpb.MType | REJOIN_REQUEST | "REJOIN_REQUEST"
+ProtoJSON | ttnpb.MType | UNCONFIRMED_DOWN | "UNCONFIRMED_DOWN"
+ProtoJSON | ttnpb.MType | UNCONFIRMED_UP | "UNCONFIRMED_UP"
+ProtoJSON | ttnpb.Major | LORAWAN_R1 | "LORAWAN_R1"
+ProtoJSON | ttnpb.Minor | MINOR_1 | "MINOR_1"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_0 | "MINOR_RFU_0"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_10 | "MINOR_RFU_10"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_11 | "MINOR_RFU_11"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_12 | "MINOR_RFU_12"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_13 | "MINOR_RFU_13"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_14 | "MINOR_RFU_14"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_15 | "MINOR_RFU_15"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_2 | "MINOR_RFU_2"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_3 | "MINOR_RFU_3"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_4 | "MINOR_RFU_4"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_5 | "MINOR_RFU_5"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_6 | "MINOR_RFU_6"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_7 | "MINOR_RFU_7"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_8 | "MINOR_RFU_8"
+ProtoJSON | ttnpb.Minor | MINOR_RFU_9 | "MINOR_RFU_9"
+ProtoJSON | ttnpb.PHYVersion | PHY_UNKNOWN | "PHY_UNKNOWN"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_0 | "PHY_V1_0"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_0_1 | "PHY_V1_0_1"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_0_2_REV_A | "PHY_V1_0_2_REV_A"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_0_2_REV_B | "PHY_V1_0_2_REV_B"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_0_3_REV_A | "PHY_V1_0_3_REV_A"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_1_REV_A | "PHY_V1_1_REV_A"
+ProtoJSON | ttnpb.PHYVersion | PHY_V1_1_REV_B | "PHY_V1_1_REV_B"
+ProtoJSON | ttnpb.PHYVersion | RP002_V1_0_0 | "RP002_V1_0_0"
+ProtoJSON | ttnpb.PHYVersion | RP002_V1_0_1 | "RP002_V1_0_1"
+ProtoJSON | ttnpb.PHYVersion | RP002_V1_0_2 | "RP002_V1_0_2"
+ProtoJSON | ttnpb.PHYVersion | RP002_V1_0_3 | "RP002_V1_0_3"
+ProtoJSON | ttnpb.PHYVersion | RP002_V1_0_4 | "RP002_V1_0_4"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_128S | "PING_EVERY_128S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_16S | "PING_EVERY_16S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_1S | "PING_EVERY_1S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_2S | "PING_EVERY_2S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_32S | "PING_EVERY_32S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_4S | "PING_EVERY_4S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_64S | "PING_EVERY_64S"
+ProtoJSON | ttnpb.PingSlotPeriod | PING_EVERY_8S | "PING_EVERY_8S"
+ProtoJSON | ttnpb.PingSlotPeriodValue |  | "PING_EVERY_1S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_128S | "PING_EVERY_128S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_16S | "PING_EVERY_16S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_2S | "PING_EVERY_2S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_32S | "PING_EVERY_32S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_4S | "PING_EVERY_4S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_64S | "PING_EVERY_64S"
+ProtoJSON | ttnpb.PingSlotPeriodValue | value:PING_EVERY_8S | "PING_EVERY_8S"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_1024 | "REJOIN_COUNT_1024"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_128 | "REJOIN_COUNT_128"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_131072 | "REJOIN_COUNT_131072"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_16 | "REJOIN_COUNT_16"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_16384 | "REJOIN_COUNT_16384"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_2048 | "REJOIN_COUNT_2048"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_256 | "REJOIN_COUNT_256"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_262144 | "REJOIN_COUNT_262144"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_32 | "REJOIN_COUNT_32"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_32768 | "REJOIN_COUNT_32768"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_4096 | "REJOIN_COUNT_4096"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_512 | "REJOIN_COUNT_512"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_524288 | "REJOIN_COUNT_524288"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_64 | "REJOIN_COUNT_64"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_65536 | "REJOIN_COUNT_65536"
+ProtoJSON | ttnpb.RejoinCountExponent | REJOIN_COUNT_8192 | "REJOIN_COUNT_8192"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_0 | "REJOIN_PERIOD_0"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_1 | "REJOIN_PERIOD_1"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_2 | "REJOIN_PERIOD_2"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_3 | "REJOIN_PERIOD_3"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_4 | "REJOIN_PERIOD_4"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_5 | "REJOIN_PERIOD_5"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_6 | "REJOIN_PERIOD_6"
+ProtoJSON | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_7 | "REJOIN_PERIOD_7"
+ProtoJSON | ttnpb.RejoinRequestType | CONTEXT | "CONTEXT"
+ProtoJSON | ttnpb.RejoinRequestType | KEYS | "KEYS"
+ProtoJSON | ttnpb.RejoinRequestType | SESSION | "SESSION"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_0 | "REJOIN_TIME_0"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_1 | "REJOIN_TIME_1"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_10 | "REJOIN_TIME_10"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_11 | "REJOIN_TIME_11"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_12 | "REJOIN_TIME_12"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_13 | "REJOIN_TIME_13"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_14 | "REJOIN_TIME_14"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_15 | "REJOIN_TIME_15"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_2 | "REJOIN_TIME_2"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_3 | "REJOIN_TIME_3"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_4 | "REJOIN_TIME_4"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_5 | "REJOIN_TIME_5"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_6 | "REJOIN_TIME_6"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_7 | "REJOIN_TIME_7"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_8 | "REJOIN_TIME_8"
+ProtoJSON | ttnpb.RejoinTimeExponent | REJOIN_TIME_9 | "REJOIN_TIME_9"
+ProtoJSON | ttnpb.Right | RIGHT_ALL | "RIGHT_ALL"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_ALL | "RIGHT_APPLICATION_ALL"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_DELETE | "RIGHT_APPLICATION_DELETE"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_READ | "RIGHT_APPLICATION_DEVICES_READ"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_READ_KEYS | "RIGHT_APPLICATION_DEVICES_READ_KEYS"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_WRITE | "RIGHT_APPLICATION_DEVICES_WRITE"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_DEVICES_WRITE_KEYS | "RIGHT_APPLICATION_DEVICES_WRITE_KEYS"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_INFO | "RIGHT_APPLICATION_INFO"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_LINK | "RIGHT_APPLICATION_LINK"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_API_KEYS | "RIGHT_APPLICATION_SETTINGS_API_KEYS"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_BASIC | "RIGHT_APPLICATION_SETTINGS_BASIC"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_COLLABORATORS | "RIGHT_APPLICATION_SETTINGS_COLLABORATORS"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_SETTINGS_PACKAGES | "RIGHT_APPLICATION_SETTINGS_PACKAGES"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE | "RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_READ | "RIGHT_APPLICATION_TRAFFIC_READ"
+ProtoJSON | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_UP_WRITE | "RIGHT_APPLICATION_TRAFFIC_UP_WRITE"
+ProtoJSON | ttnpb.Right | RIGHT_CLIENT_ALL | "RIGHT_CLIENT_ALL"
+ProtoJSON | ttnpb.Right | RIGHT_CLIENT_DELETE | "RIGHT_CLIENT_DELETE"
+ProtoJSON | ttnpb.Right | RIGHT_CLIENT_INFO | "RIGHT_CLIENT_INFO"
+ProtoJSON | ttnpb.Right | RIGHT_CLIENT_SETTINGS_BASIC | "RIGHT_CLIENT_SETTINGS_BASIC"
+ProtoJSON | ttnpb.Right | RIGHT_CLIENT_SETTINGS_COLLABORATORS | "RIGHT_CLIENT_SETTINGS_COLLABORATORS"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_ALL | "RIGHT_GATEWAY_ALL"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_DELETE | "RIGHT_GATEWAY_DELETE"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_INFO | "RIGHT_GATEWAY_INFO"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_LINK | "RIGHT_GATEWAY_LINK"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_LOCATION_READ | "RIGHT_GATEWAY_LOCATION_READ"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_READ_SECRETS | "RIGHT_GATEWAY_READ_SECRETS"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_SETTINGS_API_KEYS | "RIGHT_GATEWAY_SETTINGS_API_KEYS"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_SETTINGS_BASIC | "RIGHT_GATEWAY_SETTINGS_BASIC"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_SETTINGS_COLLABORATORS | "RIGHT_GATEWAY_SETTINGS_COLLABORATORS"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_STATUS_READ | "RIGHT_GATEWAY_STATUS_READ"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_TRAFFIC_DOWN_WRITE | "RIGHT_GATEWAY_TRAFFIC_DOWN_WRITE"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_TRAFFIC_READ | "RIGHT_GATEWAY_TRAFFIC_READ"
+ProtoJSON | ttnpb.Right | RIGHT_GATEWAY_WRITE_SECRETS | "RIGHT_GATEWAY_WRITE_SECRETS"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_ADD_AS_COLLABORATOR | "RIGHT_ORGANIZATION_ADD_AS_COLLABORATOR"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_ALL | "RIGHT_ORGANIZATION_ALL"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_APPLICATIONS_CREATE | "RIGHT_ORGANIZATION_APPLICATIONS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_APPLICATIONS_LIST | "RIGHT_ORGANIZATION_APPLICATIONS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_CLIENTS_CREATE | "RIGHT_ORGANIZATION_CLIENTS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_CLIENTS_LIST | "RIGHT_ORGANIZATION_CLIENTS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_DELETE | "RIGHT_ORGANIZATION_DELETE"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_GATEWAYS_CREATE | "RIGHT_ORGANIZATION_GATEWAYS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_GATEWAYS_LIST | "RIGHT_ORGANIZATION_GATEWAYS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_INFO | "RIGHT_ORGANIZATION_INFO"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_SETTINGS_API_KEYS | "RIGHT_ORGANIZATION_SETTINGS_API_KEYS"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_SETTINGS_BASIC | "RIGHT_ORGANIZATION_SETTINGS_BASIC"
+ProtoJSON | ttnpb.Right | RIGHT_ORGANIZATION_SETTINGS_MEMBERS | "RIGHT_ORGANIZATION_SETTINGS_MEMBERS"
+ProtoJSON | ttnpb.Right | RIGHT_SEND_INVITES | "RIGHT_SEND_INVITES"
+ProtoJSON | ttnpb.Right | RIGHT_USER_ALL | "RIGHT_USER_ALL"
+ProtoJSON | ttnpb.Right | RIGHT_USER_APPLICATIONS_CREATE | "RIGHT_USER_APPLICATIONS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_USER_APPLICATIONS_LIST | "RIGHT_USER_APPLICATIONS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_USER_AUTHORIZED_CLIENTS | "RIGHT_USER_AUTHORIZED_CLIENTS"
+ProtoJSON | ttnpb.Right | RIGHT_USER_CLIENTS_CREATE | "RIGHT_USER_CLIENTS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_USER_CLIENTS_LIST | "RIGHT_USER_CLIENTS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_USER_DELETE | "RIGHT_USER_DELETE"
+ProtoJSON | ttnpb.Right | RIGHT_USER_GATEWAYS_CREATE | "RIGHT_USER_GATEWAYS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_USER_GATEWAYS_LIST | "RIGHT_USER_GATEWAYS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_USER_INFO | "RIGHT_USER_INFO"
+ProtoJSON | ttnpb.Right | RIGHT_USER_NOTIFICATIONS_READ | "RIGHT_USER_NOTIFICATIONS_READ"
+ProtoJSON | ttnpb.Right | RIGHT_USER_ORGANIZATIONS_CREATE | "RIGHT_USER_ORGANIZATIONS_CREATE"
+ProtoJSON | ttnpb.Right | RIGHT_USER_ORGANIZATIONS_LIST | "RIGHT_USER_ORGANIZATIONS_LIST"
+ProtoJSON | ttnpb.Right | RIGHT_USER_SETTINGS_API_KEYS | "RIGHT_USER_SETTINGS_API_KEYS"
+ProtoJSON | ttnpb.Right | RIGHT_USER_SETTINGS_BASIC | "RIGHT_USER_SETTINGS_BASIC"
+ProtoJSON | ttnpb.Right | right_invalid | "right_invalid"
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_0 | 0
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_1 | 1
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_10 | 10
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_11 | 11
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_12 | 12
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_13 | 13
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_14 | 14
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_15 | 15
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_2 | 2
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_3 | 3
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_4 | 4
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_5 | 5
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_6 | 6
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_7 | 7
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_8 | 8
+ProtoJSON | ttnpb.RxDelay | RX_DELAY_9 | 9
+ProtoJSON | ttnpb.RxDelayValue |  | 0
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_1 | 1
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_10 | 10
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_11 | 11
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_12 | 12
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_13 | 13
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_14 | 14
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_15 | 15
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_2 | 2
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_3 | 3
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_4 | 4
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_5 | 5
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_6 | 6
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_7 | 7
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_8 | 8
+ProtoJSON | ttnpb.RxDelayValue | value:RX_DELAY_9 | 9
+ProtoJSON | ttnpb.State | STATE_APPROVED | "STATE_APPROVED"
+ProtoJSON | ttnpb.State | STATE_FLAGGED | "STATE_FLAGGED"
+ProtoJSON | ttnpb.State | STATE_REJECTED | "STATE_REJECTED"
+ProtoJSON | ttnpb.State | STATE_REQUESTED | "STATE_REQUESTED"
+ProtoJSON | ttnpb.State | STATE_SUSPENDED | "STATE_SUSPENDED"
+ProtoJSON | ttnpb.TxSchedulePriority | ABOVE_NORMAL | "ABOVE_NORMAL"
+ProtoJSON | ttnpb.TxSchedulePriority | BELOW_NORMAL | "BELOW_NORMAL"
+ProtoJSON | ttnpb.TxSchedulePriority | HIGH | "HIGH"
+ProtoJSON | ttnpb.TxSchedulePriority | HIGHEST | "HIGHEST"
+ProtoJSON | ttnpb.TxSchedulePriority | LOW | "LOW"
+ProtoJSON | ttnpb.TxSchedulePriority | LOWEST | "LOWEST"
+ProtoJSON | ttnpb.TxSchedulePriority | NORMAL | "NORMAL"
+ProtoJSON | ttnpb.ZeroableFrequencyValue |  | "0"
+ProtoJSON | ttnpb.ZeroableFrequencyValue | value:100000 | "100000"
+ProtoJSON | ttnpb.ZeroableFrequencyValue | value:2000000 | "2000000"
+ProtoJSON | ttnpb.ZeroableFrequencyValue | value:30000000 | "30000000"
 Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_1 | ADR_ACK_DELAY_1
 Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_1024 | ADR_ACK_DELAY_1024
 Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_128 | ADR_ACK_DELAY_128
@@ -864,22 +1249,22 @@ Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_512 | ADR_ACK_DELAY_512
 Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_64 | ADR_ACK_DELAY_64
 Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8 | ADR_ACK_DELAY_8
 Text | ttnpb.ADRAckDelayExponent | ADR_ACK_DELAY_8192 | ADR_ACK_DELAY_8192
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1 {} 0} | ADR_ACK_DELAY_1
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_1024 {} 0} | ADR_ACK_DELAY_1024
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_128 {} 0} | ADR_ACK_DELAY_128
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16 {} 0} | ADR_ACK_DELAY_16
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_16384 {} 0} | ADR_ACK_DELAY_16384
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2 {} 0} | ADR_ACK_DELAY_2
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_2048 {} 0} | ADR_ACK_DELAY_2048
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_256 {} 0} | ADR_ACK_DELAY_256
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32 {} 0} | ADR_ACK_DELAY_32
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_32768 {} 0} | ADR_ACK_DELAY_32768
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4 {} 0} | ADR_ACK_DELAY_4
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_4096 {} 0} | ADR_ACK_DELAY_4096
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_512 {} 0} | ADR_ACK_DELAY_512
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_64 {} 0} | ADR_ACK_DELAY_64
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8 {} 0} | ADR_ACK_DELAY_8
-Text | ttnpb.ADRAckDelayExponentValue | {ADR_ACK_DELAY_8192 {} 0} | ADR_ACK_DELAY_8192
+Text | ttnpb.ADRAckDelayExponentValue |  | ADR_ACK_DELAY_1
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_1024 | ADR_ACK_DELAY_1024
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_128 | ADR_ACK_DELAY_128
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16 | ADR_ACK_DELAY_16
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_16384 | ADR_ACK_DELAY_16384
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2 | ADR_ACK_DELAY_2
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_2048 | ADR_ACK_DELAY_2048
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_256 | ADR_ACK_DELAY_256
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32 | ADR_ACK_DELAY_32
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_32768 | ADR_ACK_DELAY_32768
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4 | ADR_ACK_DELAY_4
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_4096 | ADR_ACK_DELAY_4096
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_512 | ADR_ACK_DELAY_512
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_64 | ADR_ACK_DELAY_64
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8 | ADR_ACK_DELAY_8
+Text | ttnpb.ADRAckDelayExponentValue | value:ADR_ACK_DELAY_8192 | ADR_ACK_DELAY_8192
 Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1 | ADR_ACK_LIMIT_1
 Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_1024 | ADR_ACK_LIMIT_1024
 Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_128 | ADR_ACK_LIMIT_128
@@ -896,22 +1281,22 @@ Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_512 | ADR_ACK_LIMIT_512
 Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_64 | ADR_ACK_LIMIT_64
 Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8 | ADR_ACK_LIMIT_8
 Text | ttnpb.ADRAckLimitExponent | ADR_ACK_LIMIT_8192 | ADR_ACK_LIMIT_8192
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1 {} 0} | ADR_ACK_LIMIT_1
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_1024 {} 0} | ADR_ACK_LIMIT_1024
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_128 {} 0} | ADR_ACK_LIMIT_128
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16 {} 0} | ADR_ACK_LIMIT_16
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_16384 {} 0} | ADR_ACK_LIMIT_16384
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2 {} 0} | ADR_ACK_LIMIT_2
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_2048 {} 0} | ADR_ACK_LIMIT_2048
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_256 {} 0} | ADR_ACK_LIMIT_256
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32 {} 0} | ADR_ACK_LIMIT_32
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_32768 {} 0} | ADR_ACK_LIMIT_32768
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4 {} 0} | ADR_ACK_LIMIT_4
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_4096 {} 0} | ADR_ACK_LIMIT_4096
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_512 {} 0} | ADR_ACK_LIMIT_512
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_64 {} 0} | ADR_ACK_LIMIT_64
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8 {} 0} | ADR_ACK_LIMIT_8
-Text | ttnpb.ADRAckLimitExponentValue | {ADR_ACK_LIMIT_8192 {} 0} | ADR_ACK_LIMIT_8192
+Text | ttnpb.ADRAckLimitExponentValue |  | ADR_ACK_LIMIT_1
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_1024 | ADR_ACK_LIMIT_1024
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_128 | ADR_ACK_LIMIT_128
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16 | ADR_ACK_LIMIT_16
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_16384 | ADR_ACK_LIMIT_16384
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2 | ADR_ACK_LIMIT_2
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_2048 | ADR_ACK_LIMIT_2048
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_256 | ADR_ACK_LIMIT_256
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32 | ADR_ACK_LIMIT_32
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_32768 | ADR_ACK_LIMIT_32768
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4 | ADR_ACK_LIMIT_4
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_4096 | ADR_ACK_LIMIT_4096
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_512 | ADR_ACK_LIMIT_512
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_64 | ADR_ACK_LIMIT_64
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8 | ADR_ACK_LIMIT_8
+Text | ttnpb.ADRAckLimitExponentValue | value:ADR_ACK_LIMIT_8192 | ADR_ACK_LIMIT_8192
 Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1 | DUTY_CYCLE_1
 Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_1024 | DUTY_CYCLE_1024
 Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_128 | DUTY_CYCLE_128
@@ -928,77 +1313,77 @@ Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_512 | DUTY_CYCLE_512
 Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_64 | DUTY_CYCLE_64
 Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8 | DUTY_CYCLE_8
 Text | ttnpb.AggregatedDutyCycle | DUTY_CYCLE_8192 | DUTY_CYCLE_8192
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1 {} 0} | DUTY_CYCLE_1
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_1024 {} 0} | DUTY_CYCLE_1024
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_128 {} 0} | DUTY_CYCLE_128
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16 {} 0} | DUTY_CYCLE_16
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_16384 {} 0} | DUTY_CYCLE_16384
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2 {} 0} | DUTY_CYCLE_2
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_2048 {} 0} | DUTY_CYCLE_2048
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_256 {} 0} | DUTY_CYCLE_256
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32 {} 0} | DUTY_CYCLE_32
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_32768 {} 0} | DUTY_CYCLE_32768
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4 {} 0} | DUTY_CYCLE_4
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_4096 {} 0} | DUTY_CYCLE_4096
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_512 {} 0} | DUTY_CYCLE_512
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_64 {} 0} | DUTY_CYCLE_64
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8 {} 0} | DUTY_CYCLE_8
-Text | ttnpb.AggregatedDutyCycleValue | {DUTY_CYCLE_8192 {} 0} | DUTY_CYCLE_8192
-Text | ttnpb.BoolValue | {false {} 0} | false
-Text | ttnpb.BoolValue | {true {} 0} | true
+Text | ttnpb.AggregatedDutyCycleValue |  | DUTY_CYCLE_1
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_1024 | DUTY_CYCLE_1024
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_128 | DUTY_CYCLE_128
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16 | DUTY_CYCLE_16
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_16384 | DUTY_CYCLE_16384
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2 | DUTY_CYCLE_2
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_2048 | DUTY_CYCLE_2048
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_256 | DUTY_CYCLE_256
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32 | DUTY_CYCLE_32
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_32768 | DUTY_CYCLE_32768
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4 | DUTY_CYCLE_4
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_4096 | DUTY_CYCLE_4096
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_512 | DUTY_CYCLE_512
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_64 | DUTY_CYCLE_64
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8 | DUTY_CYCLE_8
+Text | ttnpb.AggregatedDutyCycleValue | value:DUTY_CYCLE_8192 | DUTY_CYCLE_8192
+Text | ttnpb.BoolValue |  | false
+Text | ttnpb.BoolValue | value:true | true
 Text | ttnpb.CFListType | CHANNEL_MASKS | CHANNEL_MASKS
 Text | ttnpb.CFListType | FREQUENCIES | FREQUENCIES
 Text | ttnpb.Class | CLASS_A | CLASS_A
 Text | ttnpb.Class | CLASS_B | CLASS_B
 Text | ttnpb.Class | CLASS_C | CLASS_C
-Text | ttnpb.DataRateIndex | 0 | 0
-Text | ttnpb.DataRateIndex | 1 | 1
-Text | ttnpb.DataRateIndex | 10 | 10
-Text | ttnpb.DataRateIndex | 11 | 11
-Text | ttnpb.DataRateIndex | 12 | 12
-Text | ttnpb.DataRateIndex | 13 | 13
-Text | ttnpb.DataRateIndex | 14 | 14
-Text | ttnpb.DataRateIndex | 15 | 15
-Text | ttnpb.DataRateIndex | 2 | 2
-Text | ttnpb.DataRateIndex | 3 | 3
-Text | ttnpb.DataRateIndex | 4 | 4
-Text | ttnpb.DataRateIndex | 5 | 5
-Text | ttnpb.DataRateIndex | 6 | 6
-Text | ttnpb.DataRateIndex | 7 | 7
-Text | ttnpb.DataRateIndex | 8 | 8
-Text | ttnpb.DataRateIndex | 9 | 9
-Text | ttnpb.DataRateIndexValue | {0 {} 0} | 0
-Text | ttnpb.DataRateIndexValue | {1 {} 0} | 1
-Text | ttnpb.DataRateIndexValue | {10 {} 0} | 10
-Text | ttnpb.DataRateIndexValue | {11 {} 0} | 11
-Text | ttnpb.DataRateIndexValue | {12 {} 0} | 12
-Text | ttnpb.DataRateIndexValue | {13 {} 0} | 13
-Text | ttnpb.DataRateIndexValue | {14 {} 0} | 14
-Text | ttnpb.DataRateIndexValue | {15 {} 0} | 15
-Text | ttnpb.DataRateIndexValue | {2 {} 0} | 2
-Text | ttnpb.DataRateIndexValue | {3 {} 0} | 3
-Text | ttnpb.DataRateIndexValue | {4 {} 0} | 4
-Text | ttnpb.DataRateIndexValue | {5 {} 0} | 5
-Text | ttnpb.DataRateIndexValue | {6 {} 0} | 6
-Text | ttnpb.DataRateIndexValue | {7 {} 0} | 7
-Text | ttnpb.DataRateIndexValue | {8 {} 0} | 8
-Text | ttnpb.DataRateIndexValue | {9 {} 0} | 9
-Text | ttnpb.DataRateOffset | 0 | 0
-Text | ttnpb.DataRateOffset | 1 | 1
-Text | ttnpb.DataRateOffset | 2 | 2
-Text | ttnpb.DataRateOffset | 3 | 3
-Text | ttnpb.DataRateOffset | 4 | 4
-Text | ttnpb.DataRateOffset | 5 | 5
-Text | ttnpb.DataRateOffset | 6 | 6
-Text | ttnpb.DataRateOffset | 7 | 7
-Text | ttnpb.DataRateOffsetValue | {0 {} 0} | 0
-Text | ttnpb.DataRateOffsetValue | {1 {} 0} | 1
-Text | ttnpb.DataRateOffsetValue | {2 {} 0} | 2
-Text | ttnpb.DataRateOffsetValue | {3 {} 0} | 3
-Text | ttnpb.DataRateOffsetValue | {4 {} 0} | 4
-Text | ttnpb.DataRateOffsetValue | {5 {} 0} | 5
-Text | ttnpb.DataRateOffsetValue | {6 {} 0} | 6
-Text | ttnpb.DataRateOffsetValue | {7 {} 0} | 7
+Text | ttnpb.DataRateIndex | DATA_RATE_0 | 0
+Text | ttnpb.DataRateIndex | DATA_RATE_1 | 1
+Text | ttnpb.DataRateIndex | DATA_RATE_10 | 10
+Text | ttnpb.DataRateIndex | DATA_RATE_11 | 11
+Text | ttnpb.DataRateIndex | DATA_RATE_12 | 12
+Text | ttnpb.DataRateIndex | DATA_RATE_13 | 13
+Text | ttnpb.DataRateIndex | DATA_RATE_14 | 14
+Text | ttnpb.DataRateIndex | DATA_RATE_15 | 15
+Text | ttnpb.DataRateIndex | DATA_RATE_2 | 2
+Text | ttnpb.DataRateIndex | DATA_RATE_3 | 3
+Text | ttnpb.DataRateIndex | DATA_RATE_4 | 4
+Text | ttnpb.DataRateIndex | DATA_RATE_5 | 5
+Text | ttnpb.DataRateIndex | DATA_RATE_6 | 6
+Text | ttnpb.DataRateIndex | DATA_RATE_7 | 7
+Text | ttnpb.DataRateIndex | DATA_RATE_8 | 8
+Text | ttnpb.DataRateIndex | DATA_RATE_9 | 9
+Text | ttnpb.DataRateIndexValue |  | 0
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_1 | 1
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_10 | 10
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_11 | 11
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_12 | 12
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_13 | 13
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_14 | 14
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_15 | 15
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_2 | 2
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_3 | 3
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_4 | 4
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_5 | 5
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_6 | 6
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_7 | 7
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_8 | 8
+Text | ttnpb.DataRateIndexValue | value:DATA_RATE_9 | 9
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_0 | 0
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_1 | 1
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_2 | 2
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_3 | 3
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_4 | 4
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_5 | 5
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_6 | 6
+Text | ttnpb.DataRateOffset | DATA_RATE_OFFSET_7 | 7
+Text | ttnpb.DataRateOffsetValue |  | 0
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_1 | 1
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_2 | 2
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_3 | 3
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_4 | 4
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_5 | 5
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_6 | 6
+Text | ttnpb.DataRateOffsetValue | value:DATA_RATE_OFFSET_7 | 7
 Text | ttnpb.DeviceEIRP | DEVICE_EIRP_10 | DEVICE_EIRP_10
 Text | ttnpb.DeviceEIRP | DEVICE_EIRP_12 | DEVICE_EIRP_12
 Text | ttnpb.DeviceEIRP | DEVICE_EIRP_13 | DEVICE_EIRP_13
@@ -1015,12 +1400,35 @@ Text | ttnpb.DeviceEIRP | DEVICE_EIRP_30 | DEVICE_EIRP_30
 Text | ttnpb.DeviceEIRP | DEVICE_EIRP_33 | DEVICE_EIRP_33
 Text | ttnpb.DeviceEIRP | DEVICE_EIRP_36 | DEVICE_EIRP_36
 Text | ttnpb.DeviceEIRP | DEVICE_EIRP_8 | DEVICE_EIRP_8
-Text | ttnpb.FrequencyValue | {100000 {} 0} | 100000
-Text | ttnpb.FrequencyValue | {2000000 {} 0} | 2000000
-Text | ttnpb.FrequencyValue | {30000000 {} 0} | 30000000
+Text | ttnpb.DeviceEIRPValue |  | DEVICE_EIRP_8
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_10 | DEVICE_EIRP_10
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_12 | DEVICE_EIRP_12
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_13 | DEVICE_EIRP_13
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_14 | DEVICE_EIRP_14
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_16 | DEVICE_EIRP_16
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_18 | DEVICE_EIRP_18
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_20 | DEVICE_EIRP_20
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_21 | DEVICE_EIRP_21
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_24 | DEVICE_EIRP_24
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_26 | DEVICE_EIRP_26
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_27 | DEVICE_EIRP_27
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_29 | DEVICE_EIRP_29
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_30 | DEVICE_EIRP_30
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_33 | DEVICE_EIRP_33
+Text | ttnpb.DeviceEIRPValue | value:DEVICE_EIRP_36 | DEVICE_EIRP_36
+Text | ttnpb.FrequencyValue | value:100000 | 100000
+Text | ttnpb.FrequencyValue | value:2000000 | 2000000
+Text | ttnpb.FrequencyValue | value:30000000 | 30000000
+Text | ttnpb.GatewayAntennaPlacement | INDOOR | INDOOR
+Text | ttnpb.GatewayAntennaPlacement | OUTDOOR | OUTDOOR
+Text | ttnpb.GatewayAntennaPlacement | PLACEMENT_UNKNOWN | PLACEMENT_UNKNOWN
 Text | ttnpb.GrantType | GRANT_AUTHORIZATION_CODE | GRANT_AUTHORIZATION_CODE
 Text | ttnpb.GrantType | GRANT_PASSWORD | GRANT_PASSWORD
 Text | ttnpb.GrantType | GRANT_REFRESH_TOKEN | GRANT_REFRESH_TOKEN
+Text | ttnpb.JoinRequestType | JOIN | JOIN
+Text | ttnpb.JoinRequestType | REJOIN_CONTEXT | REJOIN_CONTEXT
+Text | ttnpb.JoinRequestType | REJOIN_KEYS | REJOIN_KEYS
+Text | ttnpb.JoinRequestType | REJOIN_SESSION | REJOIN_SESSION
 Text | ttnpb.LocationSource | SOURCE_BT_RSSI_GEOLOCATION | SOURCE_BT_RSSI_GEOLOCATION
 Text | ttnpb.LocationSource | SOURCE_COMBINED_GEOLOCATION | SOURCE_COMBINED_GEOLOCATION
 Text | ttnpb.LocationSource | SOURCE_GPS | SOURCE_GPS
@@ -1051,13 +1459,13 @@ Text | ttnpb.MACCommandIdentifier | CID_RFU_0 | CID_RFU_0
 Text | ttnpb.MACCommandIdentifier | CID_RX_PARAM_SETUP | CID_RX_PARAM_SETUP
 Text | ttnpb.MACCommandIdentifier | CID_RX_TIMING_SETUP | CID_RX_TIMING_SETUP
 Text | ttnpb.MACCommandIdentifier | CID_TX_PARAM_SETUP | CID_TX_PARAM_SETUP
-Text | ttnpb.MACVersion | 1.0.0 | 1.0.0
-Text | ttnpb.MACVersion | 1.0.1 | 1.0.1
-Text | ttnpb.MACVersion | 1.0.2 | 1.0.2
-Text | ttnpb.MACVersion | 1.0.3 | 1.0.3
-Text | ttnpb.MACVersion | 1.0.4 | 1.0.4
-Text | ttnpb.MACVersion | 1.1.0 | 1.1.0
-Text | ttnpb.MACVersion | unknown | unknown
+Text | ttnpb.MACVersion | MAC_UNKNOWN | MAC_UNKNOWN
+Text | ttnpb.MACVersion | MAC_V1_0 | MAC_V1_0
+Text | ttnpb.MACVersion | MAC_V1_0_1 | MAC_V1_0_1
+Text | ttnpb.MACVersion | MAC_V1_0_2 | MAC_V1_0_2
+Text | ttnpb.MACVersion | MAC_V1_0_3 | MAC_V1_0_3
+Text | ttnpb.MACVersion | MAC_V1_0_4 | MAC_V1_0_4
+Text | ttnpb.MACVersion | MAC_V1_1 | MAC_V1_1
 Text | ttnpb.MType | CONFIRMED_DOWN | CONFIRMED_DOWN
 Text | ttnpb.MType | CONFIRMED_UP | CONFIRMED_UP
 Text | ttnpb.MType | JOIN_ACCEPT | JOIN_ACCEPT
@@ -1083,14 +1491,19 @@ Text | ttnpb.Minor | MINOR_RFU_6 | MINOR_RFU_6
 Text | ttnpb.Minor | MINOR_RFU_7 | MINOR_RFU_7
 Text | ttnpb.Minor | MINOR_RFU_8 | MINOR_RFU_8
 Text | ttnpb.Minor | MINOR_RFU_9 | MINOR_RFU_9
-Text | ttnpb.PHYVersion | 1.0.0 | 1.0.0
-Text | ttnpb.PHYVersion | 1.0.1 | 1.0.1
-Text | ttnpb.PHYVersion | 1.0.2-a | 1.0.2-a
-Text | ttnpb.PHYVersion | 1.0.2-b | 1.0.2-b
-Text | ttnpb.PHYVersion | 1.0.3-a | 1.0.3-a
-Text | ttnpb.PHYVersion | 1.1.0-a | 1.1.0-a
-Text | ttnpb.PHYVersion | 1.1.0-b | 1.1.0-b
-Text | ttnpb.PHYVersion | unknown | unknown
+Text | ttnpb.PHYVersion | PHY_UNKNOWN | PHY_UNKNOWN
+Text | ttnpb.PHYVersion | PHY_V1_0 | PHY_V1_0
+Text | ttnpb.PHYVersion | PHY_V1_0_1 | PHY_V1_0_1
+Text | ttnpb.PHYVersion | PHY_V1_0_2_REV_A | PHY_V1_0_2_REV_A
+Text | ttnpb.PHYVersion | PHY_V1_0_2_REV_B | PHY_V1_0_2_REV_B
+Text | ttnpb.PHYVersion | PHY_V1_0_3_REV_A | PHY_V1_0_3_REV_A
+Text | ttnpb.PHYVersion | PHY_V1_1_REV_A | PHY_V1_1_REV_A
+Text | ttnpb.PHYVersion | PHY_V1_1_REV_B | PHY_V1_1_REV_B
+Text | ttnpb.PHYVersion | RP002_V1_0_0 | RP002_V1_0_0
+Text | ttnpb.PHYVersion | RP002_V1_0_1 | RP002_V1_0_1
+Text | ttnpb.PHYVersion | RP002_V1_0_2 | RP002_V1_0_2
+Text | ttnpb.PHYVersion | RP002_V1_0_3 | RP002_V1_0_3
+Text | ttnpb.PHYVersion | RP002_V1_0_4 | RP002_V1_0_4
 Text | ttnpb.PingSlotPeriod | PING_EVERY_128S | PING_EVERY_128S
 Text | ttnpb.PingSlotPeriod | PING_EVERY_16S | PING_EVERY_16S
 Text | ttnpb.PingSlotPeriod | PING_EVERY_1S | PING_EVERY_1S
@@ -1099,14 +1512,14 @@ Text | ttnpb.PingSlotPeriod | PING_EVERY_32S | PING_EVERY_32S
 Text | ttnpb.PingSlotPeriod | PING_EVERY_4S | PING_EVERY_4S
 Text | ttnpb.PingSlotPeriod | PING_EVERY_64S | PING_EVERY_64S
 Text | ttnpb.PingSlotPeriod | PING_EVERY_8S | PING_EVERY_8S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_128S {} 0} | PING_EVERY_128S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_16S {} 0} | PING_EVERY_16S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_1S {} 0} | PING_EVERY_1S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_2S {} 0} | PING_EVERY_2S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_32S {} 0} | PING_EVERY_32S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_4S {} 0} | PING_EVERY_4S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_64S {} 0} | PING_EVERY_64S
-Text | ttnpb.PingSlotPeriodValue | {PING_EVERY_8S {} 0} | PING_EVERY_8S
+Text | ttnpb.PingSlotPeriodValue |  | PING_EVERY_1S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_128S | PING_EVERY_128S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_16S | PING_EVERY_16S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_2S | PING_EVERY_2S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_32S | PING_EVERY_32S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_4S | PING_EVERY_4S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_64S | PING_EVERY_64S
+Text | ttnpb.PingSlotPeriodValue | value:PING_EVERY_8S | PING_EVERY_8S
 Text | ttnpb.RejoinCountExponent | REJOIN_COUNT_1024 | REJOIN_COUNT_1024
 Text | ttnpb.RejoinCountExponent | REJOIN_COUNT_128 | REJOIN_COUNT_128
 Text | ttnpb.RejoinCountExponent | REJOIN_COUNT_131072 | REJOIN_COUNT_131072
@@ -1131,6 +1544,9 @@ Text | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_4 | REJOIN_PERIOD_4
 Text | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_5 | REJOIN_PERIOD_5
 Text | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_6 | REJOIN_PERIOD_6
 Text | ttnpb.RejoinPeriodExponent | REJOIN_PERIOD_7 | REJOIN_PERIOD_7
+Text | ttnpb.RejoinRequestType | CONTEXT | CONTEXT
+Text | ttnpb.RejoinRequestType | KEYS | KEYS
+Text | ttnpb.RejoinRequestType | SESSION | SESSION
 Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_0 | REJOIN_TIME_0
 Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_1 | REJOIN_TIME_1
 Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_10 | REJOIN_TIME_10
@@ -1147,9 +1563,6 @@ Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_6 | REJOIN_TIME_6
 Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_7 | REJOIN_TIME_7
 Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_8 | REJOIN_TIME_8
 Text | ttnpb.RejoinTimeExponent | REJOIN_TIME_9 | REJOIN_TIME_9
-Text | ttnpb.RejoinType | CONTEXT | CONTEXT
-Text | ttnpb.RejoinType | KEYS | KEYS
-Text | ttnpb.RejoinType | SESSION | SESSION
 Text | ttnpb.Right | RIGHT_ALL | RIGHT_ALL
 Text | ttnpb.Right | RIGHT_APPLICATION_ALL | RIGHT_APPLICATION_ALL
 Text | ttnpb.Right | RIGHT_APPLICATION_DELETE | RIGHT_APPLICATION_DELETE
@@ -1167,6 +1580,10 @@ Text | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE | RIGHT_APPLICATION_TR
 Text | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_READ | RIGHT_APPLICATION_TRAFFIC_READ
 Text | ttnpb.Right | RIGHT_APPLICATION_TRAFFIC_UP_WRITE | RIGHT_APPLICATION_TRAFFIC_UP_WRITE
 Text | ttnpb.Right | RIGHT_CLIENT_ALL | RIGHT_CLIENT_ALL
+Text | ttnpb.Right | RIGHT_CLIENT_DELETE | RIGHT_CLIENT_DELETE
+Text | ttnpb.Right | RIGHT_CLIENT_INFO | RIGHT_CLIENT_INFO
+Text | ttnpb.Right | RIGHT_CLIENT_SETTINGS_BASIC | RIGHT_CLIENT_SETTINGS_BASIC
+Text | ttnpb.Right | RIGHT_CLIENT_SETTINGS_COLLABORATORS | RIGHT_CLIENT_SETTINGS_COLLABORATORS
 Text | ttnpb.Right | RIGHT_GATEWAY_ALL | RIGHT_GATEWAY_ALL
 Text | ttnpb.Right | RIGHT_GATEWAY_DELETE | RIGHT_GATEWAY_DELETE
 Text | ttnpb.Right | RIGHT_GATEWAY_INFO | RIGHT_GATEWAY_INFO
@@ -1204,43 +1621,44 @@ Text | ttnpb.Right | RIGHT_USER_DELETE | RIGHT_USER_DELETE
 Text | ttnpb.Right | RIGHT_USER_GATEWAYS_CREATE | RIGHT_USER_GATEWAYS_CREATE
 Text | ttnpb.Right | RIGHT_USER_GATEWAYS_LIST | RIGHT_USER_GATEWAYS_LIST
 Text | ttnpb.Right | RIGHT_USER_INFO | RIGHT_USER_INFO
+Text | ttnpb.Right | RIGHT_USER_NOTIFICATIONS_READ | RIGHT_USER_NOTIFICATIONS_READ
 Text | ttnpb.Right | RIGHT_USER_ORGANIZATIONS_CREATE | RIGHT_USER_ORGANIZATIONS_CREATE
 Text | ttnpb.Right | RIGHT_USER_ORGANIZATIONS_LIST | RIGHT_USER_ORGANIZATIONS_LIST
 Text | ttnpb.Right | RIGHT_USER_SETTINGS_API_KEYS | RIGHT_USER_SETTINGS_API_KEYS
 Text | ttnpb.Right | RIGHT_USER_SETTINGS_BASIC | RIGHT_USER_SETTINGS_BASIC
 Text | ttnpb.Right | right_invalid | right_invalid
-Text | ttnpb.RxDelay | 0 | 0
-Text | ttnpb.RxDelay | 1 | 1
-Text | ttnpb.RxDelay | 10 | 10
-Text | ttnpb.RxDelay | 11 | 11
-Text | ttnpb.RxDelay | 12 | 12
-Text | ttnpb.RxDelay | 13 | 13
-Text | ttnpb.RxDelay | 14 | 14
-Text | ttnpb.RxDelay | 15 | 15
-Text | ttnpb.RxDelay | 2 | 2
-Text | ttnpb.RxDelay | 3 | 3
-Text | ttnpb.RxDelay | 4 | 4
-Text | ttnpb.RxDelay | 5 | 5
-Text | ttnpb.RxDelay | 6 | 6
-Text | ttnpb.RxDelay | 7 | 7
-Text | ttnpb.RxDelay | 8 | 8
-Text | ttnpb.RxDelay | 9 | 9
-Text | ttnpb.RxDelayValue | {0 {} 0} | 0
-Text | ttnpb.RxDelayValue | {1 {} 0} | 1
-Text | ttnpb.RxDelayValue | {10 {} 0} | 10
-Text | ttnpb.RxDelayValue | {11 {} 0} | 11
-Text | ttnpb.RxDelayValue | {12 {} 0} | 12
-Text | ttnpb.RxDelayValue | {13 {} 0} | 13
-Text | ttnpb.RxDelayValue | {14 {} 0} | 14
-Text | ttnpb.RxDelayValue | {15 {} 0} | 15
-Text | ttnpb.RxDelayValue | {2 {} 0} | 2
-Text | ttnpb.RxDelayValue | {3 {} 0} | 3
-Text | ttnpb.RxDelayValue | {4 {} 0} | 4
-Text | ttnpb.RxDelayValue | {5 {} 0} | 5
-Text | ttnpb.RxDelayValue | {6 {} 0} | 6
-Text | ttnpb.RxDelayValue | {7 {} 0} | 7
-Text | ttnpb.RxDelayValue | {8 {} 0} | 8
-Text | ttnpb.RxDelayValue | {9 {} 0} | 9
+Text | ttnpb.RxDelay | RX_DELAY_0 | 0
+Text | ttnpb.RxDelay | RX_DELAY_1 | 1
+Text | ttnpb.RxDelay | RX_DELAY_10 | 10
+Text | ttnpb.RxDelay | RX_DELAY_11 | 11
+Text | ttnpb.RxDelay | RX_DELAY_12 | 12
+Text | ttnpb.RxDelay | RX_DELAY_13 | 13
+Text | ttnpb.RxDelay | RX_DELAY_14 | 14
+Text | ttnpb.RxDelay | RX_DELAY_15 | 15
+Text | ttnpb.RxDelay | RX_DELAY_2 | 2
+Text | ttnpb.RxDelay | RX_DELAY_3 | 3
+Text | ttnpb.RxDelay | RX_DELAY_4 | 4
+Text | ttnpb.RxDelay | RX_DELAY_5 | 5
+Text | ttnpb.RxDelay | RX_DELAY_6 | 6
+Text | ttnpb.RxDelay | RX_DELAY_7 | 7
+Text | ttnpb.RxDelay | RX_DELAY_8 | 8
+Text | ttnpb.RxDelay | RX_DELAY_9 | 9
+Text | ttnpb.RxDelayValue |  | 0
+Text | ttnpb.RxDelayValue | value:RX_DELAY_1 | 1
+Text | ttnpb.RxDelayValue | value:RX_DELAY_10 | 10
+Text | ttnpb.RxDelayValue | value:RX_DELAY_11 | 11
+Text | ttnpb.RxDelayValue | value:RX_DELAY_12 | 12
+Text | ttnpb.RxDelayValue | value:RX_DELAY_13 | 13
+Text | ttnpb.RxDelayValue | value:RX_DELAY_14 | 14
+Text | ttnpb.RxDelayValue | value:RX_DELAY_15 | 15
+Text | ttnpb.RxDelayValue | value:RX_DELAY_2 | 2
+Text | ttnpb.RxDelayValue | value:RX_DELAY_3 | 3
+Text | ttnpb.RxDelayValue | value:RX_DELAY_4 | 4
+Text | ttnpb.RxDelayValue | value:RX_DELAY_5 | 5
+Text | ttnpb.RxDelayValue | value:RX_DELAY_6 | 6
+Text | ttnpb.RxDelayValue | value:RX_DELAY_7 | 7
+Text | ttnpb.RxDelayValue | value:RX_DELAY_8 | 8
+Text | ttnpb.RxDelayValue | value:RX_DELAY_9 | 9
 Text | ttnpb.State | STATE_APPROVED | STATE_APPROVED
 Text | ttnpb.State | STATE_FLAGGED | STATE_FLAGGED
 Text | ttnpb.State | STATE_REJECTED | STATE_REJECTED
@@ -1253,3 +1671,7 @@ Text | ttnpb.TxSchedulePriority | HIGHEST | HIGHEST
 Text | ttnpb.TxSchedulePriority | LOW | LOW
 Text | ttnpb.TxSchedulePriority | LOWEST | LOWEST
 Text | ttnpb.TxSchedulePriority | NORMAL | NORMAL
+Text | ttnpb.ZeroableFrequencyValue |  | 0
+Text | ttnpb.ZeroableFrequencyValue | value:100000 | 100000
+Text | ttnpb.ZeroableFrequencyValue | value:2000000 | 2000000
+Text | ttnpb.ZeroableFrequencyValue | value:30000000 | 30000000

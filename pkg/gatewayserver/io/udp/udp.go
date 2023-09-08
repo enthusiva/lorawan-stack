@@ -16,15 +16,14 @@ package udp
 
 import (
 	"context"
-	"fmt"
+	"encoding/binary"
 	"net"
-	"os"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/scheduling"
@@ -34,6 +33,9 @@ import (
 	encoding "go.thethings.network/lorawan-stack/v3/pkg/ttnpb/udp"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
+	"go.thethings.network/lorawan-stack/v3/pkg/workerpool"
+	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type srv struct {
@@ -42,64 +44,65 @@ type srv struct {
 
 	server      io.Server
 	conn        *net.UDPConn
-	packetCh    chan encoding.Packet
 	connections sync.Map
 	firewall    Firewall
 
 	limitLogs ratelimit.Interface
 }
 
-func (*srv) Protocol() string            { return "udp" }
-func (*srv) SupportsDownlinkClaim() bool { return true }
+func (*srv) Protocol() string                          { return "udp" }
+func (*srv) SupportsDownlinkClaim() bool               { return true }
+func (*srv) DutyCycleStyle() scheduling.DutyCycleStyle { return scheduling.DefaultDutyCycleStyle }
 
 var (
-	errUDPFrontendRecovered      = errors.DefineInternal("udp_frontend_recovered", "internal server error")
-	limitLogsConfig              = ratelimit.Profile{MaxPerMin: 1}
-	limitLogsSize           uint = 1 << 13
+	limitLogsConfig      = config.RateLimitingProfile{MaxPerMin: 1}
+	limitLogsSize   uint = 1 << 13
 )
 
 // Serve serves the UDP frontend.
-func Serve(ctx context.Context, server io.Server, conn *net.UDPConn, config Config) error {
+func Serve(ctx context.Context, server io.Server, conn *net.UDPConn, conf Config) error {
 	ctx = log.NewContextWithField(ctx, "namespace", "gatewayserver/io/udp")
-	var firewall Firewall
-	if config.AddrChangeBlock > 0 {
-		firewall = NewMemoryFirewall(ctx, config.AddrChangeBlock)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var firewall Firewall = noopFirewall{}
+	if conf.AddrChangeBlock > 0 {
+		firewall = NewMemoryFirewall(ctx, conf.AddrChangeBlock)
 	}
-	if config.RateLimiting.Enable {
-		firewall = NewRateLimitingFirewall(firewall, config.RateLimiting.Messages, config.RateLimiting.Threshold)
+	if conf.RateLimiting.Enable {
+		firewall = NewRateLimitingFirewall(firewall, conf.RateLimiting.Messages, conf.RateLimiting.Threshold)
 	}
-	limitLogs, err := limitLogsConfig.New(ctx, limitLogsSize)
+	limitLogs, err := ratelimit.NewProfile(ctx, limitLogsConfig, limitLogsSize)
 	if err != nil {
 		return err
 	}
 	s := &srv{
 		ctx:      ctx,
-		config:   config,
+		config:   conf,
 		server:   server,
 		conn:     conn,
-		packetCh: make(chan encoding.Packet, config.PacketBuffer),
 		firewall: firewall,
 
 		limitLogs: limitLogs,
 	}
+	wp := workerpool.NewWorkerPool(workerpool.Config[encoding.Packet]{
+		Component:  server,
+		Context:    ctx,
+		Name:       "udp",
+		Handler:    s.handlePacket,
+		MaxWorkers: conf.PacketHandlers,
+		QueueSize:  conf.PacketBuffer,
+	})
 	go s.gc()
 	go func() {
 		<-ctx.Done()
 		s.conn.Close()
 	}()
-	for i := 0; i < config.PacketHandlers; i++ {
-		go s.handlePackets()
-	}
-	return s.read()
+	return s.read(wp)
 }
 
-func (s *srv) read() (err error) {
-	defer func() {
-		retrievedErr := recoverUDPFrontend(s.ctx)
-		if retrievedErr != nil {
-			err = retrievedErr
-		}
-	}()
+var errPacketType = errors.DefineInvalidArgument("packet_type", "invalid packet type")
+
+func (s *srv) read(wp workerpool.WorkerPool[encoding.Packet]) error {
 	var buf [65507]byte
 	for {
 		n, addr, err := s.conn.ReadFromUDP(buf[:])
@@ -111,89 +114,88 @@ func (s *srv) read() (err error) {
 		}
 		now := time.Now()
 		ctx := log.NewContextWithField(s.ctx, "remote_addr", addr.String())
+		logger := log.FromContext(ctx)
 
+		registerMessageReceived(ctx)
 		if err := ratelimit.Require(s.server.RateLimiter(), ratelimit.GatewayUDPTrafficResource(addr)); err != nil {
 			if ratelimit.Require(s.limitLogs, ratelimit.NewCustomResource(addr.IP.String())) == nil {
-				log.FromContext(s.ctx).WithError(err).Warn("Drop packet")
+				logger.WithError(err).Warn("Drop packet")
 			}
+			registerMessageDropped(ctx, err)
 			continue
 		}
 
-		packetBuf := make([]byte, n)
-		copy(packetBuf, buf[:])
+		packetBuf := slices.Clone(buf[:n])
 
 		packet := encoding.Packet{
 			GatewayAddr: addr,
 			ReceivedAt:  now,
 		}
-		if err = packet.UnmarshalBinary(packetBuf); err != nil {
-			log.FromContext(ctx).WithError(err).Debug("Failed to unmarshal packet")
+		if err := packet.UnmarshalBinary(packetBuf); err != nil {
+			logger.WithError(err).Debug("Failed to unmarshal packet")
+			registerMessageDropped(ctx, err)
 			continue
 		}
 		switch packet.PacketType {
 		case encoding.PullData, encoding.PushData, encoding.TxAck:
 		default:
-			log.FromContext(ctx).WithField("packet_type", packet.PacketType).Debug("Invalid packet type for uplink")
+			logger.WithField("packet_type", packet.PacketType).Debug("Invalid packet type for uplink")
+			registerMessageDropped(ctx, errPacketType)
 			continue
 		}
 		if packet.GatewayEUI == nil {
-			log.FromContext(ctx).Debug("No gateway EUI in uplink message")
+			logger.Debug("No gateway EUI in uplink message")
+			registerMessageDropped(ctx, errNoEUI)
 			continue
 		}
 
-		select {
-		case s.packetCh <- packet:
-		default:
-			log.FromContext(ctx).Warn("Packet handlers busy, dropping packet")
+		if err := wp.Publish(ctx, packet); err != nil {
+			logger.WithError(err).Warn("UDP packet publishing failed")
+			registerMessageDropped(ctx, err)
+			continue
 		}
+		registerMessageForwarded(ctx, packet.PacketType)
 	}
 }
 
-func (s *srv) handlePackets() {
-	defer recoverUDPFrontend(s.ctx)
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
+func (s *srv) handlePacket(ctx context.Context, packet encoding.Packet) {
+	eui := *packet.GatewayEUI
+	ctx = log.NewContextWithField(ctx, "gateway_eui", eui)
+	logger := log.FromContext(ctx)
 
-		case packet := <-s.packetCh:
-			eui := *packet.GatewayEUI
-			ctx := log.NewContextWithField(s.ctx, "gateway_eui", eui)
-			logger := log.FromContext(ctx)
-
-			switch packet.PacketType {
-			case encoding.PullData, encoding.PushData:
-				if err := s.writeAckFor(packet); err != nil {
-					logger.WithError(err).Warn("Failed to write acknowledgment")
-				}
-			}
-
-			if s.firewall != nil {
-				if err := s.firewall.Filter(packet); err != nil {
-					if errors.IsResourceExhausted(err) && ratelimit.Require(s.limitLogs, ratelimit.NewCustomResource(eui.String())) == nil {
-						break
-					}
-					logger.WithError(err).Warn("Packet filtered")
-					break
-				}
-			}
-
-			cs, err := s.connect(ctx, eui)
-			if err != nil {
-				logger.WithError(err).Warn("Failed to connect")
-				break
-			}
-
-			if err := s.handleUp(cs.io.Context(), cs, packet); err != nil {
-				logger.WithError(err).Warn("Failed to handle upstream packet")
-			}
+	switch packet.PacketType {
+	case encoding.PullData, encoding.PushData:
+		if err := s.writeAckFor(packet); err != nil {
+			logger.WithError(err).Warn("Failed to write acknowledgment")
 		}
+	}
+
+	if err := s.firewall.Filter(packet); err != nil {
+		if !errors.IsResourceExhausted(err) {
+			goto filtered
+		}
+		if ratelimit.Require(s.limitLogs, ratelimit.NewCustomResource(eui.String())) != nil {
+			return
+		}
+	filtered:
+		logger.WithError(err).Warn("Packet filtered")
+		return
+	}
+
+	cs, err := s.connect(ctx, eui, packet.GatewayAddr)
+	if err != nil {
+		logger.WithError(err).Warn("Failed to connect")
+		return
+	}
+
+	if err := s.handleUp(cs.io.Context(), cs, packet); err != nil {
+		logger.WithError(err).Warn("Failed to handle upstream packet")
 	}
 }
 
 var errConnectionNotReady = errors.DefineUnavailable("connection_not_ready", "connection is not ready")
 
-func (s *srv) connect(ctx context.Context, eui types.EUI64) (*state, error) {
+func (s *srv) connect(ctx context.Context, eui types.EUI64, addr *net.UDPAddr) (*state, error) {
 	cs := &state{
 		ioWait:           make(chan struct{}),
 		downlinkTaskDone: &sync.WaitGroup{},
@@ -204,35 +206,39 @@ func (s *srv) connect(ctx context.Context, eui types.EUI64) (*state, error) {
 	val, loaded := s.connections.LoadOrStore(eui, cs)
 	cs = val.(*state)
 	if !loaded {
-		var io *io.Connection
+		var conn *io.Connection
 		var err error
 		defer func() {
 			if err != nil {
-				delete := func() { s.connections.Delete(eui) }
+				del := func() { s.connections.Delete(eui) }
 				if expiration := s.config.ConnectionErrorExpires; expiration != 0 {
-					time.AfterFunc(expiration, delete)
+					time.AfterFunc(expiration, del)
 				} else {
-					delete()
+					del()
 				}
 			}
-			cs.io, cs.ioErr = io, err
+			cs.io, cs.ioErr = conn, err
 			close(cs.ioWait)
 		}()
-		ids := ttnpb.GatewayIdentifiers{EUI: &eui}
+		ids := &ttnpb.GatewayIdentifiers{Eui: eui.Bytes()}
 		ctx, ids, err = s.server.FillGatewayContext(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
 		uid := unique.ID(ctx, ids)
 		ctx = log.NewContextWithField(ctx, "gateway_uid", uid)
-		ctx = rights.NewContext(ctx, rights.Rights{
-			GatewayRights: map[string]*ttnpb.Rights{
+		ctx = rights.NewContext(ctx, &rights.Rights{
+			GatewayRights: *rights.NewMap(map[string]*ttnpb.Rights{
 				uid: {
-					Rights: []ttnpb.Right{ttnpb.RIGHT_GATEWAY_LINK},
+					Rights: []ttnpb.Right{ttnpb.Right_RIGHT_GATEWAY_LINK},
 				},
-			},
+			}),
 		})
-		io, err = s.server.Connect(ctx, s, ids)
+
+		streamActive := cs.createStreamActive(s.config.ConnectionExpires, s.config.DownlinkPathExpires)
+		conn, err = s.server.Connect(ctx, s, ids, &ttnpb.GatewayRemoteAddress{
+			Ip: addr.IP.String(),
+		}, io.WithStreamActive(streamActive))
 		if err != nil {
 			return nil, err
 		}
@@ -245,39 +251,45 @@ func (s *srv) connect(ctx context.Context, eui types.EUI64) (*state, error) {
 		if cs.ioErr != nil {
 			return nil, cs.ioErr
 		}
+		// The connection may be disconnected and is awaiting garbage collection, see gc().
+		// The connection cannot be deleted from the map at this point, because before that, the downlink tasks must be
+		// awaited, which is not desirable here in the hot path.
+		if err := cs.io.Context().Err(); err != nil {
+			return nil, err
+		}
 	}
 	return cs, nil
 }
 
-func (s *srv) handleUp(ctx context.Context, state *state, packet encoding.Packet) error {
+func (s *srv) handleUp(ctx context.Context, st *state, packet encoding.Packet) error {
 	logger := log.FromContext(ctx)
 	md := encoding.UpstreamMetadata{
-		ID: state.io.Gateway().GatewayIdentifiers,
+		ID: st.io.Gateway().GetIds(),
 		IP: packet.GatewayAddr.IP.String(),
 	}
 
 	now := time.Now()
 	switch packet.PacketType {
 	case encoding.PullData:
-		atomic.StoreInt64(&state.lastSeenPull, now.UnixNano())
-		state.lastDownlinkPath.Store(downlinkPath{
+		atomic.StoreInt64(&st.lastSeenPull, now.UnixNano())
+		st.lastDownlinkPath.Store(&downlinkPath{
 			addr:    *packet.GatewayAddr,
 			version: packet.ProtocolVersion,
 		})
-		state.startHandleDownMu.RLock()
-		state.startHandleDown.Do(func() {
-			state.downlinkTaskDone.Add(1)
+		st.startHandleDownMu.RLock()
+		st.startHandleDown.Do(func() {
+			st.downlinkTaskDone.Add(1)
 			go func() {
-				defer state.downlinkTaskDone.Done()
-				if err := s.handleDown(ctx, state); err != nil {
+				defer st.downlinkTaskDone.Done()
+				if err := s.handleDown(ctx, st); err != nil && !errors.Is(err, errDownlinkPathExpired) {
 					logger.WithError(err).Warn("Failed to handle downstream packet")
 				}
 			}()
 		})
-		state.startHandleDownMu.RUnlock()
+		st.startHandleDownMu.RUnlock()
 
 	case encoding.PushData:
-		atomic.StoreInt64(&state.lastSeenPush, now.UnixNano())
+		atomic.StoreInt64(&st.lastSeenPush, now.UnixNano())
 		if len(packet.Data.RxPacket) > 0 {
 			var timestamp uint32
 			for _, pkt := range packet.Data.RxPacket {
@@ -285,30 +297,30 @@ func (s *srv) handleUp(ctx context.Context, state *state, packet encoding.Packet
 					timestamp = pkt.Tmst
 				}
 			}
-			state.clockMu.Lock()
-			state.clock.Sync(timestamp, now)
-			state.clockMu.Unlock()
+			st.clockMu.Lock()
+			st.clock.Sync(timestamp, now)
+			st.clockMu.Unlock()
 		}
 		msg, err := encoding.ToGatewayUp(*packet.Data, md)
 		if err != nil {
 			logger.WithError(err).Warn("Failed to unmarshal packet")
 			return err
 		}
-		for _, up := range msg.UplinkMessages {
-			up.ReceivedAt = packet.ReceivedAt
-			if err := state.io.HandleUp(up); err != nil {
+		for _, up := range io.UniqueUplinkMessagesByRSSI(msg.UplinkMessages) {
+			up.ReceivedAt = timestamppb.New(packet.ReceivedAt)
+			if err := st.io.HandleUp(up, nil); err != nil {
 				logger.WithError(err).Warn("Failed to handle uplink message")
 			}
 		}
 		if msg.GatewayStatus != nil {
-			if err := state.io.HandleStatus(msg.GatewayStatus); err != nil {
+			if err := st.io.HandleStatus(msg.GatewayStatus); err != nil {
 				logger.WithError(err).Warn("Failed to handle status message")
 			}
 		}
 
 	case encoding.TxAck:
-		atomic.StoreInt64(&state.lastSeenPull, now.UnixNano())
-		if atomic.CompareAndSwapUint32(&state.receivedTxAck, 0, 1) {
+		atomic.StoreInt64(&st.lastSeenPull, now.UnixNano())
+		if atomic.CompareAndSwapUint32(&st.receivedTxAck, 0, 1) {
 			logger.Debug("Received Tx acknowledgment, JIT queue supported")
 		}
 		var msg *ttnpb.GatewayUp
@@ -327,16 +339,16 @@ func (s *srv) handleUp(ctx context.Context, state *state, packet encoding.Packet
 			}
 		}
 		var rtt *time.Duration
-		if downlink, delta, ok := state.tokens.Get(uint16(packet.Token[0])<<8|uint16(packet.Token[1]), packet.ReceivedAt); ok {
+		if downlink, delta, ok := st.tokens.Get(binary.BigEndian.Uint16(packet.Token[:]), packet.ReceivedAt); ok {
 			msg.TxAcknowledgment.DownlinkMessage = downlink
-			msg.TxAcknowledgment.CorrelationIDs = downlink.CorrelationIDs
+			msg.TxAcknowledgment.CorrelationIds = downlink.CorrelationIds
 			rtt = &delta
 		}
-		if err := state.io.HandleTxAck(msg.TxAcknowledgment); err != nil {
+		if err := st.io.HandleTxAck(msg.TxAcknowledgment); err != nil {
 			logger.WithError(err).Warn("Failed to handle Tx acknowledgment")
 		}
 		if rtt != nil {
-			state.io.RecordRTT(*rtt, packet.ReceivedAt)
+			st.io.RecordRTT(*rtt, packet.ReceivedAt)
 		}
 		// TODO: Send event to NS (https://github.com/TheThingsNetwork/lorawan-stack/issues/76)
 	}
@@ -345,26 +357,26 @@ func (s *srv) handleUp(ctx context.Context, state *state, packet encoding.Packet
 }
 
 var (
-	errClaimDownlinkFailed = errors.DefineUnavailable("downlink_claim", "failed to claim downlink")
+	errClaimDownlinkFailed = errors.DefineUnavailable("downlink_claim", "claim downlink")
 	errDownlinkPathExpired = errors.DefineAborted("downlink_path_expired", "downlink path expired")
 )
 
-func (s *srv) handleDown(ctx context.Context, state *state) error {
+func (s *srv) handleDown(ctx context.Context, st *state) error {
 	defer func() {
-		state.lastDownlinkPath.Store(downlinkPath{})
-		state.startHandleDownMu.Lock()
-		state.startHandleDown = &sync.Once{}
-		state.startHandleDownMu.Unlock()
+		st.lastDownlinkPath.Store(nil)
+		st.startHandleDownMu.Lock()
+		st.startHandleDown = &sync.Once{}
+		st.startHandleDownMu.Unlock()
 	}()
 	logger := log.FromContext(ctx)
-	if err := s.server.ClaimDownlink(ctx, state.io.Gateway().GatewayIdentifiers); err != nil {
+	if err := s.server.ClaimDownlink(ctx, st.io.Gateway().GetIds()); err != nil {
 		logger.WithError(err).Error("Failed to claim downlink path")
 		return errClaimDownlinkFailed.WithCause(err)
 	}
 	logger.Info("Downlink path claimed")
 	defer func() {
 		ctx := s.server.FromRequestContext(ctx)
-		if err := s.server.UnclaimDownlink(ctx, state.io.Gateway().GatewayIdentifiers); err != nil {
+		if err := s.server.UnclaimDownlink(ctx, st.io.Gateway().GetIds()); err != nil {
 			logger.WithError(err).Error("Failed to unclaim downlink path")
 			return
 		}
@@ -376,16 +388,20 @@ func (s *srv) handleDown(ctx context.Context, state *state) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-state.io.Context().Done():
-			return state.io.Context().Err()
-		case down := <-state.io.Down():
+		case <-st.io.Context().Done():
+			return st.io.Context().Err()
+		case down := <-st.io.Down():
 			tx, err := encoding.FromDownlinkMessage(down)
 			if err != nil {
 				logger.WithError(err).Warn("Failed to marshal downlink message")
 				// TODO: Report to Network Server: https://github.com/TheThingsNetwork/lorawan-stack/issues/76
 				break
 			}
-			downlinkPath := state.lastDownlinkPath.Load().(downlinkPath)
+			downlinkPath := st.lastDownlinkPath.Load()
+			if downlinkPath == nil {
+				logger.Debug("Received downlink message without an active downlink path")
+				break
+			}
 			logger := logger.WithField("remote_addr", downlinkPath.addr.String())
 			packet := encoding.Packet{
 				GatewayAddr:     &downlinkPath.addr,
@@ -397,37 +413,37 @@ func (s *srv) handleDown(ctx context.Context, state *state) error {
 			}
 			write := func() {
 				logger.Debug("Write downlink message")
-				token := state.tokens.Next(down, time.Now())
-				packet.Token = [2]byte{byte(token >> 8), byte(token)}
+				token := st.tokens.Next(down, time.Now())
+				packet.Token = [2]byte(binary.BigEndian.AppendUint16(nil, token))
 				if err := s.write(packet); err != nil {
 					logger.WithError(err).Warn("Failed to write downlink message")
 					// TODO: Report to Network Server: https://github.com/TheThingsNetwork/lorawan-stack/issues/76
 				}
 			}
-			canImmediate := atomic.LoadUint32(&state.receivedTxAck) == 1
-			forceLate := state.io.Gateway().ScheduleDownlinkLate
+			canImmediate := atomic.LoadUint32(&st.receivedTxAck) == 1
+			forceLate := st.io.Gateway().ScheduleDownlinkLate
 			if canImmediate && !forceLate {
 				write()
 				break
 			}
-			state.clockMu.RLock()
-			if !state.clock.IsSynced() {
-				state.clockMu.RUnlock()
+			st.clockMu.RLock()
+			if !st.clock.IsSynced() {
+				st.clockMu.RUnlock()
 				logger.Warn("Schedule late forced but no gateway clock available")
 				write()
 				break
 			}
-			serverTime := state.clock.ToServerTime(state.clock.FromTimestampTime(tx.Tmst))
-			state.clockMu.RUnlock()
+			serverTime := st.clock.ToServerTime(st.clock.FromTimestampTime(tx.Tmst))
+			st.clockMu.RUnlock()
 			d := time.Until(serverTime.Add(-s.config.ScheduleLateTime))
 			logger.WithField("duration", d).Debug("Wait to schedule downlink message late")
 			time.AfterFunc(d, write)
 		case <-healthCheck.C:
-			lastSeenPull := time.Unix(0, atomic.LoadInt64(&state.lastSeenPull))
-			if time.Since(lastSeenPull) > s.config.DownlinkPathExpires {
-				logger.Debug("Downlink path expired")
-				return errDownlinkPathExpired.New()
+			if st.isPullPathActive(s.config.DownlinkPathExpires) {
+				break
 			}
+			logger.Debug("Downlink path expired")
+			return errDownlinkPathExpired.New()
 		}
 	}
 }
@@ -465,33 +481,30 @@ func (s *srv) gc() {
 			connectionsTicker.Stop()
 			return
 		case <-connectionsTicker.C:
-			s.connections.Range(func(k, v interface{}) bool {
+			s.connections.Range(func(k, v any) bool {
 				logger := logger.WithField("gateway_eui", k.(types.EUI64))
-				state := v.(*state)
+				st := v.(*state)
 				select {
-				case <-state.ioWait:
+				case <-st.ioWait:
 				default:
 					return true
 				}
-				if state.ioErr != nil {
+				if st.ioErr != nil {
 					return true
 				}
 				select {
-				case <-state.io.Context().Done():
+				case <-st.io.Context().Done():
 					logger.Debug("Connection context done")
-					state.downlinkTaskDone.Wait()
+					st.downlinkTaskDone.Wait()
 					s.connections.Delete(k)
 				default:
-					lastSeenPull := time.Unix(0, atomic.LoadInt64(&state.lastSeenPull))
-					if time.Since(lastSeenPull) > s.config.ConnectionExpires {
-						lastSeenPush := time.Unix(0, atomic.LoadInt64(&state.lastSeenPush))
-						if time.Since(lastSeenPush) > s.config.ConnectionExpires {
-							logger.Debug("Connection expired")
-							state.io.Disconnect(errConnectionExpired)
-							state.downlinkTaskDone.Wait()
-							s.connections.Delete(k)
-						}
+					if st.isAnyPathActive(s.config.ConnectionExpires) {
+						break
 					}
+					logger.Debug("Connection expired")
+					st.io.Disconnect(errConnectionExpired.New())
+					st.downlinkTaskDone.Wait()
+					s.connections.Delete(k)
 				}
 				return true
 			})
@@ -518,25 +531,36 @@ type state struct {
 	clockMu sync.RWMutex
 
 	downlinkTaskDone  *sync.WaitGroup
-	lastDownlinkPath  atomic.Value // downlinkPath
+	lastDownlinkPath  atomic.Pointer[downlinkPath]
 	startHandleDown   *sync.Once
 	startHandleDownMu sync.RWMutex
 
 	tokens io.DownlinkTokens
 }
 
-func recoverUDPFrontend(ctx context.Context) error {
-	if p := recover(); p != nil {
-		fmt.Fprintln(os.Stderr, p)
-		os.Stderr.Write(debug.Stack())
-		var err error
-		if pErr, ok := p.(error); ok {
-			err = errUDPFrontendRecovered.WithCause(pErr)
-		} else {
-			err = errUDPFrontendRecovered.WithAttributes("panic", p)
+func (st *state) isPullPathActive(timeout time.Duration) bool {
+	lastSeenPull := time.Unix(0, atomic.LoadInt64(&st.lastSeenPull))
+	return time.Since(lastSeenPull) <= timeout
+}
+
+func (st *state) isPushPathActive(timeout time.Duration) bool {
+	lastSeenPush := time.Unix(0, atomic.LoadInt64(&st.lastSeenPush))
+	return time.Since(lastSeenPush) <= timeout
+}
+
+func (st *state) isAnyPathActive(timeout time.Duration) bool {
+	return st.isPullPathActive(timeout) || st.isPushPathActive(timeout)
+}
+
+func (st *state) createStreamActive(pushTimeout, pullTimeout time.Duration) func(io.MessageStream) bool {
+	return func(stream io.MessageStream) bool {
+		switch stream {
+		case io.UplinkStream, io.StatusStream:
+			return st.isPushPathActive(pushTimeout)
+		case io.DownlinkStream, io.TxAckStream, io.RTTStream:
+			return st.isPullPathActive(pullTimeout)
+		default:
+			panic("unknown stream")
 		}
-		log.FromContext(ctx).WithError(err).Error("UDP frontend failed")
-		return err
 	}
-	return nil
 }

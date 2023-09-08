@@ -21,13 +21,12 @@ import (
 	"time"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	clusterauth "go.thethings.network/lorawan-stack/v3/pkg/auth/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/rpcmiddleware/hooks"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -41,9 +40,9 @@ var (
 )
 
 type asImplementation struct {
-	*component.Component
 	ttnpb.UnimplementedAppAsServer
 
+	*component.Component
 	up chan *ttnpb.ApplicationUp
 }
 
@@ -62,6 +61,8 @@ func (as *asImplementation) Subscribe(id *ttnpb.ApplicationIdentifiers, stream t
 }
 
 type gsImplementation struct {
+	ttnpb.UnimplementedGsServer
+
 	*component.Component
 }
 
@@ -70,6 +71,15 @@ func (gs *gsImplementation) GetGatewayConnectionStats(ctx context.Context, _ *tt
 		return nil, err
 	}
 	return &ttnpb.GatewayConnectionStats{}, nil
+}
+
+func (*gsImplementation) BatchGetGatewayConnectionStats(ctx context.Context,
+	_ *ttnpb.BatchGetGatewayConnectionStatsRequest,
+) (*ttnpb.BatchGetGatewayConnectionStatsResponse, error) {
+	if err := clusterauth.Authorized(ctx); err != nil {
+		return nil, err
+	}
+	return &ttnpb.BatchGetGatewayConnectionStatsResponse{}, nil
 }
 
 func TestHooks(t *testing.T) {
@@ -98,12 +108,12 @@ func TestHooks(t *testing.T) {
 		t.FailNow()
 	}
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(errors.UnaryServerInterceptor(), hooks.UnaryServerInterceptor())),
-		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(errors.StreamServerInterceptor(), hooks.StreamServerInterceptor())),
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(errors.UnaryServerInterceptor(), c.GRPC.UnaryServerInterceptor())),
+		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(errors.StreamServerInterceptor(), c.GRPC.StreamServerInterceptor())),
 	)
 
-	hooks.RegisterUnaryHook("/ttn.lorawan.v3.Gs", cluster.HookName, c.ClusterAuthUnaryHook())
-	hooks.RegisterStreamHook("/ttn.lorawan.v3.AppAs", cluster.HookName, c.ClusterAuthStreamHook())
+	c.GRPC.RegisterUnaryHook("/ttn.lorawan.v3.Gs", cluster.HookName, c.ClusterAuthUnaryHook())
+	c.GRPC.RegisterStreamHook("/ttn.lorawan.v3.AppAs", cluster.HookName, c.ClusterAuthStreamHook())
 
 	as := &asImplementation{
 		Component: c,
@@ -161,13 +171,13 @@ func TestHooks(t *testing.T) {
 			as.up <- &ttnpb.ApplicationUp{
 				Up: &ttnpb.ApplicationUp_UplinkMessage{
 					UplinkMessage: &ttnpb.ApplicationUplink{
-						SessionKeyID: []byte{0x11, 0x22, 0x33, 0x44},
+						SessionKeyId: []byte{0x11, 0x22, 0x33, 0x44},
 					},
 				},
 			}
 		}()
 		up, err := sub.Recv()
 		a.So(err, should.BeNil)
-		a.So(up.GetUplinkMessage().SessionKeyID, should.Resemble, []byte{0x11, 0x22, 0x33, 0x44})
+		a.So(up.GetUplinkMessage().SessionKeyId, should.Resemble, []byte{0x11, 0x22, 0x33, 0x44})
 	}
 }

@@ -29,7 +29,9 @@ type Entry interface {
 
 // entry implements Entry.
 type entry struct {
-	logger  *Logger
+	logger interface {
+		commit(e *entry)
+	}
 	level   Level
 	message string
 	time    time.Time
@@ -37,8 +39,10 @@ type entry struct {
 }
 
 // interface assertions.
-var _ Entry = &entry{}
-var _ Interface = &entry{}
+var (
+	_ Entry     = &entry{}
+	_ Interface = &entry{}
+)
 
 // Level implements Entry.
 func (e *entry) Level() Level {
@@ -71,57 +75,57 @@ func (e *entry) commit(level Level, msg string) {
 }
 
 // Debug implements log.Interface.
-func (e *entry) Debug(msg string) {
-	e.commit(DebugLevel, msg)
+func (e *entry) Debug(args ...any) {
+	e.commit(DebugLevel, fmt.Sprint(args...))
 }
 
 // Info implements log.Interface.
-func (e *entry) Info(msg string) {
-	e.commit(InfoLevel, msg)
+func (e *entry) Info(args ...any) {
+	e.commit(InfoLevel, fmt.Sprint(args...))
 }
 
 // Warn implements log.Interface.
-func (e *entry) Warn(msg string) {
-	e.commit(WarnLevel, msg)
+func (e *entry) Warn(args ...any) {
+	e.commit(WarnLevel, fmt.Sprint(args...))
 }
 
 // Error implements log.Interface.
-func (e *entry) Error(msg string) {
-	e.commit(ErrorLevel, msg)
+func (e *entry) Error(args ...any) {
+	e.commit(ErrorLevel, fmt.Sprint(args...))
 }
 
 // Fatal implements log.Interface.
-func (e *entry) Fatal(msg string) {
-	e.commit(FatalLevel, msg)
+func (e *entry) Fatal(args ...any) {
+	e.commit(FatalLevel, fmt.Sprint(args...))
 }
 
 // Debugf implements log.Interface.
-func (e *entry) Debugf(msg string, v ...interface{}) {
+func (e *entry) Debugf(msg string, v ...any) {
 	e.Debug(fmt.Sprintf(msg, v...))
 }
 
 // Infof implements log.Interface.
-func (e *entry) Infof(msg string, v ...interface{}) {
+func (e *entry) Infof(msg string, v ...any) {
 	e.Info(fmt.Sprintf(msg, v...))
 }
 
 // Warnf implements log.Interface.
-func (e *entry) Warnf(msg string, v ...interface{}) {
+func (e *entry) Warnf(msg string, v ...any) {
 	e.Warn(fmt.Sprintf(msg, v...))
 }
 
 // Errorf implements log.Interface.
-func (e *entry) Errorf(msg string, v ...interface{}) {
+func (e *entry) Errorf(msg string, v ...any) {
 	e.Error(fmt.Sprintf(msg, v...))
 }
 
 // Fatalf implements log.Interface.
-func (e *entry) Fatalf(msg string, v ...interface{}) {
+func (e *entry) Fatalf(msg string, v ...any) {
 	e.Fatal(fmt.Sprintf(msg, v...))
 }
 
 // WithField implements log.Interface.
-func (e *entry) WithField(name string, value interface{}) Interface {
+func (e *entry) WithField(name string, value any) Interface {
 	return &entry{
 		logger:  e.logger,
 		time:    e.time,

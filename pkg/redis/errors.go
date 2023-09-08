@@ -15,13 +15,13 @@
 package redis
 
 import (
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 )
 
 var (
-	errDecode              = errors.Define("decode", "failed to decode value")
-	errEncode              = errors.Define("encode", "failed to encode value")
+	errDecode              = errors.Define("decode", "decode value")
+	errEncode              = errors.Define("encode", "encode value")
 	errInvalidKeyValueType = errors.DefineInvalidArgument("value_type", "invalid value type for key `{key}`")
 	errNoArguments         = errors.DefineInvalidArgument("no_arguments", "no arguments")
 	errNotFound            = errors.DefineNotFound("not_found", "entity not found")

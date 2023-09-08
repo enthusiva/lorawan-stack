@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,14 +23,17 @@ import Checkbox from '@ttn-lw/components/checkbox'
 import Select from '@ttn-lw/components/select'
 import SubmitBar from '@ttn-lw/components/submit-bar'
 import SubmitButton from '@ttn-lw/components/submit-button'
-import Notification from '@ttn-lw/components/notification'
 import ModalButton from '@ttn-lw/components/button/modal-button'
 import PortalledModal from '@ttn-lw/components/modal/portalled'
+import Link from '@ttn-lw/components/link'
+
+import Message from '@ttn-lw/lib/components/message'
 
 import PubsubFormatSelector from '@console/containers/pubsub-formats-select'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 import PropTypes from '@ttn-lw/lib/prop-types'
+import tooltipIds from '@ttn-lw/lib/constants/tooltip-ids'
 
 import m from './messages'
 import {
@@ -50,22 +53,16 @@ export default class PubsubForm extends Component {
     appId: PropTypes.string.isRequired,
     existCheck: PropTypes.func,
     initialPubsubValue: PropTypes.pubsub,
+    mqttDisabled: PropTypes.bool.isRequired,
+    natsDisabled: PropTypes.bool.isRequired,
     onDelete: PropTypes.func,
-    onDeleteFailure: PropTypes.func,
-    onDeleteSuccess: PropTypes.func,
     onSubmit: PropTypes.func.isRequired,
-    onSubmitFailure: PropTypes.func,
-    onSubmitSuccess: PropTypes.func,
     update: PropTypes.bool.isRequired,
   }
 
   static defaultProps = {
     initialPubsubValue: undefined,
     existCheck: () => false,
-    onSubmitSuccess: () => null,
-    onSubmitFailure: () => null,
-    onDeleteSuccess: () => null,
-    onDeleteFailure: () => null,
     onDelete: () => null,
   }
 
@@ -76,15 +73,23 @@ export default class PubsubForm extends Component {
     this.modalResolve = () => null
     this.modalReject = () => null
 
-    const { initialPubsubValue, update } = this.props
+    const { initialPubsubValue, update, mqttDisabled, natsDisabled } = this.props
 
     this.state = {
       error: undefined,
+      mqttDisabled,
       provider: blankValues._provider,
       mqttUseCredentials: true,
       natsUseCredentials: true,
+      natsDisabled,
       displayOverwriteModal: false,
       existingId: undefined,
+    }
+
+    if (natsDisabled && mqttDisabled) {
+      this.state.provider = blankValues._provider
+    } else {
+      this.state.provider = natsDisabled ? providers.MQTT : providers.NATS
     }
 
     if (update && 'nats' in initialPubsubValue) {
@@ -101,13 +106,13 @@ export default class PubsubForm extends Component {
   }
 
   @bind
-  async handleSubmit(values, { setSubmitting, resetForm }) {
-    const { appId, onSubmit, onSubmitSuccess, onSubmitFailure, existCheck, update } = this.props
+  async handleSubmit(values, { resetForm }) {
+    const { appId, onSubmit, existCheck, update } = this.props
 
     const castedValues = validationSchema.cast(values)
     const pubsub = mapFormValuesToPubsub(castedValues, appId)
 
-    await this.setState({ error: '' })
+    this.setState({ error: '' })
 
     try {
       if (!update) {
@@ -121,28 +126,24 @@ export default class PubsubForm extends Component {
           })
         }
       }
-      const result = await onSubmit(pubsub)
+      await onSubmit(pubsub)
 
       resetForm({ values })
-      await onSubmitSuccess(result)
     } catch (error) {
       resetForm({ values })
 
-      await this.setState({ error })
-      await onSubmitFailure(error)
+      this.setState({ error })
     }
   }
 
   @bind
   async handleDelete() {
-    const { onDelete, onDeleteSuccess, onDeleteFailure } = this.props
+    const { onDelete } = this.props
     try {
       await onDelete()
       this.form.current.resetForm()
-      onDeleteSuccess()
     } catch (error) {
-      await this.setState({ error })
-      onDeleteFailure()
+      this.setState({ error })
     }
   }
 
@@ -181,10 +182,10 @@ export default class PubsubForm extends Component {
     return (
       <>
         <Form.SubTitle title={m.natsConfig} />
-        <Form.Field name="nats.secure" title={m.useSecureConnection} component={Checkbox} />
+        <Form.Field name="nats.secure" label={m.useSecureConnection} component={Checkbox} />
         <Form.Field
           name="nats._use_credentials"
-          title={m.useCredentials}
+          label={m.useCredentials}
           component={Checkbox}
           onChange={this.handleUseCredentialsChangeNats}
         />
@@ -203,6 +204,7 @@ export default class PubsubForm extends Component {
           component={Input}
           required={natsUseCredentials}
           disabled={!natsUseCredentials}
+          sensitive
         />
         <Form.Field
           name="nats.address"
@@ -232,7 +234,7 @@ export default class PubsubForm extends Component {
         <Form.SubTitle title={m.mqttConfig} />
         <Form.Field
           name="mqtt.use_tls"
-          title={m.useSecureConnection}
+          label={m.useSecureConnection}
           component={Checkbox}
           onChange={this.handleMqttUseTlsChange}
         />
@@ -283,7 +285,7 @@ export default class PubsubForm extends Component {
         />
         <Form.Field
           name="mqtt._use_credentials"
-          title={m.useCredentials}
+          label={m.useCredentials}
           component={Checkbox}
           onChange={this.handleUseCredentialsChangeMqtt}
         />
@@ -301,6 +303,7 @@ export default class PubsubForm extends Component {
           placeholder={m.passwordPlaceholder}
           component={Input}
           disabled={!mqttUseCredentials}
+          sensitive
         />
         <Form.Field
           title={m.subscribeQos}
@@ -323,7 +326,8 @@ export default class PubsubForm extends Component {
   get messageTypesSection() {
     return (
       <>
-        <Form.SubTitle title={sharedMessages.messageTypes} />
+        <Form.SubTitle title={sharedMessages.eventEnabledTypes} className="mb-0" />
+        <Message component="p" content={m.messageInfo} className="mt-0 mb-ls-xxs" />
         <PubsubFormatSelector name="format" required />
         <Form.Field
           name="base_topic"
@@ -331,97 +335,117 @@ export default class PubsubForm extends Component {
           placeholder="base-topic"
           component={Input}
         />
-        <Notification content={m.messageInfo} info small />
         <Form.Field
           name="uplink_message"
           type="toggled-input"
-          title={sharedMessages.uplinkMessage}
+          enabledMessage={sharedMessages.uplinkMessage}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventUplinkMessageDesc}
+        />
+        <Form.Field
+          name="uplink_normalized"
+          type="toggled-input"
+          enabledMessage={sharedMessages.uplinkNormalized}
+          placeholder={pathPlaceholder}
+          component={Input.Toggled}
+          description={sharedMessages.eventUplinkNormalizedDesc}
         />
         <Form.Field
           name="join_accept"
           type="toggled-input"
-          title={sharedMessages.joinAccept}
+          enabledMessage={sharedMessages.joinAccept}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventJoinAcceptDesc}
         />
         <Form.Field
           name="downlink_ack"
           type="toggled-input"
-          title={sharedMessages.downlinkAck}
+          enabledMessage={sharedMessages.downlinkAck}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkAckDesc}
         />
         <Form.Field
           name="downlink_nack"
           type="toggled-input"
-          title={sharedMessages.downlinkNack}
+          enabledMessage={sharedMessages.downlinkNack}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkNackDesc}
         />
         <Form.Field
           name="downlink_sent"
           type="toggled-input"
-          title={sharedMessages.downlinkSent}
+          enabledMessage={sharedMessages.downlinkSent}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkSentDesc}
         />
         <Form.Field
           name="downlink_failed"
           type="toggled-input"
-          title={sharedMessages.downlinkFailed}
+          enabledMessage={sharedMessages.downlinkFailed}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkFailedDesc}
         />
         <Form.Field
           name="downlink_queued"
           type="toggled-input"
-          title={sharedMessages.downlinkQueued}
+          enabledMessage={sharedMessages.downlinkQueued}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkQueuedDesc}
         />
         <Form.Field
           name="downlink_queue_invalidated"
           type="toggled-input"
-          title={sharedMessages.downlinkQueueInvalidated}
+          enabledMessage={sharedMessages.downlinkQueueInvalidated}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          tooltipId={tooltipIds.DOWNLINK_QUEUE_INVALIDATED}
+          description={sharedMessages.eventDownlinkQueueInvalidatedDesc}
         />
         <Form.Field
           name="location_solved"
           type="toggled-input"
-          title={sharedMessages.locationSolved}
+          enabledMessage={sharedMessages.locationSolved}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventLocationSolvedDesc}
         />
         <Form.Field
           name="service_data"
           type="toggled-input"
-          title={sharedMessages.serviceData}
+          enabledMessage={sharedMessages.serviceData}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventServiceDataDesc}
         />
         <Form.Field
           name="downlink_push"
           type="toggled-input"
-          title={sharedMessages.downlinkPush}
+          enabledMessage={sharedMessages.downlinkPush}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkPushDesc}
         />
         <Form.Field
           name="downlink_replace"
           type="toggled-input"
-          title={sharedMessages.downlinkReplace}
+          enabledMessage={sharedMessages.downlinkReplace}
           placeholder={pathPlaceholder}
           component={Input.Toggled}
+          description={sharedMessages.eventDownlinkReplaceDesc}
         />
       </>
     )
   }
 
   render() {
-    const { update, initialPubsubValue } = this.props
+    const { update, initialPubsubValue, mqttDisabled, natsDisabled } = this.props
     const { error, provider, displayOverwriteModal, existingId } = this.state
     let initialValues = blankValues
     if (update && initialPubsubValue) {
@@ -429,66 +453,81 @@ export default class PubsubForm extends Component {
     }
 
     return (
-      <Form
-        onSubmit={this.handleSubmit}
-        validationSchema={validationSchema}
-        initialValues={initialValues}
-        error={error}
-        formikRef={this.form}
-      >
-        <PortalledModal
-          title={sharedMessages.idAlreadyExists}
-          message={{ ...m.alreadyExistsModalMessage, values: { id: existingId } }}
-          buttonMessage={m.replacePubsub}
-          onComplete={this.handleReplaceModalDecision}
-          approval
-          visible={displayOverwriteModal}
+      <>
+        <Message
+          content={m.pubsubsDescription}
+          values={{
+            Link: val => (
+              <Link.DocLink path="/integrations/pubsub" secondary>
+                {val}
+              </Link.DocLink>
+            ),
+          }}
+          component="p"
         />
-        <Form.SubTitle title={sharedMessages.generalInformation} />
-        <Form.Field
-          name="pub_sub_id"
-          title={sharedMessages.pubsubId}
-          placeholder={m.idPlaceholder}
-          component={Input}
-          required
-          autoFocus
-          disabled={update}
-        />
-        <Form.Field
-          horizontal
-          title={sharedMessages.provider}
-          name="_provider"
-          component={Radio.Group}
+        <hr className="mb-ls-m" />
+        <Form
+          onSubmit={this.handleSubmit}
+          validationSchema={validationSchema}
+          initialValues={initialValues}
+          error={error}
+          formikRef={this.form}
         >
-          <Radio label="NATS" value={providers.NATS} onChange={this.handleProviderSelect} />
-          <Radio label="MQTT" value={providers.MQTT} onChange={this.handleProviderSelect} />
-        </Form.Field>
-        {provider === providers.NATS && this.natsSection}
-        {provider === providers.MQTT && this.mqttSection}
-        {this.messageTypesSection}
-        <SubmitBar>
-          <Form.Submit
-            component={SubmitButton}
-            message={update ? sharedMessages.saveChanges : sharedMessages.addPubsub}
+          <PortalledModal
+            title={sharedMessages.idAlreadyExists}
+            message={{ ...m.alreadyExistsModalMessage, values: { id: existingId } }}
+            buttonMessage={m.replacePubsub}
+            onComplete={this.handleReplaceModalDecision}
+            approval
+            visible={displayOverwriteModal}
           />
-          {update && (
-            <ModalButton
-              type="button"
-              icon="delete"
-              danger
-              naked
-              message={m.deletePubsub}
-              modalData={{
-                message: {
-                  values: { pubsubId: initialPubsubValue.ids.pub_sub_id },
-                  ...m.modalWarning,
-                },
-              }}
-              onApprove={this.handleDelete}
+          <Form.SubTitle title={sharedMessages.generalSettings} />
+          <Form.Field
+            name="pub_sub_id"
+            title={sharedMessages.pubsubId}
+            placeholder={m.idPlaceholder}
+            component={Input}
+            required
+            autoFocus
+            disabled={update}
+          />
+          <Form.Field
+            horizontal
+            title={sharedMessages.provider}
+            name="_provider"
+            component={Radio.Group}
+            disabled={natsDisabled || mqttDisabled}
+          >
+            <Radio label="NATS" value={providers.NATS} onChange={this.handleProviderSelect} />
+            <Radio label="MQTT" value={providers.MQTT} onChange={this.handleProviderSelect} />
+          </Form.Field>
+          {provider === providers.NATS && this.natsSection}
+          {provider === providers.MQTT && this.mqttSection}
+          {this.messageTypesSection}
+          <SubmitBar>
+            <Form.Submit
+              component={SubmitButton}
+              message={update ? sharedMessages.saveChanges : sharedMessages.addPubsub}
             />
-          )}
-        </SubmitBar>
-      </Form>
+            {update && (
+              <ModalButton
+                type="button"
+                icon="delete"
+                danger
+                naked
+                message={m.deletePubsub}
+                modalData={{
+                  message: {
+                    values: { pubsubId: initialPubsubValue.ids.pub_sub_id },
+                    ...m.modalWarning,
+                  },
+                }}
+                onApprove={this.handleDelete}
+              />
+            )}
+          </SubmitBar>
+        </Form>
+      </>
     )
   }
 }

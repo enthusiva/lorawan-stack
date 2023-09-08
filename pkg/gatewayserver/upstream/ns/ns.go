@@ -18,6 +18,7 @@ package ns
 import (
 	"context"
 
+	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
@@ -28,31 +29,37 @@ import (
 
 // Cluster provides cluster operations.
 type Cluster interface {
-	GetPeerConn(ctx context.Context, role ttnpb.ClusterRole, ids ttnpb.Identifiers) (*grpc.ClientConn, error)
+	GetPeerConn(ctx context.Context, role ttnpb.ClusterRole, ids cluster.EntityIdentifiers) (*grpc.ClientConn, error)
 	WithClusterAuth() grpc.CallOption
-	ClaimIDs(ctx context.Context, ids ttnpb.Identifiers) error
-	UnclaimIDs(ctx context.Context, ids ttnpb.Identifiers) error
+	ClaimIDs(ctx context.Context, ids cluster.EntityIdentifiers) error
+	UnclaimIDs(ctx context.Context, ids cluster.EntityIdentifiers) error
+}
+
+// ContextDecoupler decouples the request context from its values.
+type ContextDecoupler interface {
 	FromRequestContext(ctx context.Context) context.Context
 }
 
 // Handler is the upstream handler.
 type Handler struct {
-	ctx             context.Context
-	cluster         Cluster
-	devAddrPrefixes []types.DevAddrPrefix
+	ctx              context.Context
+	cluster          Cluster
+	contextDecoupler ContextDecoupler
+	devAddrPrefixes  []types.DevAddrPrefix
 }
 
 // NewHandler returns a new upstream handler.
-func NewHandler(ctx context.Context, cluster Cluster, devAddrPrefixes []types.DevAddrPrefix) *Handler {
+func NewHandler(ctx context.Context, cluster Cluster, contextDecoupler ContextDecoupler, devAddrPrefixes []types.DevAddrPrefix) *Handler {
 	return &Handler{
-		ctx:             ctx,
-		cluster:         cluster,
-		devAddrPrefixes: devAddrPrefixes,
+		ctx:              ctx,
+		cluster:          cluster,
+		contextDecoupler: contextDecoupler,
+		devAddrPrefixes:  devAddrPrefixes,
 	}
 }
 
-// GetDevAddrPrefixes implements upstream.Handler.
-func (h *Handler) GetDevAddrPrefixes() []types.DevAddrPrefix {
+// DevAddrPrefixes implements upstream.Handler.
+func (h *Handler) DevAddrPrefixes() []types.DevAddrPrefix {
 	return h.devAddrPrefixes
 }
 
@@ -62,20 +69,20 @@ func (h *Handler) Setup(context.Context) error {
 }
 
 // ConnectGateway implements upstream.Handler.
-func (h *Handler) ConnectGateway(ctx context.Context, ids ttnpb.GatewayIdentifiers, conn *io.Connection) error {
+func (h *Handler) ConnectGateway(ctx context.Context, ids *ttnpb.GatewayIdentifiers, conn *io.Connection) error {
 	// If the frontend can claim downlinks, don't claim automatically on connection.
 	if conn.Frontend().SupportsDownlinkClaim() {
 		return nil
 	}
+	decoupledCtx := h.contextDecoupler.FromRequestContext(ctx)
 	logger := log.FromContext(ctx)
-	if err := h.cluster.ClaimIDs(ctx, ids); err != nil {
+	if err := h.cluster.ClaimIDs(decoupledCtx, ids); err != nil {
 		logger.WithError(err).Error("Failed to claim downlink path")
 		return err
 	}
 	logger.Info("Downlink path claimed")
 	defer func() {
-		ctx := h.cluster.FromRequestContext(ctx)
-		if err := h.cluster.UnclaimIDs(ctx, ids); err != nil {
+		if err := h.cluster.UnclaimIDs(decoupledCtx, ids); err != nil {
 			logger.WithError(err).Error("Failed to unclaim downlink path")
 			return
 		}
@@ -88,29 +95,29 @@ func (h *Handler) ConnectGateway(ctx context.Context, ids ttnpb.GatewayIdentifie
 var errNetworkServerNotFound = errors.DefineNotFound("network_server_not_found", "Network Server not found")
 
 // HandleUplink implements upstream.Handler.
-func (h *Handler) HandleUplink(ctx context.Context, _ ttnpb.GatewayIdentifiers, ids ttnpb.EndDeviceIdentifiers, msg *ttnpb.GatewayUplinkMessage) error {
-	nsConn, err := h.cluster.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
+func (h *Handler) HandleUplink(ctx context.Context, _ *ttnpb.GatewayIdentifiers, ids *ttnpb.EndDeviceIdentifiers, msg *ttnpb.GatewayUplinkMessage) error {
+	nsConn, err := h.cluster.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
 	if err != nil {
 		return errNetworkServerNotFound.WithCause(err)
 	}
-	_, err = ttnpb.NewGsNsClient(nsConn).HandleUplink(ctx, msg.UplinkMessage, h.cluster.WithClusterAuth())
+	_, err = ttnpb.NewGsNsClient(nsConn).HandleUplink(ctx, msg.Message, h.cluster.WithClusterAuth())
 	return err
 }
 
 // HandleStatus implements upstream.Handler.
-func (h *Handler) HandleStatus(context.Context, ttnpb.GatewayIdentifiers, *ttnpb.GatewayStatus) error {
+func (h *Handler) HandleStatus(context.Context, *ttnpb.GatewayIdentifiers, *ttnpb.GatewayStatus) error {
 	return nil
 }
 
 // HandleTxAck implements upstream.Handler.
-func (h *Handler) HandleTxAck(ctx context.Context, ids ttnpb.GatewayIdentifiers, msg *ttnpb.TxAcknowledgment) error {
-	nsConn, err := h.cluster.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, ids)
+func (h *Handler) HandleTxAck(ctx context.Context, ids *ttnpb.GatewayIdentifiers, msg *ttnpb.TxAcknowledgment) error {
+	nsConn, err := h.cluster.GetPeerConn(ctx, ttnpb.ClusterRole_NETWORK_SERVER, nil)
 	if err != nil {
 		return errNetworkServerNotFound.WithCause(err)
 	}
 	_, err = ttnpb.NewGsNsClient(nsConn).ReportTxAcknowledgment(ctx, &ttnpb.GatewayTxAcknowledgment{
 		TxAck:      msg,
-		GatewayIDs: &ids,
+		GatewayIds: ids,
 	}, h.cluster.WithClusterAuth())
 	return err
 }

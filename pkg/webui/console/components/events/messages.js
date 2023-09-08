@@ -23,6 +23,7 @@ const messages = defineMessages({
   fCnt: 'FCnt',
   rawPayload: 'Raw payload',
   txPower: 'Tx Power',
+  dataRate: 'Data rate',
   bandwidth: 'Bandwidth',
   metrics: 'Metrics',
   versions: 'Versions',
@@ -31,6 +32,11 @@ const messages = defineMessages({
   sessionKeyId: 'Session key ID',
   selectedMacVersion: 'Selected MAC version',
   rx1Delay: 'Rx1 Delay',
+  rx1DataRateIndex: 'Rx1 Data Rate Index',
+  rx1Frequency: 'Rx1 Frequency',
+  rx2DataRateIndex: 'Rx2 Data Rate Index',
+  rx2Frequency: 'Rx2 Frequency',
+  class: 'Class',
   // Generic messages
   eventDetails: 'Event details',
   rawEvent: 'Raw event',
@@ -46,6 +52,9 @@ const messages = defineMessages({
   eventsTruncated:
     'Old events have been truncated to save memory. The current event limit per stream is {limit}.',
   eventUnavailable: 'This event is not available anymore. It was likely truncated to save memory.',
+  verboseStream: 'Verbose stream',
+  confirmedDownlink: 'Confirmed downlink',
+  confirmedUplink: 'Confirmed uplink',
 })
 
 export default messages

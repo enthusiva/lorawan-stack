@@ -17,24 +17,21 @@ package identityserver
 import (
 	"context"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/jinzhu/gorm"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
-	"go.thethings.network/lorawan-stack/v3/pkg/email"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
-	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/emails"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
-	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/unique"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
 	evtUpdateClientCollaborator = events.Define(
 		"client.collaborator.update", "update client collaborator",
 		events.WithVisibility(
-			ttnpb.RIGHT_CLIENT_ALL,
-			ttnpb.RIGHT_USER_CLIENTS_LIST,
+			ttnpb.Right_RIGHT_CLIENT_SETTINGS_COLLABORATORS,
+			ttnpb.Right_RIGHT_USER_CLIENTS_LIST,
 		),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
@@ -42,34 +39,38 @@ var (
 	evtDeleteClientCollaborator = events.Define(
 		"client.collaborator.delete", "delete client collaborator",
 		events.WithVisibility(
-			ttnpb.RIGHT_CLIENT_ALL,
-			ttnpb.RIGHT_USER_CLIENTS_LIST,
+			ttnpb.Right_RIGHT_CLIENT_SETTINGS_COLLABORATORS,
+			ttnpb.Right_RIGHT_USER_CLIENTS_LIST,
 		),
 		events.WithAuthFromContext(),
 		events.WithClientInfoFromContext(),
 	)
 )
 
-func (is *IdentityServer) listClientRights(ctx context.Context, ids *ttnpb.ClientIdentifiers) (*ttnpb.Rights, error) {
-	cliRights, err := rights.ListClient(ctx, *ids)
+func (*IdentityServer) listClientRights(ctx context.Context, ids *ttnpb.ClientIdentifiers) (*ttnpb.Rights, error) {
+	cliRights, err := rights.ListClient(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	return cliRights.Intersect(ttnpb.AllClientRights), nil
 }
 
-func (is *IdentityServer) getClientCollaborator(ctx context.Context, req *ttnpb.GetClientCollaboratorRequest) (*ttnpb.GetCollaboratorResponse, error) {
-	if err := rights.RequireClient(ctx, req.ClientIdentifiers, ttnpb.RIGHT_CLIENT_ALL); err != nil {
+func (is *IdentityServer) getClientCollaborator(
+	ctx context.Context,
+	req *ttnpb.GetClientCollaboratorRequest,
+) (*ttnpb.GetCollaboratorResponse, error) {
+	err := rights.RequireClient(ctx, req.GetClientIds(), ttnpb.Right_RIGHT_CLIENT_SETTINGS_COLLABORATORS)
+	if err != nil {
 		return nil, err
 	}
 	res := &ttnpb.GetCollaboratorResponse{
-		OrganizationOrUserIdentifiers: req.OrganizationOrUserIdentifiers,
+		Ids: req.GetCollaborator(),
 	}
-	err := is.withDatabase(ctx, func(db *gorm.DB) error {
-		rights, err := is.getMembershipStore(ctx, db).GetMember(
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		rights, err := st.GetMember(
 			ctx,
-			&req.OrganizationOrUserIdentifiers,
-			req.ClientIdentifiers,
+			req.GetCollaborator(),
+			req.GetClientIds().GetEntityIdentifiers(),
 		)
 		if err != nil {
 			return err
@@ -83,40 +84,78 @@ func (is *IdentityServer) getClientCollaborator(ctx context.Context, req *ttnpb.
 	return res, nil
 }
 
-func (is *IdentityServer) setClientCollaborator(ctx context.Context, req *ttnpb.SetClientCollaboratorRequest) (*types.Empty, error) {
+var errClientNeedsCollaborator = errors.DefineFailedPrecondition(
+	"client_needs_collaborator",
+	"every client needs at least one collaborator with all rights",
+)
+
+func (is *IdentityServer) setClientCollaborator(
+	ctx context.Context, req *ttnpb.SetClientCollaboratorRequest,
+) (_ *emptypb.Empty, err error) {
 	// Require that caller has rights to manage collaborators.
-	if err := rights.RequireClient(ctx, req.ClientIdentifiers, ttnpb.RIGHT_CLIENT_ALL); err != nil {
+	err = rights.RequireClient(ctx, req.GetClientIds(), ttnpb.Right_RIGHT_CLIENT_SETTINGS_COLLABORATORS)
+	if err != nil {
 		return nil, err
 	}
 
-	err := is.withDatabase(ctx, func(db *gorm.DB) error {
-		store := is.getMembershipStore(ctx, db)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		existingRights, err := st.GetMember(
+			ctx,
+			req.GetCollaborator().GetIds(),
+			req.GetClientIds().GetEntityIdentifiers(),
+		)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		existingRights = existingRights.Implied()
+		newRights := ttnpb.RightsFrom(req.Collaborator.Rights...).Implied()
+		addedRights := newRights.Sub(existingRights)
+		removedRights := existingRights.Sub(newRights)
 
-		if len(req.Collaborator.Rights) > 0 {
-			newRights := ttnpb.RightsFrom(req.Collaborator.Rights...)
-			existingRights, err := store.GetMember(
-				ctx,
-				&req.Collaborator.OrganizationOrUserIdentifiers,
-				req.ClientIdentifiers,
-			)
-
-			if err != nil && !errors.IsNotFound(err) {
-				return err
-			}
-			// Require the caller to have all added rights.
-			if err := rights.RequireClient(ctx, req.ClientIdentifiers, newRights.Sub(existingRights).GetRights()...); err != nil {
-				return err
-			}
-			// Require the caller to have all removed rights.
-			if err := rights.RequireClient(ctx, req.ClientIdentifiers, existingRights.Sub(newRights).GetRights()...); err != nil {
+		// Require the caller to have all added rights.
+		if len(addedRights.GetRights()) > 0 {
+			if err := rights.RequireClient(ctx, req.GetClientIds(), addedRights.GetRights()...); err != nil {
 				return err
 			}
 		}
 
-		return store.SetMember(
+		// Unless we're deleting the collaborator, require the caller to have all removed rights.
+		if len(newRights.GetRights()) > 0 && len(removedRights.GetRights()) > 0 {
+			if err := rights.RequireClient(ctx, req.GetClientIds(), removedRights.GetRights()...); err != nil {
+				return err
+			}
+		}
+
+		if removedRights.IncludesAll(ttnpb.Right_RIGHT_CLIENT_ALL) {
+			memberRights, err := st.FindMembers(ctx, req.GetClientIds().GetEntityIdentifiers())
+			if err != nil {
+				return err
+			}
+			var hasOtherOwner bool
+			for _, v := range memberRights {
+				member, rights := v.Ids, v.Rights
+				if unique.ID(ctx, member) == unique.ID(ctx, req.GetCollaborator().GetIds()) {
+					continue
+				}
+				if rights.Implied().IncludesAll(ttnpb.Right_RIGHT_CLIENT_ALL) {
+					hasOtherOwner = true
+					break
+				}
+			}
+			if !hasOtherOwner {
+				return errClientNeedsCollaborator.New()
+			}
+		}
+
+		if len(req.Collaborator.Rights) == 0 {
+			// TODO: Remove delete capability (https://github.com/TheThingsNetwork/lorawan-stack/issues/6488).
+			return st.DeleteMember(ctx, req.GetCollaborator().GetIds(), req.GetClientIds().GetEntityIdentifiers())
+		}
+
+		return st.SetMember(
 			ctx,
-			&req.Collaborator.OrganizationOrUserIdentifiers,
-			req.ClientIdentifiers,
+			req.GetCollaborator().GetIds(),
+			req.GetClientIds().GetEntityIdentifiers(),
 			ttnpb.RightsFrom(req.Collaborator.Rights...),
 		)
 	})
@@ -124,24 +163,44 @@ func (is *IdentityServer) setClientCollaborator(ctx context.Context, req *ttnpb.
 		return nil, err
 	}
 	if len(req.Collaborator.Rights) > 0 {
-		events.Publish(evtUpdateClientCollaborator.NewWithIdentifiersAndData(ctx, ttnpb.CombineIdentifiers(req.ClientIdentifiers, req.Collaborator), nil))
-		err = is.SendContactsEmail(ctx, req.EntityIdentifiers(), func(data emails.Data) email.MessageData {
-			data.SetEntity(req.EntityIdentifiers())
-			return &emails.CollaboratorChanged{Data: data, Collaborator: req.Collaborator}
+		events.Publish(
+			evtUpdateClientCollaborator.New(
+				ctx,
+				events.WithIdentifiers(req.GetClientIds(), req.GetCollaborator().GetIds()),
+				events.WithData(req.GetCollaborator()),
+			),
+		)
+		go is.notifyInternal(ctx, &ttnpb.CreateNotificationRequest{
+			EntityIds:        req.GetClientIds().GetEntityIdentifiers(),
+			NotificationType: "collaborator_changed",
+			Data:             ttnpb.MustMarshalAny(req.GetCollaborator()),
+			Receivers: []ttnpb.NotificationReceiver{
+				ttnpb.NotificationReceiver_NOTIFICATION_RECEIVER_ADMINISTRATIVE_CONTACT,
+			},
+			Email: false,
 		})
-		if err != nil {
-			log.FromContext(ctx).WithError(err).Error("Could not send collaborator updated notification email")
-		}
 	} else {
-		events.Publish(evtDeleteClientCollaborator.NewWithIdentifiersAndData(ctx, ttnpb.CombineIdentifiers(req.ClientIdentifiers, req.Collaborator), nil))
+		events.Publish(evtDeleteClientCollaborator.New(
+			ctx, events.WithIdentifiers(req.GetClientIds(), req.GetCollaborator().GetIds()),
+		))
 	}
 	return ttnpb.Empty, nil
 }
 
-func (is *IdentityServer) listClientCollaborators(ctx context.Context, req *ttnpb.ListClientCollaboratorsRequest) (collaborators *ttnpb.Collaborators, err error) {
-	if err = is.RequireAuthenticated(ctx); err != nil { // Client collaborators can be seen by all authenticated users.
+func (is *IdentityServer) listClientCollaborators(
+	ctx context.Context,
+	req *ttnpb.ListClientCollaboratorsRequest,
+) (collaborators *ttnpb.Collaborators, err error) {
+	if err = is.RequireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
+	if err = rights.RequireClient(
+		ctx, req.GetClientIds(), ttnpb.Right_RIGHT_CLIENT_SETTINGS_COLLABORATORS,
+	); err != nil {
+		defer func() { collaborators = collaborators.PublicSafe() }()
+	}
+
+	ctx = store.WithOrder(ctx, req.Order)
 	var total uint64
 	ctx = store.WithPagination(ctx, req.Limit, req.Page, &total)
 	defer func() {
@@ -149,16 +208,17 @@ func (is *IdentityServer) listClientCollaborators(ctx context.Context, req *ttnp
 			setTotalHeader(ctx, total)
 		}
 	}()
-	err = is.withDatabase(ctx, func(db *gorm.DB) error {
-		memberRights, err := is.getMembershipStore(ctx, db).FindMembers(ctx, req.ClientIdentifiers)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		memberRights, err := st.FindMembers(ctx, req.GetClientIds().GetEntityIdentifiers())
 		if err != nil {
 			return err
 		}
 		collaborators = &ttnpb.Collaborators{}
-		for member, rights := range memberRights {
+		for _, v := range memberRights {
+			member, rights := v.Ids, v.Rights
 			collaborators.Collaborators = append(collaborators.Collaborators, &ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *member,
-				Rights:                        rights.GetRights(),
+				Ids:    member,
+				Rights: rights.GetRights(),
 			})
 		}
 		return nil
@@ -169,22 +229,89 @@ func (is *IdentityServer) listClientCollaborators(ctx context.Context, req *ttnp
 	return collaborators, nil
 }
 
+func (is *IdentityServer) deleteClientCollaborator(
+	ctx context.Context, req *ttnpb.DeleteClientCollaboratorRequest,
+) (*emptypb.Empty, error) {
+	err := rights.RequireClient(ctx, req.GetClientIds(), ttnpb.Right_RIGHT_CLIENT_SETTINGS_COLLABORATORS)
+	if err != nil {
+		return ttnpb.Empty, err
+	}
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) error {
+		removedRights, err := st.GetMember(ctx, req.GetCollaboratorIds(), req.GetClientIds().GetEntityIdentifiers())
+		if err != nil {
+			return err
+		}
+		if removedRights.Implied().IncludesAll(ttnpb.Right_RIGHT_CLIENT_ALL) {
+			memberRights, err := st.FindMembers(ctx, req.GetClientIds().GetEntityIdentifiers())
+			if err != nil {
+				return err
+			}
+			var hasOtherOwner bool
+			for _, v := range memberRights {
+				member, rights := v.Ids, v.Rights
+				if unique.ID(ctx, member) == unique.ID(ctx, req.GetCollaboratorIds()) {
+					continue
+				}
+				if rights.Implied().IncludesAll(ttnpb.Right_RIGHT_CLIENT_ALL) {
+					hasOtherOwner = true
+					break
+				}
+			}
+			if !hasOtherOwner {
+				return errClientNeedsCollaborator.New()
+			}
+		}
+		return st.DeleteMember(
+			ctx,
+			req.GetCollaboratorIds(),
+			req.GetClientIds().GetEntityIdentifiers(),
+		)
+	})
+	if err != nil {
+		return ttnpb.Empty, err
+	}
+	events.Publish(evtDeleteClientCollaborator.New(
+		ctx,
+		events.WithIdentifiers(req.GetClientIds(), req.GetCollaboratorIds()),
+	))
+	return ttnpb.Empty, nil
+}
+
 type clientAccess struct {
+	ttnpb.UnimplementedClientAccessServer
+
 	*IdentityServer
 }
 
-func (ca *clientAccess) ListRights(ctx context.Context, req *ttnpb.ClientIdentifiers) (*ttnpb.Rights, error) {
+func (ca *clientAccess) ListRights(
+	ctx context.Context, req *ttnpb.ClientIdentifiers,
+) (*ttnpb.Rights, error) {
 	return ca.listClientRights(ctx, req)
 }
 
-func (ca *clientAccess) GetCollaborator(ctx context.Context, req *ttnpb.GetClientCollaboratorRequest) (*ttnpb.GetCollaboratorResponse, error) {
+func (ca *clientAccess) GetCollaborator(
+	ctx context.Context,
+	req *ttnpb.GetClientCollaboratorRequest,
+) (*ttnpb.GetCollaboratorResponse, error) {
 	return ca.getClientCollaborator(ctx, req)
 }
 
-func (ca *clientAccess) SetCollaborator(ctx context.Context, req *ttnpb.SetClientCollaboratorRequest) (*types.Empty, error) {
+func (ca *clientAccess) SetCollaborator(
+	ctx context.Context,
+	req *ttnpb.SetClientCollaboratorRequest,
+) (*emptypb.Empty, error) {
 	return ca.setClientCollaborator(ctx, req)
 }
 
-func (ca *clientAccess) ListCollaborators(ctx context.Context, req *ttnpb.ListClientCollaboratorsRequest) (*ttnpb.Collaborators, error) {
+func (ca *clientAccess) ListCollaborators(
+	ctx context.Context,
+	req *ttnpb.ListClientCollaboratorsRequest,
+) (*ttnpb.Collaborators, error) {
 	return ca.listClientCollaborators(ctx, req)
+}
+
+func (ca *clientAccess) DeleteCollaborator(
+	ctx context.Context, req *ttnpb.DeleteClientCollaboratorRequest,
+) (*emptypb.Empty, error) {
+	return ca.deleteClientCollaborator(ctx, req)
 }

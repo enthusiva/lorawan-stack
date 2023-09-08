@@ -22,7 +22,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/mock"
 	. "go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/mqtt"
@@ -30,21 +30,23 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	mockis "go.thethings.network/lorawan-stack/v3/pkg/identityserver/mock"
 	"go.thethings.network/lorawan-stack/v3/pkg/jsonpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 var (
-	registeredApplicationID  = ttnpb.ApplicationIdentifiers{ApplicationID: "test-app"}
+	registeredApplicationID  = &ttnpb.ApplicationIdentifiers{ApplicationId: "test-app"}
 	registeredApplicationUID = unique.ID(test.Context(), registeredApplicationID)
 	registeredApplicationKey = "test-key"
-	registeredDeviceID       = ttnpb.EndDeviceIdentifiers{
-		ApplicationIdentifiers: registeredApplicationID,
-		DeviceID:               "test-device",
+	registeredDeviceID       = &ttnpb.EndDeviceIdentifiers{
+		ApplicationIds: registeredApplicationID,
+		DeviceId:       "test-device",
 	}
 
 	timeout = 10 * test.Delay
@@ -57,8 +59,9 @@ func TestAuthentication(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	is, isAddr := startMockIS(ctx)
-	is.add(ctx, registeredApplicationID, registeredApplicationKey)
+	is, isAddr, closeIS := mockis.New(ctx)
+	defer closeIS()
+	is.ApplicationRegistry().Add(ctx, registeredApplicationID, registeredApplicationKey, testRights...)
 
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
@@ -134,8 +137,9 @@ func TestTraffic(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
-	is, isAddr := startMockIS(ctx)
-	is.add(ctx, registeredApplicationID, registeredApplicationKey)
+	is, isAddr, closeIS := mockis.New(ctx)
+	defer closeIS()
+	is.ApplicationRegistry().Add(ctx, registeredApplicationID, registeredApplicationKey, testRights...)
 
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
@@ -190,39 +194,71 @@ func TestTraffic(t *testing.T) {
 			{
 				Topic: "#",
 				Message: &ttnpb.ApplicationUp{
-					EndDeviceIdentifiers: registeredDeviceID,
+					EndDeviceIds: registeredDeviceID,
 					Up: &ttnpb.ApplicationUp_UplinkMessage{
-						UplinkMessage: &ttnpb.ApplicationUplink{FRMPayload: []byte{0x1, 0x1, 0x1}},
+						UplinkMessage: &ttnpb.ApplicationUplink{FrmPayload: []byte{0x1, 0x1, 0x1}},
 					},
 				},
 				OK: true,
 			},
 			{
-				Topic: fmt.Sprintf("v3/%v/devices/%v/up", unique.ID(ctx, registeredDeviceID.ApplicationIdentifiers), registeredDeviceID.DeviceID),
+				Topic: fmt.Sprintf("v3/%v/devices/%v/up", unique.ID(ctx, registeredDeviceID.ApplicationIds), registeredDeviceID.DeviceId),
 				Message: &ttnpb.ApplicationUp{
-					EndDeviceIdentifiers: registeredDeviceID,
+					EndDeviceIds: registeredDeviceID,
 					Up: &ttnpb.ApplicationUp_UplinkMessage{
-						UplinkMessage: &ttnpb.ApplicationUplink{FRMPayload: []byte{0x2, 0x2, 0x2}},
+						UplinkMessage: &ttnpb.ApplicationUplink{FrmPayload: []byte{0x2, 0x2, 0x2}},
 					},
 				},
 				OK: true,
 			},
 			{
-				Topic: fmt.Sprintf("v3/%v/devices/%v/join", unique.ID(ctx, registeredDeviceID.ApplicationIdentifiers), registeredDeviceID.DeviceID),
+				Topic: fmt.Sprintf("v3/%v/devices/%v/up/normalized", unique.ID(ctx, registeredDeviceID.ApplicationIds), registeredDeviceID.DeviceId),
 				Message: &ttnpb.ApplicationUp{
-					EndDeviceIdentifiers: registeredDeviceID,
+					EndDeviceIds: registeredDeviceID,
+					Up: &ttnpb.ApplicationUp_UplinkNormalized{
+						UplinkNormalized: &ttnpb.ApplicationUplinkNormalized{
+							SessionKeyId: []byte{0x11},
+							FPort:        42,
+							FCnt:         42,
+							FrmPayload:   []byte{0x1, 0x2, 0x3},
+							NormalizedPayload: &structpb.Struct{
+								Fields: map[string]*structpb.Value{
+									"air": {
+										Kind: &structpb.Value_StructValue{
+											StructValue: &structpb.Struct{
+												Fields: map[string]*structpb.Value{
+													"temperature": {
+														Kind: &structpb.Value_NumberValue{
+															NumberValue: 21.5,
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				OK: true,
+			},
+			{
+				Topic: fmt.Sprintf("v3/%v/devices/%v/join", unique.ID(ctx, registeredDeviceID.ApplicationIds), registeredDeviceID.DeviceId),
+				Message: &ttnpb.ApplicationUp{
+					EndDeviceIds: registeredDeviceID,
 					Up: &ttnpb.ApplicationUp_JoinAccept{
-						JoinAccept: &ttnpb.ApplicationJoinAccept{SessionKeyID: []byte{0x1, 0x1, 0x1}},
+						JoinAccept: &ttnpb.ApplicationJoinAccept{SessionKeyId: []byte{0x1, 0x1, 0x1}},
 					},
 				},
 				OK: true,
 			},
 			{
-				Topic: fmt.Sprintf("v3/%v/devices/%v/join", unique.ID(ctx, registeredDeviceID.ApplicationIdentifiers), registeredDeviceID.DeviceID),
+				Topic: fmt.Sprintf("v3/%v/devices/%v/join", unique.ID(ctx, registeredDeviceID.ApplicationIds), registeredDeviceID.DeviceId),
 				Message: &ttnpb.ApplicationUp{
-					EndDeviceIdentifiers: registeredDeviceID,
+					EndDeviceIds: registeredDeviceID,
 					Up: &ttnpb.ApplicationUp_UplinkMessage{
-						UplinkMessage: &ttnpb.ApplicationUplink{FRMPayload: []byte{0x3, 0x3, 0x3}},
+						UplinkMessage: &ttnpb.ApplicationUplink{FrmPayload: []byte{0x3, 0x3, 0x3}},
 					},
 				},
 				OK: false, // Invalid topic
@@ -230,9 +266,9 @@ func TestTraffic(t *testing.T) {
 			{
 				Topic: fmt.Sprintf("v3/%v/devices/%v/up", "invalid-application", "invalid-device"),
 				Message: &ttnpb.ApplicationUp{
-					EndDeviceIdentifiers: registeredDeviceID,
+					EndDeviceIds: registeredDeviceID,
 					Up: &ttnpb.ApplicationUp_UplinkMessage{
-						UplinkMessage: &ttnpb.ApplicationUplink{FRMPayload: []byte{0x4, 0x4, 0x4}},
+						UplinkMessage: &ttnpb.ApplicationUplink{FrmPayload: []byte{0x4, 0x4, 0x4}},
 					},
 				},
 				OK: false, // Invalid application ID
@@ -288,61 +324,61 @@ func TestTraffic(t *testing.T) {
 	t.Run("Downstream", func(t *testing.T) {
 		for _, tc := range []struct {
 			Topic    string
-			IDs      ttnpb.EndDeviceIdentifiers
+			IDs      *ttnpb.EndDeviceIdentifiers
 			Message  *ttnpb.ApplicationDownlinks
 			Expected []*ttnpb.ApplicationDownlink
 		}{
 			{
-				Topic: fmt.Sprintf("v3/%v/devices/%v/down/push", unique.ID(ctx, registeredDeviceID.ApplicationIdentifiers), registeredDeviceID.DeviceID),
+				Topic: fmt.Sprintf("v3/%v/devices/%v/down/push", unique.ID(ctx, registeredDeviceID.ApplicationIds), registeredDeviceID.DeviceId),
 				IDs:   registeredDeviceID,
 				Message: &ttnpb.ApplicationDownlinks{
 					Downlinks: []*ttnpb.ApplicationDownlink{
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x1, 0x1, 0x1},
+							FrmPayload: []byte{0x1, 0x1, 0x1},
 						},
 					},
 				},
 				Expected: []*ttnpb.ApplicationDownlink{
 					{
 						FPort:      42,
-						FRMPayload: []byte{0x1, 0x1, 0x1},
+						FrmPayload: []byte{0x1, 0x1, 0x1},
 					},
 				},
 			},
 			{
-				Topic: fmt.Sprintf("v3/%v/devices/%v/down/replace", unique.ID(ctx, registeredDeviceID.ApplicationIdentifiers), registeredDeviceID.DeviceID),
+				Topic: fmt.Sprintf("v3/%v/devices/%v/down/replace", unique.ID(ctx, registeredDeviceID.ApplicationIds), registeredDeviceID.DeviceId),
 				IDs:   registeredDeviceID,
 				Message: &ttnpb.ApplicationDownlinks{
 					Downlinks: []*ttnpb.ApplicationDownlink{
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x2, 0x2, 0x2},
+							FrmPayload: []byte{0x2, 0x2, 0x2},
 						},
 					},
 				},
 				Expected: []*ttnpb.ApplicationDownlink{
 					{
 						FPort:      42,
-						FRMPayload: []byte{0x2, 0x2, 0x2},
+						FrmPayload: []byte{0x2, 0x2, 0x2},
 					},
 				},
 			},
 			{
-				Topic: fmt.Sprintf("v3/%v/devices/%v/down/push", unique.ID(ctx, registeredDeviceID.ApplicationIdentifiers), "invalid-device"),
+				Topic: fmt.Sprintf("v3/%v/devices/%v/down/push", unique.ID(ctx, registeredDeviceID.ApplicationIds), "invalid-device"),
 				IDs:   registeredDeviceID,
 				Message: &ttnpb.ApplicationDownlinks{
 					Downlinks: []*ttnpb.ApplicationDownlink{
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x3, 0x3, 0x3},
+							FrmPayload: []byte{0x3, 0x3, 0x3},
 						},
 					},
 				},
 				Expected: []*ttnpb.ApplicationDownlink{
 					{
 						FPort:      42,
-						FRMPayload: []byte{0x2, 0x2, 0x2}, // Do not expect a change.
+						FrmPayload: []byte{0x2, 0x2, 0x2}, // Do not expect a change.
 					},
 				},
 			},
@@ -353,14 +389,14 @@ func TestTraffic(t *testing.T) {
 					Downlinks: []*ttnpb.ApplicationDownlink{
 						{
 							FPort:      42,
-							FRMPayload: []byte{0x4, 0x4, 0x4},
+							FrmPayload: []byte{0x4, 0x4, 0x4},
 						},
 					},
 				},
 				Expected: []*ttnpb.ApplicationDownlink{
 					{
 						FPort:      42,
-						FRMPayload: []byte{0x2, 0x2, 0x2}, // Do not expect a change.
+						FrmPayload: []byte{0x2, 0x2, 0x2}, // Do not expect a change.
 					},
 				},
 			},

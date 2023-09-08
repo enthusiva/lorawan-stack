@@ -15,7 +15,7 @@
 package component
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -23,11 +23,14 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/heptiolabs/healthcheck"
+	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
+	"go.thethings.network/lorawan-stack/v3/pkg/healthcheck"
 	"go.thethings.network/lorawan-stack/v3/pkg/metrics"
 	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/web"
 	"go.thethings.network/lorawan-stack/v3/pkg/webmiddleware"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 const (
@@ -105,8 +108,7 @@ func (c *Component) initWeb() error {
 				webmiddleware.AuthUser(healthUsername, c.config.HTTP.Health.Password),
 			)))
 		}
-		g.HandleFunc("/healthz/live", c.healthHandler.LiveEndpoint)
-		g.HandleFunc("/healthz/ready", c.healthHandler.ReadyEndpoint)
+		g.Handle("/healthz", c.healthHandler.GetHandler())
 	}
 
 	c.web = web
@@ -118,22 +120,21 @@ func (c *Component) RegisterWeb(s web.Registerer) {
 	c.webSubsystems = append(c.webSubsystems, s)
 }
 
-// RegisterLivenessCheck registers a liveness check for the component.
-func (c *Component) RegisterLivenessCheck(name string, check healthcheck.Check) {
-	c.healthHandler.AddLivenessCheck(name, check)
-}
-
-// RegisterReadinessCheck registers a readiness check for the component.
-func (c *Component) RegisterReadinessCheck(name string, check healthcheck.Check) {
-	c.healthHandler.AddReadinessCheck(name, check)
+// HealthChecker returns the component's health checker.
+func (c *Component) HealthChecker() healthcheck.HealthChecker {
+	return c.healthHandler
 }
 
 func (c *Component) serveWeb(lis net.Listener) error {
+	var handler http.Handler = c
+	if _, isTCP := lis.(*net.TCPListener); isTCP {
+		handler = h2c.NewHandler(c, &http2.Server{})
+	}
 	srv := http.Server{
-		Handler:           c,
+		Handler:           handler,
 		ReadTimeout:       120 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
-		ErrorLog:          log.New(ioutil.Discard, "", 0),
+		ErrorLog:          log.New(io.Discard, "", 0),
 	}
 	go func() {
 		<-c.Context().Done()
@@ -145,16 +146,11 @@ func (c *Component) serveWeb(lis net.Listener) error {
 func (c *Component) webEndpoints() []Endpoint {
 	return []Endpoint{
 		NewTCPEndpoint(c.config.HTTP.Listen, "Web"),
-		NewTLSEndpoint(c.config.HTTP.ListenTLS, "Web", WithNextProtos("h2", "http/1.1")),
+		NewTLSEndpoint(c.config.HTTP.ListenTLS, "Web", tlsconfig.WithNextProtos("h2", "http/1.1")),
 	}
 }
 
 // listenWeb starts the web listeners on the addresses and endpoints configured in the HTTP section.
-func (c *Component) listenWeb() (err error) {
-	err = c.serveOnEndpoints(c.webEndpoints(), (*Component).serveWeb, "web")
-	if err != nil {
-		return
-	}
-
-	return nil
+func (c *Component) listenWeb() error {
+	return c.serveOnEndpoints(c.webEndpoints(), (*Component).serveWeb, "web")
 }

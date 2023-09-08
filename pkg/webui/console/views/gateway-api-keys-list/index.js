@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,68 +14,54 @@
 
 import React from 'react'
 import { Container, Row, Col } from 'react-grid-system'
-import bind from 'autobind-decorator'
-
-import PAGE_SIZES from '@ttn-lw/constants/page-sizes'
+import { useParams } from 'react-router-dom'
+import { createSelector } from 'reselect'
 
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
 
 import ApiKeysTable from '@console/containers/api-keys-table'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
 import { getApiKeysList } from '@console/store/actions/api-keys'
 
-import {
-  selectApiKeys,
-  selectApiKeysTotalCount,
-  selectApiKeysFetching,
-  selectApiKeysError,
-} from '@console/store/selectors/api-keys'
+import { selectApiKeys, selectApiKeysTotalCount } from '@console/store/selectors/api-keys'
 
-export default class GatewayApiKeys extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+const GatewayApiKeysList = () => {
+  const { gtwId } = useParams()
 
-  constructor(props) {
-    super(props)
+  const getApiKeys = React.useCallback(
+    filters => getApiKeysList('gateway', gtwId, filters),
+    [gtwId],
+  )
 
-    const { gtwId } = props.match.params
-    this.getApiKeysList = filters => getApiKeysList('gateway', gtwId, filters)
-  }
+  const baseDataSelector = createSelector(
+    [
+      // These are the input selectors
+      state => selectApiKeys(state, gtwId),
+      state => selectApiKeysTotalCount(state, gtwId),
+    ],
+    // This is the result function
+    (keys, totalCount) => ({
+      keys,
+      totalCount,
+    }),
+  )
 
-  @bind
-  baseDataSelector(state) {
-    const { gtwId } = this.props.match.params
-
-    const id = { id: gtwId }
-    return {
-      keys: selectApiKeys(state, id),
-      totalCount: selectApiKeysTotalCount(state, id),
-      fetching: selectApiKeysFetching(state),
-      error: selectApiKeysError(state),
-    }
-  }
-
-  render() {
-    const { gtwId } = this.props.match.params
-
-    return (
-      <Container>
-        <Row>
-          <IntlHelmet title={sharedMessages.apiKeys} />
-          <Col>
-            <ApiKeysTable
-              entityId={gtwId}
-              pageSize={PAGE_SIZES.REGULAR}
-              baseDataSelector={this.baseDataSelector}
-              getItemsAction={this.getApiKeysList}
-            />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Container>
+      <Row>
+        <IntlHelmet title={sharedMessages.apiKeys} />
+        <Col>
+          <ApiKeysTable
+            entityId={gtwId}
+            baseDataSelector={baseDataSelector}
+            getItemsAction={getApiKeys}
+          />
+        </Col>
+      </Row>
+    </Container>
+  )
 }
+
+export default GatewayApiKeysList

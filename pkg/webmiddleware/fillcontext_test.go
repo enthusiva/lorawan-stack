@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package webmiddleware
+package webmiddleware_test
 
 import (
 	"context"
@@ -20,8 +20,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	. "go.thethings.network/lorawan-stack/v3/pkg/webmiddleware"
 )
 
 func TestFillContext(t *testing.T) {

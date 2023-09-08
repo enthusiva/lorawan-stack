@@ -17,15 +17,17 @@ package mqtt
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"time"
 
 	ttnpbv2 "go.thethings.network/lorawan-stack-legacy/v2/pkg/ttnpb"
-	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mqtt/topics"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/datarate"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // eirpDelta is the delta between EIRP and ERP.
@@ -33,56 +35,38 @@ const eirpDelta = 2.15
 
 var (
 	sourceToV3 = map[ttnpbv2.LocationMetadata_LocationSource]ttnpb.LocationSource{
-		ttnpbv2.LocationMetadata_GPS:            ttnpb.SOURCE_GPS,
-		ttnpbv2.LocationMetadata_CONFIG:         ttnpb.SOURCE_REGISTRY,
-		ttnpbv2.LocationMetadata_REGISTRY:       ttnpb.SOURCE_REGISTRY,
-		ttnpbv2.LocationMetadata_IP_GEOLOCATION: ttnpb.SOURCE_IP_GEOLOCATION,
-	}
-
-	frequencyPlanToBand = map[ttnpbv2.FrequencyPlan]string{
-		ttnpbv2.FrequencyPlan_EU_863_870: "EU_863_870",
-		ttnpbv2.FrequencyPlan_US_902_928: "US_902_928",
-		ttnpbv2.FrequencyPlan_CN_779_787: "CN_779_787",
-		ttnpbv2.FrequencyPlan_EU_433:     "EU_433",
-		ttnpbv2.FrequencyPlan_AU_915_928: "AU_915_928",
-		ttnpbv2.FrequencyPlan_CN_470_510: "CN_470_510",
-		ttnpbv2.FrequencyPlan_AS_923:     "AS_923",
-		ttnpbv2.FrequencyPlan_AS_920_923: "AS_923",
-		ttnpbv2.FrequencyPlan_AS_923_925: "AS_923",
-		ttnpbv2.FrequencyPlan_KR_920_923: "KR_920_923",
-		ttnpbv2.FrequencyPlan_IN_865_867: "IN_865_867",
-		ttnpbv2.FrequencyPlan_RU_864_870: "RU_864_870",
+		ttnpbv2.LocationMetadata_GPS:            ttnpb.LocationSource_SOURCE_GPS,
+		ttnpbv2.LocationMetadata_CONFIG:         ttnpb.LocationSource_SOURCE_REGISTRY,
+		ttnpbv2.LocationMetadata_REGISTRY:       ttnpb.LocationSource_SOURCE_REGISTRY,
+		ttnpbv2.LocationMetadata_IP_GEOLOCATION: ttnpb.LocationSource_SOURCE_IP_GEOLOCATION,
 	}
 
 	errNotScheduled    = errors.DefineInvalidArgument("not_scheduled", "not scheduled")
-	errLoRaWANPayload  = errors.DefineInvalidArgument("lorawan_payload", "invalid LoRaWAN payload")
 	errLoRaWANMetadata = errors.DefineInvalidArgument("lorawan_metadata", "missing LoRaWAN metadata")
-	errDataRate        = errors.DefineInvalidArgument("data_rate", "unknown data rate `{data_rate}`")
 	errModulation      = errors.DefineInvalidArgument("modulation", "unknown modulation `{modulation}`")
-	errFrequencyPlan   = errors.DefineNotFound("frequency_plan", "unknown frequency plan `{frequency_plan}`")
 )
 
 type protobufv2 struct {
 	topics.Layout
 }
 
-func (protobufv2) FromDownlink(down *ttnpb.DownlinkMessage, _ ttnpb.GatewayIdentifiers) ([]byte, error) {
+func (protobufv2) FromDownlink(down *ttnpb.DownlinkMessage, _ *ttnpb.GatewayIdentifiers) ([]byte, error) {
 	settings := down.GetScheduled()
 	if settings == nil {
 		return nil, errNotScheduled.New()
 	}
 	lorawan := &ttnpbv2.LoRaWANTxConfiguration{}
-	if pld, ok := down.GetPayload().GetPayload().(*ttnpb.Message_MACPayload); ok && pld != nil {
-		lorawan.FCnt = pld.MACPayload.FHDR.FCnt
+	if pld, ok := down.GetPayload().GetPayload().(*ttnpb.Message_MacPayload); ok && pld != nil {
+		lorawan.FCnt = pld.MacPayload.FHdr.GetFCnt()
 	}
 	switch dr := settings.DataRate.Modulation.(type) {
-	case *ttnpb.DataRate_LoRa:
+	case *ttnpb.DataRate_Lora:
 		lorawan.Modulation = ttnpbv2.Modulation_LORA
-		lorawan.CodingRate = settings.CodingRate
-		lorawan.DataRate = fmt.Sprintf("SF%dBW%d", dr.LoRa.SpreadingFactor, dr.LoRa.Bandwidth/1000)
-	case *ttnpb.DataRate_FSK:
+		lorawan.CodingRate = dr.Lora.CodingRate
+		lorawan.DataRate = fmt.Sprintf("SF%dBW%d", dr.Lora.SpreadingFactor, dr.Lora.Bandwidth/1000)
+	case *ttnpb.DataRate_Fsk:
 		lorawan.Modulation = ttnpbv2.Modulation_FSK
-		lorawan.BitRate = dr.FSK.BitRate
+		lorawan.BitRate = dr.Fsk.BitRate
 	default:
 		return nil, errModulation.New()
 	}
@@ -100,12 +84,12 @@ func (protobufv2) FromDownlink(down *ttnpb.DownlinkMessage, _ ttnpb.GatewayIdent
 			Lorawan: lorawan,
 		},
 	}
-	return v2downlink.Marshal()
+	return proto.Marshal(v2downlink)
 }
 
-func (protobufv2) ToUplink(message []byte, ids ttnpb.GatewayIdentifiers) (*ttnpb.UplinkMessage, error) {
+func (protobufv2) ToUplink(message []byte, ids *ttnpb.GatewayIdentifiers) (*ttnpb.UplinkMessage, error) {
 	v2uplink := &ttnpbv2.UplinkMessage{}
-	err := v2uplink.Unmarshal(message)
+	err := proto.Unmarshal(message, v2uplink)
 	if err != nil {
 		return nil, err
 	}
@@ -125,37 +109,16 @@ func (protobufv2) ToUplink(message []byte, ids ttnpb.GatewayIdentifiers) (*ttnpb
 	}
 	switch lorawanMetadata.Modulation {
 	case ttnpbv2.Modulation_LORA:
-		bandID, ok := frequencyPlanToBand[lorawanMetadata.FrequencyPlan]
-		if !ok {
-			return nil, errFrequencyPlan.WithAttributes("frequency_plan", lorawanMetadata.FrequencyPlan)
-		}
-		phy, err := band.GetByID(bandID)
-		if err != nil {
-			return nil, err
-		}
-		var drIndex ttnpb.DataRateIndex
-		var found bool
 		loraDr, err := datarate.ParseLoRa(lorawanMetadata.DataRate)
 		if err != nil {
 			return nil, err
 		}
-		for bandDRIndex, bandDR := range phy.DataRates {
-			if bandDR.Rate.Equal(loraDr.DataRate) {
-				found = true
-				drIndex = bandDRIndex
-				break
-			}
-		}
-		if !found {
-			return nil, errDataRate.WithAttributes("data_rate", lorawanMetadata.DataRate)
-		}
 		settings.DataRate = loraDr.DataRate
-		settings.CodingRate = lorawanMetadata.CodingRate
-		settings.DataRateIndex = drIndex
+		settings.DataRate.Modulation.(*ttnpb.DataRate_Lora).Lora.CodingRate = lorawanMetadata.CodingRate
 	case ttnpbv2.Modulation_FSK:
-		settings.DataRate = ttnpb.DataRate{
-			Modulation: &ttnpb.DataRate_FSK{
-				FSK: &ttnpb.FSKDataRate{
+		settings.DataRate = &ttnpb.DataRate{
+			Modulation: &ttnpb.DataRate_Fsk{
+				Fsk: &ttnpb.FSKDataRate{
 					BitRate: lorawanMetadata.BitRate,
 				},
 			},
@@ -164,7 +127,7 @@ func (protobufv2) ToUplink(message []byte, ids ttnpb.GatewayIdentifiers) (*ttnpb
 		return nil, errModulation.WithAttributes("modulation", lorawanMetadata.Modulation)
 	}
 
-	mdTime := time.Unix(0, gwMetadata.Time)
+	mdTime := timestamppb.New(time.Unix(0, gwMetadata.Time))
 	if antennas := gwMetadata.Antennas; len(antennas) > 0 {
 		for _, antenna := range antennas {
 			rssi := antenna.ChannelRssi
@@ -172,36 +135,37 @@ func (protobufv2) ToUplink(message []byte, ids ttnpb.GatewayIdentifiers) (*ttnpb
 				rssi = antenna.Rssi
 			}
 			uplink.RxMetadata = append(uplink.RxMetadata, &ttnpb.RxMetadata{
-				GatewayIdentifiers:    ids,
+				GatewayIds:            ids,
 				AntennaIndex:          antenna.Antenna,
-				ChannelRSSI:           rssi,
+				ChannelRssi:           rssi,
 				FrequencyOffset:       antenna.FrequencyOffset,
-				RSSI:                  rssi,
-				RSSIStandardDeviation: antenna.RssiStandardDeviation,
-				SNR:                   antenna.Snr,
-				Time:                  &mdTime,
+				Rssi:                  rssi,
+				RssiStandardDeviation: antenna.RssiStandardDeviation,
+				Snr:                   antenna.Snr,
+				Time:                  mdTime,
 				Timestamp:             gwMetadata.Timestamp,
 			})
 		}
 	} else {
 		uplink.RxMetadata = append(uplink.RxMetadata, &ttnpb.RxMetadata{
-			GatewayIdentifiers: ids,
-			AntennaIndex:       0,
-			ChannelRSSI:        gwMetadata.Rssi,
-			RSSI:               gwMetadata.Rssi,
-			SNR:                gwMetadata.Snr,
-			Time:               &mdTime,
-			Timestamp:          gwMetadata.Timestamp,
+			GatewayIds:   ids,
+			AntennaIndex: 0,
+			ChannelRssi:  gwMetadata.Rssi,
+			Rssi:         gwMetadata.Rssi,
+			Snr:          gwMetadata.Snr,
+			Time:         mdTime,
+			Timestamp:    gwMetadata.Timestamp,
 		})
 	}
-	uplink.Settings = settings
-
+	uplink.Settings = &settings
 	return uplink, nil
 }
 
-func (protobufv2) ToStatus(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.GatewayStatus, error) {
+var ttkgPlatformRegex = regexp.MustCompile(`The Things Gateway v1 - BL (r[0-9]+\-[0-9a-f]+) \(([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)\) - Firmware (v[0-9]+.[0-9]+.[0-9]+\-[0-9a-f]+) \(([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)\)`)
+
+func (protobufv2) ToStatus(message []byte, _ *ttnpb.GatewayIdentifiers) (*ttnpb.GatewayStatus, error) {
 	v2status := &ttnpbv2.StatusMessage{}
-	err := v2status.Unmarshal(message)
+	err := proto.Unmarshal(message, v2status)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +201,10 @@ func (protobufv2) ToStatus(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.G
 		versions["hal"] = v2status.Hal
 	}
 	if v2status.Platform != "" {
+		if matches := ttkgPlatformRegex.FindStringSubmatch(v2status.Platform); len(matches) == 5 {
+			versions["model"] = "The Things Kickstarter Gateway v1"
+			versions["firmware"] = matches[3]
+		}
 		versions["platform"] = v2status.Platform
 	}
 	var antennasLocation []*ttnpb.Location
@@ -253,15 +221,15 @@ func (protobufv2) ToStatus(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.G
 	}
 	return &ttnpb.GatewayStatus{
 		AntennaLocations: antennasLocation,
-		BootTime:         time.Unix(0, v2status.BootTime),
-		IP:               v2status.Ip,
+		BootTime:         timestamppb.New(time.Unix(0, v2status.BootTime)),
+		Ip:               v2status.Ip,
 		Metrics:          metrics,
-		Time:             time.Unix(0, v2status.Time),
+		Time:             timestamppb.New(time.Unix(0, v2status.Time)),
 		Versions:         versions,
 	}, nil
 }
 
-func (protobufv2) ToTxAck(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.TxAcknowledgment, error) {
+func (protobufv2) ToTxAck(message []byte, _ *ttnpb.GatewayIdentifiers) (*ttnpb.TxAcknowledgment, error) {
 	return nil, errNotSupported.New()
 }
 

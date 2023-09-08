@@ -14,9 +14,16 @@
 
 import Yup from '@ttn-lw/lib/yup'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import { id as deviceIdRegexp } from '@ttn-lw/lib/regexp'
 
-import { attributeValidCheck, attributeTooShortCheck } from '@console/lib/attributes'
-import { id as deviceIdRegexp, address as addressRegexp } from '@console/lib/regexp'
+import {
+  attributeValidCheck,
+  attributeTooShortCheck,
+  attributeKeyTooLongCheck,
+  attributeValueTooLongCheck,
+  attributesCountCheck,
+} from '@console/lib/attributes'
+import { address as addressRegexp } from '@console/lib/regexp'
 import { parseLorawanMacVersion, generate16BytesKey } from '@console/lib/device-utils'
 
 const toUndefined = value => (!Boolean(value) ? undefined : value)
@@ -43,7 +50,7 @@ const validationSchema = Yup.object()
       Yup.passValues(sharedMessages.validateAddressFormat),
     ),
     _external_js: Yup.boolean(),
-    join_server_address: Yup.string().when(['$supportsJoin'], (supportsJoin, schema) => {
+    join_server_address: Yup.string().when(['$supportsJoin'], ([supportsJoin], schema) => {
       if (!supportsJoin) {
         return schema.strip()
       }
@@ -54,7 +61,7 @@ const validationSchema = Yup.object()
     }),
     resets_join_nonces: Yup.bool().when(
       ['$supportsJoin', '$lorawanVersion', '_external_js'],
-      (supportsJoin, lorawanVersion, externalJs, schema) => {
+      ([supportsJoin, lorawanVersion, externalJs], schema) => {
         if (!supportsJoin || parseLorawanMacVersion(lorawanVersion) < 110) {
           return schema.strip()
         }
@@ -68,21 +75,21 @@ const validationSchema = Yup.object()
     ),
     root_keys: Yup.object().when(
       ['_external_js', '$lorawanVersion', '$supportsJoin'],
-      (externalJs, version, supportsJoin, schema) => {
+      ([externalJs, version, supportsJoin], schema) => {
         if (!supportsJoin) {
           return schema.strip()
         }
 
-        const keySchema = Yup.lazy(() => {
-          return !externalJs
+        const keySchema = Yup.lazy(() =>
+          !externalJs
             ? Yup.object().shape({
                 key: Yup.string()
                   .emptyOrLength(16 * 2, Yup.passValues(sharedMessages.validateLength)) // 16 Byte hex.
                   .transform(toUndefined)
                   .default(generate16BytesKey),
               })
-            : Yup.object().strip()
-        })
+            : Yup.object().strip(),
+        )
 
         if (externalJs) {
           return schema.shape({
@@ -104,17 +111,28 @@ const validationSchema = Yup.object()
         })
       },
     ),
-    attributes: Yup.array()
-      .max(10, Yup.passValues(sharedMessages.attributesValidateTooMany))
+    attributes: Yup.object()
+      .nullable()
       .test(
-        'has no empty string values',
-        sharedMessages.attributesValidateRequired,
-        attributeValidCheck,
+        'has no more than 10 keys',
+        sharedMessages.attributesValidateTooMany,
+        attributesCountCheck,
       )
+      .test('has no null values', sharedMessages.attributesValidateRequired, attributeValidCheck)
       .test(
         'has key length longer than 2',
         sharedMessages.attributeKeyValidateTooShort,
         attributeTooShortCheck,
+      )
+      .test(
+        'has key length less than 36',
+        sharedMessages.attributeKeyValidateTooLong,
+        attributeKeyTooLongCheck,
+      )
+      .test(
+        'has value length less than 200',
+        sharedMessages.attributeValueValidateTooLong,
+        attributeValueTooLongCheck,
       ),
   })
   .noUnknown()

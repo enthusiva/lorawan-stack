@@ -42,11 +42,11 @@ func getUserAndClientID(flagSet *pflag.FlagSet, args []string) (*ttnpb.UserIdent
 	}
 	switch {
 	case userID != "" && clientID != "":
-		return &ttnpb.UserIdentifiers{UserID: userID}, &ttnpb.ClientIdentifiers{ClientID: clientID}
+		return &ttnpb.UserIdentifiers{UserId: userID}, &ttnpb.ClientIdentifiers{ClientId: clientID}
 	case userID != "":
-		return &ttnpb.UserIdentifiers{UserID: userID}, nil
+		return &ttnpb.UserIdentifiers{UserId: userID}, nil
 	case clientID != "":
-		return nil, &ttnpb.ClientIdentifiers{ClientID: clientID}
+		return nil, &ttnpb.ClientIdentifiers{ClientId: clientID}
 	}
 	return nil, nil
 }
@@ -69,7 +69,7 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID := getUserID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -78,7 +78,7 @@ var (
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
 			res, err := ttnpb.NewOAuthAuthorizationRegistryClient(is).List(ctx, &ttnpb.ListOAuthClientAuthorizationsRequest{
-				UserIdentifiers: *usrID, Limit: limit, Page: page, Order: getOrder(cmd.Flags()),
+				UserIds: usrID, Limit: limit, Page: page, Order: getOrder(cmd.Flags()),
 			}, opt)
 			if err != nil {
 				return err
@@ -95,10 +95,10 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID, cliID := getUserAndClientID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -107,14 +107,18 @@ var (
 			}
 
 			res, err := ttnpb.NewOAuthAuthorizationRegistryClient(is).ListTokens(ctx, &ttnpb.ListOAuthAccessTokensRequest{
-				UserIDs:   *usrID,
-				ClientIDs: *cliID,
+				UserIds:   usrID,
+				ClientIds: cliID,
 			})
+			if err != nil {
+				return err
+			}
+
 			for _, token := range res.Tokens {
 				_, err = ttnpb.NewOAuthAuthorizationRegistryClient(is).DeleteToken(ctx, &ttnpb.OAuthAccessTokenIdentifiers{
-					UserIDs:   *usrID,
-					ClientIDs: *cliID,
-					ID:        token.ID,
+					UserIds:   usrID,
+					ClientIds: cliID,
+					Id:        token.Id,
 				})
 				if err != nil {
 					return err
@@ -122,8 +126,8 @@ var (
 			}
 
 			_, err = ttnpb.NewOAuthAuthorizationRegistryClient(is).Delete(ctx, &ttnpb.OAuthClientAuthorizationIdentifiers{
-				UserIDs:   *usrID,
-				ClientIDs: *cliID,
+				UserIds:   usrID,
+				ClientIds: cliID,
 			})
 
 			return err
@@ -141,10 +145,10 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID, cliID := getUserAndClientID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -153,8 +157,8 @@ var (
 			}
 			limit, page, opt, getTotal := withPagination(cmd.Flags())
 			res, err := ttnpb.NewOAuthAuthorizationRegistryClient(is).ListTokens(ctx, &ttnpb.ListOAuthAccessTokensRequest{
-				UserIDs:   *usrID,
-				ClientIDs: *cliID,
+				UserIds:   usrID,
+				ClientIds: cliID,
 				Limit:     limit,
 				Page:      page,
 				Order:     getOrder(cmd.Flags()),
@@ -174,14 +178,14 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			usrID, cliID := getUserAndClientID(cmd.Flags(), args)
 			if usrID == nil {
-				return errNoUserID
+				return errNoUserID.New()
 			}
 			if cliID == nil {
-				return errNoClientID
+				return errNoClientID.New()
 			}
 			tokenID, _ := cmd.Flags().GetString("token-id")
 			if tokenID == "" {
-				return errNoTokenID
+				return errNoTokenID.New()
 			}
 
 			is, err := api.Dial(ctx, config.IdentityServerGRPCAddress)
@@ -190,9 +194,9 @@ var (
 			}
 
 			_, err = ttnpb.NewOAuthAuthorizationRegistryClient(is).DeleteToken(ctx, &ttnpb.OAuthAccessTokenIdentifiers{
-				UserIDs:   *usrID,
-				ClientIDs: *cliID,
-				ID:        tokenID,
+				UserIds:   usrID,
+				ClientIds: cliID,
+				Id:        tokenID,
 			})
 
 			return err

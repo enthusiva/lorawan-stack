@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package webmiddleware
+package webmiddleware_test
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	. "go.thethings.network/lorawan-stack/v3/pkg/webmiddleware"
 )
 
 func TestCORS(t *testing.T) {
@@ -52,7 +53,7 @@ func TestCORS(t *testing.T) {
 		a.So(res.Header.Get("Access-Control-Expose-Headers"), should.ContainSubstring, "X-Exposed-Header")
 		a.So(res.Header.Get("Access-Control-Allow-Credentials"), should.Equal, "true")
 
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		a.So(string(body), should.Equal, "CORS-Enabled")
 	})
 
@@ -74,7 +75,7 @@ func TestCORS(t *testing.T) {
 		a.So(res.Header.Get("Access-Control-Max-Age"), should.Equal, "600")
 		a.So(res.Header.Get("Access-Control-Allow-Credentials"), should.Equal, "true")
 
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		a.So(body, should.BeEmpty)
 	})
 
@@ -92,7 +93,7 @@ func TestCORS(t *testing.T) {
 		a.So(res.StatusCode, should.BeBetweenOrEqual, 200, 299)
 		a.So(res.Header.Get("Access-Control-Allow-Origin"), should.BeEmpty)
 
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		a.So(body, should.BeEmpty)
 	})
 
@@ -113,7 +114,7 @@ func TestCORS(t *testing.T) {
 		a.So(res.StatusCode, should.Equal, http.StatusMethodNotAllowed)
 		a.So(res.Header.Get("Access-Control-Allow-Origin"), should.BeEmpty)
 
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		a.So(body, should.BeEmpty)
 	})
 
@@ -134,7 +135,7 @@ func TestCORS(t *testing.T) {
 		a.So(res.StatusCode, should.Equal, http.StatusForbidden)
 		a.So(res.Header.Get("Access-Control-Allow-Origin"), should.BeEmpty)
 
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		a.So(body, should.BeEmpty)
 	})
 }

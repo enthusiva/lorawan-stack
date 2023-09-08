@@ -1,0 +1,21 @@
+name: Install Go and Dependencies
+description: Install Go and Go Dependencies
+inputs:
+  go-version:
+    description: Go Version
+    required: true
+    default: "~1.20"
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ inputs.go-version }}
+    - name: Download Go dependencies
+      shell: bash
+      run: |
+        go mod download
+        pushd tools
+        go mod download
+        popd

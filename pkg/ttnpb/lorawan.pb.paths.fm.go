@@ -195,11 +195,13 @@ var CFListFieldPathsTopLevel = []string{
 }
 var LoRaDataRateFieldPathsNested = []string{
 	"bandwidth",
+	"coding_rate",
 	"spreading_factor",
 }
 
 var LoRaDataRateFieldPathsTopLevel = []string{
 	"bandwidth",
+	"coding_rate",
 	"spreading_factor",
 }
 var FSKDataRateFieldPathsNested = []string{
@@ -209,28 +211,48 @@ var FSKDataRateFieldPathsNested = []string{
 var FSKDataRateFieldPathsTopLevel = []string{
 	"bit_rate",
 }
+var LRFHSSDataRateFieldPathsNested = []string{
+	"coding_rate",
+	"modulation_type",
+	"operating_channel_width",
+}
+
+var LRFHSSDataRateFieldPathsTopLevel = []string{
+	"coding_rate",
+	"modulation_type",
+	"operating_channel_width",
+}
 var DataRateFieldPathsNested = []string{
 	"modulation",
 	"modulation.fsk",
 	"modulation.fsk.bit_rate",
 	"modulation.lora",
 	"modulation.lora.bandwidth",
+	"modulation.lora.coding_rate",
 	"modulation.lora.spreading_factor",
+	"modulation.lrfhss",
+	"modulation.lrfhss.coding_rate",
+	"modulation.lrfhss.modulation_type",
+	"modulation.lrfhss.operating_channel_width",
 }
 
 var DataRateFieldPathsTopLevel = []string{
 	"modulation",
 }
 var TxSettingsFieldPathsNested = []string{
-	"coding_rate",
+	"concentrator_timestamp",
 	"data_rate",
 	"data_rate.modulation",
 	"data_rate.modulation.fsk",
 	"data_rate.modulation.fsk.bit_rate",
 	"data_rate.modulation.lora",
 	"data_rate.modulation.lora.bandwidth",
+	"data_rate.modulation.lora.coding_rate",
 	"data_rate.modulation.lora.spreading_factor",
-	"data_rate_index",
+	"data_rate.modulation.lrfhss",
+	"data_rate.modulation.lrfhss.coding_rate",
+	"data_rate.modulation.lrfhss.modulation_type",
+	"data_rate.modulation.lrfhss.operating_channel_width",
 	"downlink",
 	"downlink.antenna_index",
 	"downlink.invert_polarization",
@@ -242,9 +264,8 @@ var TxSettingsFieldPathsNested = []string{
 }
 
 var TxSettingsFieldPathsTopLevel = []string{
-	"coding_rate",
+	"concentrator_timestamp",
 	"data_rate",
-	"data_rate_index",
 	"downlink",
 	"enable_crc",
 	"frequency",
@@ -262,8 +283,22 @@ var GatewayAntennaIdentifiersFieldPathsTopLevel = []string{
 	"antenna_index",
 	"gateway_ids",
 }
+var ClassBCGatewayIdentifiersFieldPathsNested = []string{
+	"antenna_index",
+	"gateway_ids",
+	"gateway_ids.eui",
+	"gateway_ids.gateway_id",
+	"group_index",
+}
+
+var ClassBCGatewayIdentifiersFieldPathsTopLevel = []string{
+	"antenna_index",
+	"gateway_ids",
+	"group_index",
+}
 var UplinkTokenFieldPathsNested = []string{
 	"concentrator_time",
+	"gateway_time",
 	"ids",
 	"ids.antenna_index",
 	"ids.gateway_ids",
@@ -275,6 +310,7 @@ var UplinkTokenFieldPathsNested = []string{
 
 var UplinkTokenFieldPathsTopLevel = []string{
 	"concentrator_time",
+	"gateway_time",
 	"ids",
 	"server_time",
 	"timestamp",
@@ -299,10 +335,32 @@ var TxRequestFieldPathsNested = []string{
 	"downlink_paths",
 	"frequency_plan_id",
 	"priority",
-	"rx1_data_rate_index",
+	"rx1_data_rate",
+	"rx1_data_rate.modulation",
+	"rx1_data_rate.modulation.fsk",
+	"rx1_data_rate.modulation.fsk.bit_rate",
+	"rx1_data_rate.modulation.lora",
+	"rx1_data_rate.modulation.lora.bandwidth",
+	"rx1_data_rate.modulation.lora.coding_rate",
+	"rx1_data_rate.modulation.lora.spreading_factor",
+	"rx1_data_rate.modulation.lrfhss",
+	"rx1_data_rate.modulation.lrfhss.coding_rate",
+	"rx1_data_rate.modulation.lrfhss.modulation_type",
+	"rx1_data_rate.modulation.lrfhss.operating_channel_width",
 	"rx1_delay",
 	"rx1_frequency",
-	"rx2_data_rate_index",
+	"rx2_data_rate",
+	"rx2_data_rate.modulation",
+	"rx2_data_rate.modulation.fsk",
+	"rx2_data_rate.modulation.fsk.bit_rate",
+	"rx2_data_rate.modulation.lora",
+	"rx2_data_rate.modulation.lora.bandwidth",
+	"rx2_data_rate.modulation.lora.coding_rate",
+	"rx2_data_rate.modulation.lora.spreading_factor",
+	"rx2_data_rate.modulation.lrfhss",
+	"rx2_data_rate.modulation.lrfhss.coding_rate",
+	"rx2_data_rate.modulation.lrfhss.modulation_type",
+	"rx2_data_rate.modulation.lrfhss.operating_channel_width",
 	"rx2_frequency",
 }
 
@@ -313,10 +371,10 @@ var TxRequestFieldPathsTopLevel = []string{
 	"downlink_paths",
 	"frequency_plan_id",
 	"priority",
-	"rx1_data_rate_index",
+	"rx1_data_rate",
 	"rx1_delay",
 	"rx1_frequency",
-	"rx2_data_rate_index",
+	"rx2_data_rate",
 	"rx2_frequency",
 }
 var MACCommandFieldPathsNested = []string{
@@ -417,11 +475,25 @@ var MACCommandFieldPathsTopLevel = []string{
 	"cid",
 	"payload",
 }
+var MACCommandsFieldPathsNested = []string{
+	"commands",
+}
+
+var MACCommandsFieldPathsTopLevel = []string{
+	"commands",
+}
 var FrequencyValueFieldPathsNested = []string{
 	"value",
 }
 
 var FrequencyValueFieldPathsTopLevel = []string{
+	"value",
+}
+var ZeroableFrequencyValueFieldPathsNested = []string{
+	"value",
+}
+
+var ZeroableFrequencyValueFieldPathsTopLevel = []string{
 	"value",
 }
 var DataRateOffsetValueFieldPathsNested = []string{
@@ -471,6 +543,13 @@ var ADRAckDelayExponentValueFieldPathsNested = []string{
 }
 
 var ADRAckDelayExponentValueFieldPathsTopLevel = []string{
+	"value",
+}
+var DeviceEIRPValueFieldPathsNested = []string{
+	"value",
+}
+
+var DeviceEIRPValueFieldPathsTopLevel = []string{
 	"value",
 }
 var TxSettings_DownlinkFieldPathsNested = []string{

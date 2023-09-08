@@ -2,11 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *EndDeviceBrand) SetFields(src *EndDeviceBrand, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -16,10 +12,10 @@ func (dst *EndDeviceBrand) SetFields(src *EndDeviceBrand, paths ...string) error
 				return fmt.Errorf("'brand_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.BrandID = src.BrandID
+				dst.BrandId = src.BrandId
 			} else {
 				var zero string
-				dst.BrandID = zero
+				dst.BrandId = zero
 			}
 		case "name":
 			if len(subs) > 0 {
@@ -55,10 +51,10 @@ func (dst *EndDeviceBrand) SetFields(src *EndDeviceBrand, paths ...string) error
 				return fmt.Errorf("'lora_alliance_vendor_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.LoRaAllianceVendorID = src.LoRaAllianceVendorID
+				dst.LoraAllianceVendorId = src.LoraAllianceVendorId
 			} else {
 				var zero uint32
-				dst.LoRaAllianceVendorID = zero
+				dst.LoraAllianceVendorId = zero
 			}
 		case "website":
 			if len(subs) > 0 {
@@ -106,20 +102,20 @@ func (dst *EndDeviceModel) SetFields(src *EndDeviceModel, paths ...string) error
 				return fmt.Errorf("'brand_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.BrandID = src.BrandID
+				dst.BrandId = src.BrandId
 			} else {
 				var zero string
-				dst.BrandID = zero
+				dst.BrandId = zero
 			}
 		case "model_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'model_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ModelID = src.ModelID
+				dst.ModelId = src.ModelId
 			} else {
 				var zero string
-				dst.ModelID = zero
+				dst.ModelId = zero
 			}
 		case "name":
 			if len(subs) > 0 {
@@ -257,10 +253,10 @@ func (dst *EndDeviceModel) SetFields(src *EndDeviceModel, paths ...string) error
 				return fmt.Errorf("'ip_code' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.IPCode = src.IPCode
+				dst.IpCode = src.IpCode
 			} else {
 				var zero string
-				dst.IPCode = zero
+				dst.IpCode = zero
 			}
 		case "key_provisioning":
 			if len(subs) > 0 {
@@ -278,8 +274,7 @@ func (dst *EndDeviceModel) SetFields(src *EndDeviceModel, paths ...string) error
 			if src != nil {
 				dst.KeySecurity = src.KeySecurity
 			} else {
-				var zero KeySecurity
-				dst.KeySecurity = zero
+				dst.KeySecurity = 0
 			}
 		case "photos":
 			if len(subs) > 0 {
@@ -336,20 +331,20 @@ func (dst *EndDeviceModel) SetFields(src *EndDeviceModel, paths ...string) error
 				return fmt.Errorf("'product_url' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ProductURL = src.ProductURL
+				dst.ProductUrl = src.ProductUrl
 			} else {
 				var zero string
-				dst.ProductURL = zero
+				dst.ProductUrl = zero
 			}
 		case "datasheet_url":
 			if len(subs) > 0 {
 				return fmt.Errorf("'datasheet_url' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.DatasheetURL = src.DatasheetURL
+				dst.DatasheetUrl = src.DatasheetUrl
 			} else {
 				var zero string
-				dst.DatasheetURL = zero
+				dst.DatasheetUrl = zero
 			}
 		case "resellers":
 			if len(subs) > 0 {
@@ -408,19 +403,26 @@ func (dst *GetEndDeviceBrandRequest) SetFields(src *GetEndDeviceBrandRequest, pa
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIDs
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIDs
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIDs = src.ApplicationIDs
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIDs = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "brand_id":
@@ -428,10 +430,10 @@ func (dst *GetEndDeviceBrandRequest) SetFields(src *GetEndDeviceBrandRequest, pa
 				return fmt.Errorf("'brand_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.BrandID = src.BrandID
+				dst.BrandId = src.BrandId
 			} else {
 				var zero string
-				dst.BrandID = zero
+				dst.BrandId = zero
 			}
 		case "field_mask":
 			if len(subs) > 0 {
@@ -440,8 +442,7 @@ func (dst *GetEndDeviceBrandRequest) SetFields(src *GetEndDeviceBrandRequest, pa
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -457,19 +458,26 @@ func (dst *ListEndDeviceBrandsRequest) SetFields(src *ListEndDeviceBrandsRequest
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIDs
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIDs
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIDs = src.ApplicationIDs
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIDs = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "limit":
@@ -519,8 +527,7 @@ func (dst *ListEndDeviceBrandsRequest) SetFields(src *ListEndDeviceBrandsRequest
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -536,19 +543,26 @@ func (dst *GetEndDeviceModelRequest) SetFields(src *GetEndDeviceModelRequest, pa
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIDs
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIDs
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIDs = src.ApplicationIDs
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIDs = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "brand_id":
@@ -556,20 +570,20 @@ func (dst *GetEndDeviceModelRequest) SetFields(src *GetEndDeviceModelRequest, pa
 				return fmt.Errorf("'brand_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.BrandID = src.BrandID
+				dst.BrandId = src.BrandId
 			} else {
 				var zero string
-				dst.BrandID = zero
+				dst.BrandId = zero
 			}
 		case "model_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'model_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ModelID = src.ModelID
+				dst.ModelId = src.ModelId
 			} else {
 				var zero string
-				dst.ModelID = zero
+				dst.ModelId = zero
 			}
 		case "field_mask":
 			if len(subs) > 0 {
@@ -578,8 +592,7 @@ func (dst *GetEndDeviceModelRequest) SetFields(src *GetEndDeviceModelRequest, pa
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -595,19 +608,26 @@ func (dst *ListEndDeviceModelsRequest) SetFields(src *ListEndDeviceModelsRequest
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIDs
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIDs
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIDs = src.ApplicationIDs
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIDs = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "brand_id":
@@ -615,10 +635,10 @@ func (dst *ListEndDeviceModelsRequest) SetFields(src *ListEndDeviceModelsRequest
 				return fmt.Errorf("'brand_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.BrandID = src.BrandID
+				dst.BrandId = src.BrandId
 			} else {
 				var zero string
-				dst.BrandID = zero
+				dst.BrandId = zero
 			}
 		case "limit":
 			if len(subs) > 0 {
@@ -667,8 +687,7 @@ func (dst *ListEndDeviceModelsRequest) SetFields(src *ListEndDeviceModelsRequest
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -684,44 +703,76 @@ func (dst *GetTemplateRequest) SetFields(src *GetTemplateRequest, paths ...strin
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIDs
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIDs
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIDs = src.ApplicationIDs
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIDs = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "version_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *EndDeviceVersionIdentifiers
-				if (src == nil || src.VersionIDs == nil) && dst.VersionIDs == nil {
+				if (src == nil || src.VersionIds == nil) && dst.VersionIds == nil {
 					continue
 				}
 				if src != nil {
-					newSrc = src.VersionIDs
+					newSrc = src.VersionIds
 				}
-				if dst.VersionIDs != nil {
-					newDst = dst.VersionIDs
+				if dst.VersionIds != nil {
+					newDst = dst.VersionIds
 				} else {
 					newDst = &EndDeviceVersionIdentifiers{}
-					dst.VersionIDs = newDst
+					dst.VersionIds = newDst
 				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.VersionIDs = src.VersionIDs
+					dst.VersionIds = src.VersionIds
 				} else {
-					dst.VersionIDs = nil
+					dst.VersionIds = nil
+				}
+			}
+		case "end_device_profile_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *GetTemplateRequest_EndDeviceProfileIdentifiers
+				if (src == nil || src.EndDeviceProfileIds == nil) && dst.EndDeviceProfileIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.EndDeviceProfileIds
+				}
+				if dst.EndDeviceProfileIds != nil {
+					newDst = dst.EndDeviceProfileIds
+				} else {
+					newDst = &GetTemplateRequest_EndDeviceProfileIdentifiers{}
+					dst.EndDeviceProfileIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.EndDeviceProfileIds = src.EndDeviceProfileIds
+				} else {
+					dst.EndDeviceProfileIds = nil
 				}
 			}
 
@@ -738,45 +789,61 @@ func (dst *GetPayloadFormatterRequest) SetFields(src *GetPayloadFormatterRequest
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIDs
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIDs
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIDs = src.ApplicationIDs
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIDs = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "version_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *EndDeviceVersionIdentifiers
-				if (src == nil || src.VersionIDs == nil) && dst.VersionIDs == nil {
+				if (src == nil || src.VersionIds == nil) && dst.VersionIds == nil {
 					continue
 				}
 				if src != nil {
-					newSrc = src.VersionIDs
+					newSrc = src.VersionIds
 				}
-				if dst.VersionIDs != nil {
-					newDst = dst.VersionIDs
+				if dst.VersionIds != nil {
+					newDst = dst.VersionIds
 				} else {
 					newDst = &EndDeviceVersionIdentifiers{}
-					dst.VersionIDs = newDst
+					dst.VersionIds = newDst
 				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.VersionIDs = src.VersionIDs
+					dst.VersionIds = src.VersionIds
 				} else {
-					dst.VersionIDs = nil
+					dst.VersionIds = nil
 				}
+			}
+		case "field_mask":
+			if len(subs) > 0 {
+				return fmt.Errorf("'field_mask' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FieldMask = src.FieldMask
+			} else {
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -826,7 +893,93 @@ func (dst *ListEndDeviceModelsResponse) SetFields(src *ListEndDeviceModelsRespon
 	return nil
 }
 
-func (dst *MessagePayloadFormatter) SetFields(src *MessagePayloadFormatter, paths ...string) error {
+func (dst *EncodedMessagePayload) SetFields(src *EncodedMessagePayload, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "f_port":
+			if len(subs) > 0 {
+				return fmt.Errorf("'f_port' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FPort = src.FPort
+			} else {
+				var zero uint32
+				dst.FPort = zero
+			}
+		case "frm_payload":
+			if len(subs) > 0 {
+				return fmt.Errorf("'frm_payload' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FrmPayload = src.FrmPayload
+			} else {
+				dst.FrmPayload = nil
+			}
+		case "warnings":
+			if len(subs) > 0 {
+				return fmt.Errorf("'warnings' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Warnings = src.Warnings
+			} else {
+				dst.Warnings = nil
+			}
+		case "errors":
+			if len(subs) > 0 {
+				return fmt.Errorf("'errors' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Errors = src.Errors
+			} else {
+				dst.Errors = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *DecodedMessagePayload) SetFields(src *DecodedMessagePayload, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "data":
+			if len(subs) > 0 {
+				return fmt.Errorf("'data' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Data = src.Data
+			} else {
+				dst.Data = nil
+			}
+		case "warnings":
+			if len(subs) > 0 {
+				return fmt.Errorf("'warnings' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Warnings = src.Warnings
+			} else {
+				dst.Warnings = nil
+			}
+		case "errors":
+			if len(subs) > 0 {
+				return fmt.Errorf("'errors' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Errors = src.Errors
+			} else {
+				dst.Errors = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *MessagePayloadDecoder) SetFields(src *MessagePayloadDecoder, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
 		case "formatter":
@@ -836,8 +989,7 @@ func (dst *MessagePayloadFormatter) SetFields(src *MessagePayloadFormatter, path
 			if src != nil {
 				dst.Formatter = src.Formatter
 			} else {
-				var zero PayloadFormatter
-				dst.Formatter = zero
+				dst.Formatter = 0
 			}
 		case "formatter_parameter":
 			if len(subs) > 0 {
@@ -848,6 +1000,74 @@ func (dst *MessagePayloadFormatter) SetFields(src *MessagePayloadFormatter, path
 			} else {
 				var zero string
 				dst.FormatterParameter = zero
+			}
+		case "codec_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'codec_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.CodecId = src.CodecId
+			} else {
+				var zero string
+				dst.CodecId = zero
+			}
+		case "examples":
+			if len(subs) > 0 {
+				return fmt.Errorf("'examples' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Examples = src.Examples
+			} else {
+				dst.Examples = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *MessagePayloadEncoder) SetFields(src *MessagePayloadEncoder, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "formatter":
+			if len(subs) > 0 {
+				return fmt.Errorf("'formatter' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Formatter = src.Formatter
+			} else {
+				dst.Formatter = 0
+			}
+		case "formatter_parameter":
+			if len(subs) > 0 {
+				return fmt.Errorf("'formatter_parameter' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FormatterParameter = src.FormatterParameter
+			} else {
+				var zero string
+				dst.FormatterParameter = zero
+			}
+		case "codec_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'codec_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.CodecId = src.CodecId
+			} else {
+				var zero string
+				dst.CodecId = zero
+			}
+		case "examples":
+			if len(subs) > 0 {
+				return fmt.Errorf("'examples' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Examples = src.Examples
+			} else {
+				dst.Examples = nil
 			}
 
 		default:
@@ -1172,10 +1392,10 @@ func (dst *EndDeviceModel_Reseller) SetFields(src *EndDeviceModel_Reseller, path
 				return fmt.Errorf("'url' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.URL = src.URL
+				dst.Url = src.Url
 			} else {
 				var zero string
-				dst.URL = zero
+				dst.Url = zero
 			}
 
 		default:
@@ -1217,35 +1437,45 @@ func (dst *EndDeviceModel_Compliances) SetFields(src *EndDeviceModel_Compliances
 func (dst *EndDeviceModel_FirmwareVersion_Profile) SetFields(src *EndDeviceModel_FirmwareVersion_Profile, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
+		case "vendor_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'vendor_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.VendorId = src.VendorId
+			} else {
+				var zero string
+				dst.VendorId = zero
+			}
 		case "profile_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'profile_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ProfileID = src.ProfileID
+				dst.ProfileId = src.ProfileId
 			} else {
 				var zero string
-				dst.ProfileID = zero
+				dst.ProfileId = zero
 			}
 		case "lorawan_certified":
 			if len(subs) > 0 {
 				return fmt.Errorf("'lorawan_certified' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.LoRaWANCertified = src.LoRaWANCertified
+				dst.LorawanCertified = src.LorawanCertified
 			} else {
 				var zero bool
-				dst.LoRaWANCertified = zero
+				dst.LorawanCertified = zero
 			}
 		case "codec_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'codec_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.CodecID = src.CodecID
+				dst.CodecId = src.CodecId
 			} else {
 				var zero string
-				dst.CodecID = zero
+				dst.CodecId = zero
 			}
 
 		default:
@@ -1326,6 +1556,179 @@ func (dst *EndDeviceModel_Compliances_Compliance) SetFields(src *EndDeviceModel_
 			} else {
 				var zero string
 				dst.Version = zero
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *GetTemplateRequest_EndDeviceProfileIdentifiers) SetFields(src *GetTemplateRequest_EndDeviceProfileIdentifiers, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "vendor_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'vendor_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.VendorId = src.VendorId
+			} else {
+				var zero uint32
+				dst.VendorId = zero
+			}
+		case "vendor_profile_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'vendor_profile_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.VendorProfileId = src.VendorProfileId
+			} else {
+				var zero uint32
+				dst.VendorProfileId = zero
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *MessagePayloadDecoder_Example) SetFields(src *MessagePayloadDecoder_Example, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "description":
+			if len(subs) > 0 {
+				return fmt.Errorf("'description' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Description = src.Description
+			} else {
+				var zero string
+				dst.Description = zero
+			}
+		case "input":
+			if len(subs) > 0 {
+				var newDst, newSrc *EncodedMessagePayload
+				if (src == nil || src.Input == nil) && dst.Input == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.Input
+				}
+				if dst.Input != nil {
+					newDst = dst.Input
+				} else {
+					newDst = &EncodedMessagePayload{}
+					dst.Input = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.Input = src.Input
+				} else {
+					dst.Input = nil
+				}
+			}
+		case "output":
+			if len(subs) > 0 {
+				var newDst, newSrc *DecodedMessagePayload
+				if (src == nil || src.Output == nil) && dst.Output == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.Output
+				}
+				if dst.Output != nil {
+					newDst = dst.Output
+				} else {
+					newDst = &DecodedMessagePayload{}
+					dst.Output = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.Output = src.Output
+				} else {
+					dst.Output = nil
+				}
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *MessagePayloadEncoder_Example) SetFields(src *MessagePayloadEncoder_Example, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "description":
+			if len(subs) > 0 {
+				return fmt.Errorf("'description' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Description = src.Description
+			} else {
+				var zero string
+				dst.Description = zero
+			}
+		case "input":
+			if len(subs) > 0 {
+				var newDst, newSrc *DecodedMessagePayload
+				if (src == nil || src.Input == nil) && dst.Input == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.Input
+				}
+				if dst.Input != nil {
+					newDst = dst.Input
+				} else {
+					newDst = &DecodedMessagePayload{}
+					dst.Input = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.Input = src.Input
+				} else {
+					dst.Input = nil
+				}
+			}
+		case "output":
+			if len(subs) > 0 {
+				var newDst, newSrc *EncodedMessagePayload
+				if (src == nil || src.Output == nil) && dst.Output == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.Output
+				}
+				if dst.Output != nil {
+					newDst = dst.Output
+				} else {
+					newDst = &EncodedMessagePayload{}
+					dst.Output = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.Output = src.Output
+				} else {
+					dst.Output = nil
+				}
 			}
 
 		default:

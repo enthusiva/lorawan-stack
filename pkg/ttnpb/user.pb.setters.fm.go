@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *User) SetFields(src *User, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -15,19 +10,26 @@ func (dst *User) SetFields(src *User, paths ...string) error {
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "created_at":
@@ -37,8 +39,7 @@ func (dst *User) SetFields(src *User, paths ...string) error {
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -47,8 +48,7 @@ func (dst *User) SetFields(src *User, paths ...string) error {
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "deleted_at":
 			if len(subs) > 0 {
@@ -152,8 +152,7 @@ func (dst *User) SetFields(src *User, paths ...string) error {
 			if src != nil {
 				dst.State = src.State
 			} else {
-				var zero State
-				dst.State = zero
+				dst.State = 0
 			}
 		case "state_description":
 			if len(subs) > 0 {
@@ -262,19 +261,26 @@ func (dst *GetUserRequest) SetFields(src *GetUserRequest, paths ...string) error
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "field_mask":
@@ -284,8 +290,7 @@ func (dst *GetUserRequest) SetFields(src *GetUserRequest, paths ...string) error
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -305,8 +310,7 @@ func (dst *ListUsersRequest) SetFields(src *ListUsersRequest, paths ...string) e
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -362,10 +366,18 @@ func (dst *CreateUserRequest) SetFields(src *CreateUserRequest, paths ...string)
 		case "user":
 			if len(subs) > 0 {
 				var newDst, newSrc *User
-				if src != nil {
-					newSrc = &src.User
+				if (src == nil || src.User == nil) && dst.User == nil {
+					continue
 				}
-				newDst = &dst.User
+				if src != nil {
+					newSrc = src.User
+				}
+				if dst.User != nil {
+					newDst = dst.User
+				} else {
+					newDst = &User{}
+					dst.User = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -373,8 +385,7 @@ func (dst *CreateUserRequest) SetFields(src *CreateUserRequest, paths ...string)
 				if src != nil {
 					dst.User = src.User
 				} else {
-					var zero User
-					dst.User = zero
+					dst.User = nil
 				}
 			}
 		case "invitation_token":
@@ -401,10 +412,18 @@ func (dst *UpdateUserRequest) SetFields(src *UpdateUserRequest, paths ...string)
 		case "user":
 			if len(subs) > 0 {
 				var newDst, newSrc *User
-				if src != nil {
-					newSrc = &src.User
+				if (src == nil || src.User == nil) && dst.User == nil {
+					continue
 				}
-				newDst = &dst.User
+				if src != nil {
+					newSrc = src.User
+				}
+				if dst.User != nil {
+					newDst = dst.User
+				} else {
+					newDst = &User{}
+					dst.User = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -412,8 +431,7 @@ func (dst *UpdateUserRequest) SetFields(src *UpdateUserRequest, paths ...string)
 				if src != nil {
 					dst.User = src.User
 				} else {
-					var zero User
-					dst.User = zero
+					dst.User = nil
 				}
 			}
 		case "field_mask":
@@ -423,8 +441,7 @@ func (dst *UpdateUserRequest) SetFields(src *UpdateUserRequest, paths ...string)
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -440,19 +457,26 @@ func (dst *CreateTemporaryPasswordRequest) SetFields(src *CreateTemporaryPasswor
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 
@@ -469,19 +493,26 @@ func (dst *UpdateUserPasswordRequest) SetFields(src *UpdateUserPasswordRequest, 
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "new":
@@ -528,20 +559,37 @@ func (dst *ListUserAPIKeysRequest) SetFields(src *ListUserAPIKeysRequest, paths 
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
+			}
+		case "order":
+			if len(subs) > 0 {
+				return fmt.Errorf("'order' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Order = src.Order
+			} else {
+				var zero string
+				dst.Order = zero
 			}
 		case "limit":
 			if len(subs) > 0 {
@@ -577,19 +625,26 @@ func (dst *GetUserAPIKeyRequest) SetFields(src *GetUserAPIKeyRequest, paths ...s
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "key_id":
@@ -597,10 +652,10 @@ func (dst *GetUserAPIKeyRequest) SetFields(src *GetUserAPIKeyRequest, paths ...s
 				return fmt.Errorf("'key_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.KeyID = src.KeyID
+				dst.KeyId = src.KeyId
 			} else {
 				var zero string
-				dst.KeyID = zero
+				dst.KeyId = zero
 			}
 
 		default:
@@ -616,19 +671,26 @@ func (dst *CreateUserAPIKeyRequest) SetFields(src *CreateUserAPIKeyRequest, path
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "name":
@@ -650,6 +712,15 @@ func (dst *CreateUserAPIKeyRequest) SetFields(src *CreateUserAPIKeyRequest, path
 			} else {
 				dst.Rights = nil
 			}
+		case "expires_at":
+			if len(subs) > 0 {
+				return fmt.Errorf("'expires_at' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.ExpiresAt = src.ExpiresAt
+			} else {
+				dst.ExpiresAt = nil
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -664,38 +735,107 @@ func (dst *UpdateUserAPIKeyRequest) SetFields(src *UpdateUserAPIKeyRequest, path
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "api_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *APIKey
-				if src != nil {
-					newSrc = &src.APIKey
+				if (src == nil || src.ApiKey == nil) && dst.ApiKey == nil {
+					continue
 				}
-				newDst = &dst.APIKey
+				if src != nil {
+					newSrc = src.ApiKey
+				}
+				if dst.ApiKey != nil {
+					newDst = dst.ApiKey
+				} else {
+					newDst = &APIKey{}
+					dst.ApiKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.APIKey = src.APIKey
+					dst.ApiKey = src.ApiKey
 				} else {
-					var zero APIKey
-					dst.APIKey = zero
+					dst.ApiKey = nil
 				}
+			}
+		case "field_mask":
+			if len(subs) > 0 {
+				return fmt.Errorf("'field_mask' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FieldMask = src.FieldMask
+			} else {
+				dst.FieldMask = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *DeleteUserAPIKeyRequest) SetFields(src *DeleteUserAPIKeyRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "user_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.UserIds = src.UserIds
+				} else {
+					dst.UserIds = nil
+				}
+			}
+		case "key_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'key_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.KeyId = src.KeyId
+			} else {
+				var zero string
+				dst.KeyId = zero
 			}
 
 		default:
@@ -735,8 +875,7 @@ func (dst *Invitation) SetFields(src *Invitation, paths ...string) error {
 			if src != nil {
 				dst.ExpiresAt = src.ExpiresAt
 			} else {
-				var zero time.Time
-				dst.ExpiresAt = zero
+				dst.ExpiresAt = nil
 			}
 		case "created_at":
 			if len(subs) > 0 {
@@ -745,8 +884,7 @@ func (dst *Invitation) SetFields(src *Invitation, paths ...string) error {
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -755,8 +893,7 @@ func (dst *Invitation) SetFields(src *Invitation, paths ...string) error {
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "accepted_at":
 			if len(subs) > 0 {
@@ -899,19 +1036,26 @@ func (dst *UserSessionIdentifiers) SetFields(src *UserSessionIdentifiers, paths 
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "session_id":
@@ -919,10 +1063,10 @@ func (dst *UserSessionIdentifiers) SetFields(src *UserSessionIdentifiers, paths 
 				return fmt.Errorf("'session_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SessionID = src.SessionID
+				dst.SessionId = src.SessionId
 			} else {
 				var zero string
-				dst.SessionID = zero
+				dst.SessionId = zero
 			}
 
 		default:
@@ -938,19 +1082,26 @@ func (dst *UserSession) SetFields(src *UserSession, paths ...string) error {
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "session_id":
@@ -958,10 +1109,10 @@ func (dst *UserSession) SetFields(src *UserSession, paths ...string) error {
 				return fmt.Errorf("'session_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SessionID = src.SessionID
+				dst.SessionId = src.SessionId
 			} else {
 				var zero string
-				dst.SessionID = zero
+				dst.SessionId = zero
 			}
 		case "created_at":
 			if len(subs) > 0 {
@@ -970,8 +1121,7 @@ func (dst *UserSession) SetFields(src *UserSession, paths ...string) error {
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -980,8 +1130,7 @@ func (dst *UserSession) SetFields(src *UserSession, paths ...string) error {
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "expires_at":
 			if len(subs) > 0 {
@@ -1036,19 +1185,26 @@ func (dst *ListUserSessionsRequest) SetFields(src *ListUserSessionsRequest, path
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "order":
@@ -1095,19 +1251,26 @@ func (dst *LoginToken) SetFields(src *LoginToken, paths ...string) error {
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "created_at":
@@ -1117,8 +1280,7 @@ func (dst *LoginToken) SetFields(src *LoginToken, paths ...string) error {
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -1127,8 +1289,7 @@ func (dst *LoginToken) SetFields(src *LoginToken, paths ...string) error {
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "expires_at":
 			if len(subs) > 0 {
@@ -1137,8 +1298,7 @@ func (dst *LoginToken) SetFields(src *LoginToken, paths ...string) error {
 			if src != nil {
 				dst.ExpiresAt = src.ExpiresAt
 			} else {
-				var zero time.Time
-				dst.ExpiresAt = zero
+				dst.ExpiresAt = nil
 			}
 		case "token":
 			if len(subs) > 0 {
@@ -1174,19 +1334,26 @@ func (dst *CreateLoginTokenRequest) SetFields(src *CreateLoginTokenRequest, path
 		case "user_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *UserIdentifiers
-				if src != nil {
-					newSrc = &src.UserIdentifiers
+				if (src == nil || src.UserIds == nil) && dst.UserIds == nil {
+					continue
 				}
-				newDst = &dst.UserIdentifiers
+				if src != nil {
+					newSrc = src.UserIds
+				}
+				if dst.UserIds != nil {
+					newDst = dst.UserIds
+				} else {
+					newDst = &UserIdentifiers{}
+					dst.UserIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.UserIdentifiers = src.UserIdentifiers
+					dst.UserIds = src.UserIds
 				} else {
-					var zero UserIdentifiers
-					dst.UserIdentifiers = zero
+					dst.UserIds = nil
 				}
 			}
 		case "skip_email":

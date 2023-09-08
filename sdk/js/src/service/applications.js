@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+import autoBind from 'auto-bind'
 
 import Marshaler from '../util/marshaler'
 import combineStreams from '../util/combine-streams'
@@ -50,6 +52,7 @@ class Applications {
         list: 'application_ids.application_id',
         create: 'application_ids.application_id',
         update: 'application_ids.application_id',
+        delete: 'application_ids.application_id',
       },
     })
     this.Link = new Link(api.As)
@@ -59,11 +62,14 @@ class Applications {
         get: 'application_ids.application_id',
         list: 'application_ids.application_id',
         set: 'application_ids.application_id',
+        delete: 'application_ids.application_id',
       },
     })
     this.Webhooks = new Webhooks(api.ApplicationWebhookRegistry)
     this.PubSubs = new PubSubs(api.ApplicationPubSubRegistry)
     this.Packages = new Packages(api.ApplicationPackageRegistry)
+
+    autoBind(this)
   }
 
   // Retrieval.
@@ -138,6 +144,16 @@ class Applications {
     return Marshaler.unwrapApplication(response)
   }
 
+  async restoreById(id) {
+    const response = await this._api.ApplicationRegistry.Restore({
+      routeParams: {
+        application_id: id,
+      },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
   // Creation.
 
   async create(ownerId = this._defaultUserId, application, isUserOwner = true) {
@@ -163,6 +179,24 @@ class Applications {
     return Marshaler.payloadSingleResponse(response)
   }
 
+  async purgeById(id) {
+    const response = await this._api.ApplicationRegistry.Purge({
+      routeParams: { application_id: id },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
+  // DevEUI issuing.
+
+  async issueDevEUI(id) {
+    const response = await this._api.ApplicationRegistry.IssueDevEUI({
+      routeParams: { application_id: id },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
   // Miscellaneous.
 
   async getRightsById(applicationId) {
@@ -183,11 +217,12 @@ class Applications {
 
   // Events Stream
 
-  async openStream(identifiers, tail, after) {
+  async openStream(identifiers, names, tail, after) {
     const payload = {
       identifiers: identifiers.map(id => ({
         application_ids: { application_id: id },
       })),
+      names,
       tail,
       after,
     }

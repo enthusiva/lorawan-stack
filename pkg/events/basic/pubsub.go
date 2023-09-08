@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package basic provides a basic events PubSub implementation.
 package basic
 
 import (
@@ -37,8 +38,10 @@ func NewPubSub() *PubSub {
 // Subscribe starts a subscription for events that match name and identifiers.
 // The subscription lasts until the context is canceled.
 // The handler will be notified of matching events and must not block.
-func (e *PubSub) Subscribe(ctx context.Context, name string, identifiers []*ttnpb.EntityIdentifiers, hdl events.Handler) error {
-	s, err := NewSubscription(ctx, name, identifiers, hdl)
+func (e *PubSub) Subscribe(
+	ctx context.Context, names []string, identifiers []*ttnpb.EntityIdentifiers, hdl events.Handler,
+) error {
+	s, err := NewSubscription(ctx, names, identifiers, hdl)
 	if err != nil {
 		return err
 	}
@@ -58,9 +61,7 @@ func (e *PubSub) AddSubscription(s events.Subscription) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	subscriptions := make([]events.Subscription, 0, len(e.subscriptions)+1)
-	for _, sub := range e.subscriptions {
-		subscriptions = append(subscriptions, sub)
-	}
+	subscriptions = append(subscriptions, e.subscriptions...)
 	e.subscriptions = append(subscriptions, s)
 }
 
@@ -79,14 +80,17 @@ func (e *PubSub) RemoveSubscription(s events.Subscription) {
 }
 
 // Publish publishes an event, which will notify all matching subscriptions.
-func (e *PubSub) Publish(evt events.Event) {
-	defer trace.StartRegion(evt.Context(), "publish event").End()
+func (e *PubSub) Publish(evs ...events.Event) {
 	e.mu.RLock()
 	subscriptions := e.subscriptions
 	e.mu.RUnlock()
-	for _, sub := range subscriptions {
-		if sub.Match(evt) {
-			sub.Notify(evt)
-		}
+	for _, evt := range evs {
+		trace.WithRegion(evt.Context(), "publish event", func() {
+			for _, sub := range subscriptions {
+				if sub.Match(evt) {
+					sub.Notify(evt)
+				}
+			}
+		})
 	}
 }

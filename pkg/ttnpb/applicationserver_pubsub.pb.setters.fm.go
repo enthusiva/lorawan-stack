@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *ApplicationPubSubIdentifiers) SetFields(src *ApplicationPubSubIdentifiers, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -15,19 +10,26 @@ func (dst *ApplicationPubSubIdentifiers) SetFields(src *ApplicationPubSubIdentif
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "pub_sub_id":
@@ -35,10 +37,10 @@ func (dst *ApplicationPubSubIdentifiers) SetFields(src *ApplicationPubSubIdentif
 				return fmt.Errorf("'pub_sub_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.PubSubID = src.PubSubID
+				dst.PubSubId = src.PubSubId
 			} else {
 				var zero string
-				dst.PubSubID = zero
+				dst.PubSubId = zero
 			}
 
 		default:
@@ -54,19 +56,26 @@ func (dst *ApplicationPubSub) SetFields(src *ApplicationPubSub, paths ...string)
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationPubSubIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationPubSubIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.ApplicationPubSubIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &ApplicationPubSubIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationPubSubIdentifiers = src.ApplicationPubSubIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero ApplicationPubSubIdentifiers
-					dst.ApplicationPubSubIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "created_at":
@@ -76,8 +85,7 @@ func (dst *ApplicationPubSub) SetFields(src *ApplicationPubSub, paths ...string)
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -86,8 +94,7 @@ func (dst *ApplicationPubSub) SetFields(src *ApplicationPubSub, paths ...string)
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "format":
 			if len(subs) > 0 {
@@ -182,6 +189,31 @@ func (dst *ApplicationPubSub) SetFields(src *ApplicationPubSub, paths ...string)
 					dst.UplinkMessage = src.UplinkMessage
 				} else {
 					dst.UplinkMessage = nil
+				}
+			}
+		case "uplink_normalized":
+			if len(subs) > 0 {
+				var newDst, newSrc *ApplicationPubSub_Message
+				if (src == nil || src.UplinkNormalized == nil) && dst.UplinkNormalized == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.UplinkNormalized
+				}
+				if dst.UplinkNormalized != nil {
+					newDst = dst.UplinkNormalized
+				} else {
+					newDst = &ApplicationPubSub_Message{}
+					dst.UplinkNormalized = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.UplinkNormalized = src.UplinkNormalized
+				} else {
+					dst.UplinkNormalized = nil
 				}
 			}
 		case "join_accept":
@@ -426,99 +458,108 @@ func (dst *ApplicationPubSub) SetFields(src *ApplicationPubSub, paths ...string)
 			for oneofName, oneofSubs := range subPathMap {
 				switch oneofName {
 				case "nats":
-					_, srcOk := src.Provider.(*ApplicationPubSub_NATS)
-					if !srcOk && src.Provider != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.Provider.(*ApplicationPubSub_Nats)
+					}
+					if srcValid := srcTypeOk || src == nil || src.Provider == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'nats', while different oneof is set in source")
 					}
-					_, dstOk := dst.Provider.(*ApplicationPubSub_NATS)
-					if !dstOk && dst.Provider != nil {
+					_, dstTypeOk := dst.Provider.(*ApplicationPubSub_Nats)
+					if dstValid := dstTypeOk || dst.Provider == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'nats', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ApplicationPubSub_NATSProvider
-						if !srcOk && !dstOk {
-							continue
+						if srcTypeOk {
+							newSrc = src.Provider.(*ApplicationPubSub_Nats).Nats
 						}
-						if srcOk {
-							newSrc = src.Provider.(*ApplicationPubSub_NATS).NATS
-						}
-						if dstOk {
-							newDst = dst.Provider.(*ApplicationPubSub_NATS).NATS
-						} else {
+						if dstTypeOk {
+							newDst = dst.Provider.(*ApplicationPubSub_Nats).Nats
+						} else if srcTypeOk {
 							newDst = &ApplicationPubSub_NATSProvider{}
-							dst.Provider = &ApplicationPubSub_NATS{NATS: newDst}
+							dst.Provider = &ApplicationPubSub_Nats{Nats: newDst}
+						} else {
+							dst.Provider = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.Provider = src.Provider
 						} else {
 							dst.Provider = nil
 						}
 					}
 				case "mqtt":
-					_, srcOk := src.Provider.(*ApplicationPubSub_MQTT)
-					if !srcOk && src.Provider != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.Provider.(*ApplicationPubSub_Mqtt)
+					}
+					if srcValid := srcTypeOk || src == nil || src.Provider == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'mqtt', while different oneof is set in source")
 					}
-					_, dstOk := dst.Provider.(*ApplicationPubSub_MQTT)
-					if !dstOk && dst.Provider != nil {
+					_, dstTypeOk := dst.Provider.(*ApplicationPubSub_Mqtt)
+					if dstValid := dstTypeOk || dst.Provider == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'mqtt', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ApplicationPubSub_MQTTProvider
-						if !srcOk && !dstOk {
-							continue
+						if srcTypeOk {
+							newSrc = src.Provider.(*ApplicationPubSub_Mqtt).Mqtt
 						}
-						if srcOk {
-							newSrc = src.Provider.(*ApplicationPubSub_MQTT).MQTT
-						}
-						if dstOk {
-							newDst = dst.Provider.(*ApplicationPubSub_MQTT).MQTT
-						} else {
+						if dstTypeOk {
+							newDst = dst.Provider.(*ApplicationPubSub_Mqtt).Mqtt
+						} else if srcTypeOk {
 							newDst = &ApplicationPubSub_MQTTProvider{}
-							dst.Provider = &ApplicationPubSub_MQTT{MQTT: newDst}
+							dst.Provider = &ApplicationPubSub_Mqtt{Mqtt: newDst}
+						} else {
+							dst.Provider = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.Provider = src.Provider
 						} else {
 							dst.Provider = nil
 						}
 					}
 				case "aws_iot":
-					_, srcOk := src.Provider.(*ApplicationPubSub_AWSIoT)
-					if !srcOk && src.Provider != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.Provider.(*ApplicationPubSub_AwsIot)
+					}
+					if srcValid := srcTypeOk || src == nil || src.Provider == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'aws_iot', while different oneof is set in source")
 					}
-					_, dstOk := dst.Provider.(*ApplicationPubSub_AWSIoT)
-					if !dstOk && dst.Provider != nil {
+					_, dstTypeOk := dst.Provider.(*ApplicationPubSub_AwsIot)
+					if dstValid := dstTypeOk || dst.Provider == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'aws_iot', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ApplicationPubSub_AWSIoTProvider
-						if !srcOk && !dstOk {
-							continue
+						if srcTypeOk {
+							newSrc = src.Provider.(*ApplicationPubSub_AwsIot).AwsIot
 						}
-						if srcOk {
-							newSrc = src.Provider.(*ApplicationPubSub_AWSIoT).AWSIoT
-						}
-						if dstOk {
-							newDst = dst.Provider.(*ApplicationPubSub_AWSIoT).AWSIoT
-						} else {
+						if dstTypeOk {
+							newDst = dst.Provider.(*ApplicationPubSub_AwsIot).AwsIot
+						} else if srcTypeOk {
 							newDst = &ApplicationPubSub_AWSIoTProvider{}
-							dst.Provider = &ApplicationPubSub_AWSIoT{AWSIoT: newDst}
+							dst.Provider = &ApplicationPubSub_AwsIot{AwsIot: newDst}
+						} else {
+							dst.Provider = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.Provider = src.Provider
 						} else {
 							dst.Provider = nil
@@ -583,19 +624,26 @@ func (dst *GetApplicationPubSubRequest) SetFields(src *GetApplicationPubSubReque
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationPubSubIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationPubSubIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.ApplicationPubSubIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &ApplicationPubSubIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationPubSubIdentifiers = src.ApplicationPubSubIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero ApplicationPubSubIdentifiers
-					dst.ApplicationPubSubIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "field_mask":
@@ -605,8 +653,7 @@ func (dst *GetApplicationPubSubRequest) SetFields(src *GetApplicationPubSubReque
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -622,19 +669,26 @@ func (dst *ListApplicationPubSubsRequest) SetFields(src *ListApplicationPubSubsR
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "field_mask":
@@ -644,8 +698,7 @@ func (dst *ListApplicationPubSubsRequest) SetFields(src *ListApplicationPubSubsR
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -661,19 +714,26 @@ func (dst *SetApplicationPubSubRequest) SetFields(src *SetApplicationPubSubReque
 		case "pubsub":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationPubSub
-				if src != nil {
-					newSrc = &src.ApplicationPubSub
+				if (src == nil || src.Pubsub == nil) && dst.Pubsub == nil {
+					continue
 				}
-				newDst = &dst.ApplicationPubSub
+				if src != nil {
+					newSrc = src.Pubsub
+				}
+				if dst.Pubsub != nil {
+					newDst = dst.Pubsub
+				} else {
+					newDst = &ApplicationPubSub{}
+					dst.Pubsub = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationPubSub = src.ApplicationPubSub
+					dst.Pubsub = src.Pubsub
 				} else {
-					var zero ApplicationPubSub
-					dst.ApplicationPubSub = zero
+					dst.Pubsub = nil
 				}
 			}
 		case "field_mask":
@@ -683,8 +743,7 @@ func (dst *SetApplicationPubSubRequest) SetFields(src *SetApplicationPubSubReque
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -702,10 +761,10 @@ func (dst *ApplicationPubSub_NATSProvider) SetFields(src *ApplicationPubSub_NATS
 				return fmt.Errorf("'server_url' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ServerURL = src.ServerURL
+				dst.ServerUrl = src.ServerUrl
 			} else {
 				var zero string
-				dst.ServerURL = zero
+				dst.ServerUrl = zero
 			}
 
 		default:
@@ -723,20 +782,20 @@ func (dst *ApplicationPubSub_MQTTProvider) SetFields(src *ApplicationPubSub_MQTT
 				return fmt.Errorf("'server_url' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ServerURL = src.ServerURL
+				dst.ServerUrl = src.ServerUrl
 			} else {
 				var zero string
-				dst.ServerURL = zero
+				dst.ServerUrl = zero
 			}
 		case "client_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'client_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ClientID = src.ClientID
+				dst.ClientId = src.ClientId
 			} else {
 				var zero string
-				dst.ClientID = zero
+				dst.ClientId = zero
 			}
 		case "username":
 			if len(subs) > 0 {
@@ -763,57 +822,55 @@ func (dst *ApplicationPubSub_MQTTProvider) SetFields(src *ApplicationPubSub_MQTT
 				return fmt.Errorf("'subscribe_qos' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SubscribeQoS = src.SubscribeQoS
+				dst.SubscribeQos = src.SubscribeQos
 			} else {
-				var zero ApplicationPubSub_MQTTProvider_QoS
-				dst.SubscribeQoS = zero
+				dst.SubscribeQos = 0
 			}
 		case "publish_qos":
 			if len(subs) > 0 {
 				return fmt.Errorf("'publish_qos' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.PublishQoS = src.PublishQoS
+				dst.PublishQos = src.PublishQos
 			} else {
-				var zero ApplicationPubSub_MQTTProvider_QoS
-				dst.PublishQoS = zero
+				dst.PublishQos = 0
 			}
 		case "use_tls":
 			if len(subs) > 0 {
 				return fmt.Errorf("'use_tls' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.UseTLS = src.UseTLS
+				dst.UseTls = src.UseTls
 			} else {
 				var zero bool
-				dst.UseTLS = zero
+				dst.UseTls = zero
 			}
 		case "tls_ca":
 			if len(subs) > 0 {
 				return fmt.Errorf("'tls_ca' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.TLSCA = src.TLSCA
+				dst.TlsCa = src.TlsCa
 			} else {
-				dst.TLSCA = nil
+				dst.TlsCa = nil
 			}
 		case "tls_client_cert":
 			if len(subs) > 0 {
 				return fmt.Errorf("'tls_client_cert' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.TLSClientCert = src.TLSClientCert
+				dst.TlsClientCert = src.TlsClientCert
 			} else {
-				dst.TLSClientCert = nil
+				dst.TlsClientCert = nil
 			}
 		case "tls_client_key":
 			if len(subs) > 0 {
 				return fmt.Errorf("'tls_client_key' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.TLSClientKey = src.TLSClientKey
+				dst.TlsClientKey = src.TlsClientKey
 			} else {
-				dst.TLSClientKey = nil
+				dst.TlsClientKey = nil
 			}
 		case "headers":
 			if len(subs) > 0 {
@@ -922,33 +979,36 @@ func (dst *ApplicationPubSub_AWSIoTProvider) SetFields(src *ApplicationPubSub_AW
 			for oneofName, oneofSubs := range subPathMap {
 				switch oneofName {
 				case "default":
-					_, srcOk := src.Deployment.(*ApplicationPubSub_AWSIoTProvider_Default)
-					if !srcOk && src.Deployment != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.Deployment.(*ApplicationPubSub_AWSIoTProvider_Default)
+					}
+					if srcValid := srcTypeOk || src == nil || src.Deployment == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'default', while different oneof is set in source")
 					}
-					_, dstOk := dst.Deployment.(*ApplicationPubSub_AWSIoTProvider_Default)
-					if !dstOk && dst.Deployment != nil {
+					_, dstTypeOk := dst.Deployment.(*ApplicationPubSub_AWSIoTProvider_Default)
+					if dstValid := dstTypeOk || dst.Deployment == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'default', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ApplicationPubSub_AWSIoTProvider_DefaultIntegration
-						if !srcOk && !dstOk {
-							continue
-						}
-						if srcOk {
+						if srcTypeOk {
 							newSrc = src.Deployment.(*ApplicationPubSub_AWSIoTProvider_Default).Default
 						}
-						if dstOk {
+						if dstTypeOk {
 							newDst = dst.Deployment.(*ApplicationPubSub_AWSIoTProvider_Default).Default
-						} else {
+						} else if srcTypeOk {
 							newDst = &ApplicationPubSub_AWSIoTProvider_DefaultIntegration{}
 							dst.Deployment = &ApplicationPubSub_AWSIoTProvider_Default{Default: newDst}
+						} else {
+							dst.Deployment = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.Deployment = src.Deployment
 						} else {
 							dst.Deployment = nil
@@ -996,10 +1056,10 @@ func (dst *ApplicationPubSub_AWSIoTProvider_AccessKey) SetFields(src *Applicatio
 				return fmt.Errorf("'access_key_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.AccessKeyID = src.AccessKeyID
+				dst.AccessKeyId = src.AccessKeyId
 			} else {
 				var zero string
-				dst.AccessKeyID = zero
+				dst.AccessKeyId = zero
 			}
 		case "secret_access_key":
 			if len(subs) > 0 {
@@ -1037,20 +1097,20 @@ func (dst *ApplicationPubSub_AWSIoTProvider_AssumeRole) SetFields(src *Applicati
 				return fmt.Errorf("'arn' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ARN = src.ARN
+				dst.Arn = src.Arn
 			} else {
 				var zero string
-				dst.ARN = zero
+				dst.Arn = zero
 			}
 		case "external_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'external_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ExternalID = src.ExternalID
+				dst.ExternalId = src.ExternalId
 			} else {
 				var zero string
-				dst.ExternalID = zero
+				dst.ExternalId = zero
 			}
 		case "session_duration":
 			if len(subs) > 0 {

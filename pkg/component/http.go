@@ -17,31 +17,11 @@ package component
 import (
 	"context"
 	"net/http"
-	"time"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/httpclient"
 )
 
-// defaultHTTPClientTimeout is the default timeout for the HTTP client.
-const defaultHTTPClientTimeout = 10 * time.Second
-
 // HTTPClient returns a new *http.Client with a default timeout and a configured transport.
-func (c *Component) HTTPClient(ctx context.Context) (*http.Client, error) {
-	tr, err := c.HTTPTransport(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &http.Client{
-		Timeout:   defaultHTTPClientTimeout,
-		Transport: tr,
-	}, nil
-}
-
-// HTTPTransport returns a new http.RoundTripper with TLS client configuration.
-func (c *Component) HTTPTransport(ctx context.Context) (http.RoundTripper, error) {
-	tlsConfig, err := c.GetTLSClientConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = tlsConfig
-	return tr, nil
+func (c *Component) HTTPClient(ctx context.Context, opts ...httpclient.Option) (*http.Client, error) {
+	return httpclient.NewProvider(c).HTTPClient(ctx, opts...)
 }

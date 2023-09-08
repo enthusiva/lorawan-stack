@@ -20,11 +20,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
@@ -34,8 +34,7 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
-type mockInterop struct {
-}
+type mockInterop struct{}
 
 func (m mockInterop) RegisterInterop(s *interop.Server) {
 	s.RegisterJS(m)
@@ -47,7 +46,11 @@ func (m mockInterop) JoinRequest(ctx context.Context, req *interop.JoinReq) (*in
 		return nil, err
 	}
 	return &interop.JoinAns{
-		JsNsMessageHeader: ansHeader,
+		JsNsMessageHeader: interop.JsNsMessageHeader{
+			MessageHeader: ansHeader,
+			SenderID:      req.ReceiverID,
+			ReceiverID:    req.SenderID,
+		},
 		Result: interop.Result{
 			ResultCode: interop.ResultSuccess,
 		},
@@ -60,22 +63,32 @@ func (m mockInterop) AppSKeyRequest(ctx context.Context, req *interop.AppSKeyReq
 		return nil, err
 	}
 	return &interop.AppSKeyAns{
-		JsAsMessageHeader: ansHeader,
+		JsAsMessageHeader: interop.JsAsMessageHeader{
+			MessageHeader: ansHeader,
+			SenderID:      req.ReceiverID,
+			ReceiverID:    req.SenderID,
+		},
 		Result: interop.Result{
 			ResultCode: interop.ResultSuccess,
 		},
 	}, nil
 }
 
-func (m mockInterop) HomeNSRequest(ctx context.Context, req *interop.HomeNSReq) (*interop.HomeNSAns, error) {
+func (m mockInterop) HomeNSRequest(ctx context.Context, req *interop.HomeNSReq) (*interop.TTIHomeNSAns, error) {
 	ansHeader, err := req.AnswerHeader()
 	if err != nil {
 		return nil, err
 	}
-	return &interop.HomeNSAns{
-		JsNsMessageHeader: ansHeader,
-		Result: interop.Result{
-			ResultCode: interop.ResultSuccess,
+	return &interop.TTIHomeNSAns{
+		HomeNSAns: interop.HomeNSAns{
+			JsNsMessageHeader: interop.JsNsMessageHeader{
+				MessageHeader: ansHeader,
+				SenderID:      req.ReceiverID,
+				ReceiverID:    req.SenderID,
+			},
+			Result: interop.Result{
+				ResultCode: interop.ResultSuccess,
+			},
 		},
 	}, nil
 }
@@ -108,11 +121,11 @@ func TestInteropTLS(t *testing.T) {
 	c := component.MustNew(test.GetLogger(t), config)
 	c.RegisterInterop(mockInterop)
 
-	test.Must(nil, c.Start())
+	test.Must[any](nil, c.Start())
 	defer c.Close()
 
 	certPool := x509.NewCertPool()
-	certContent, err := ioutil.ReadFile("testdata/serverca.pem")
+	certContent, err := os.ReadFile("testdata/serverca.pem")
 	a.So(err, should.BeNil)
 	certPool.AppendCertsFromPEM(certContent)
 	client := http.Client{
@@ -136,12 +149,12 @@ func TestInteropTLS(t *testing.T) {
 			NsJsMessageHeader: interop.NsJsMessageHeader{
 				MessageHeader: interop.MessageHeader{
 					MessageType:     interop.MessageTypeJoinReq,
-					ProtocolVersion: "1.1",
+					ProtocolVersion: "1.0",
 				},
 				SenderID:   interop.NetID{0x0, 0x0, 0x1},
 				ReceiverID: interop.EUI64{0x42, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 			},
-			MACVersion: interop.MACVersion(ttnpb.MAC_V1_0_3),
+			MACVersion: interop.MACVersion(ttnpb.MACVersion_MAC_V1_0_3),
 		}
 		buf, err := json.Marshal(req)
 		a.So(err, should.BeNil)
@@ -156,22 +169,22 @@ func TestInteropTLS(t *testing.T) {
 			NsJsMessageHeader: interop.NsJsMessageHeader{
 				MessageHeader: interop.MessageHeader{
 					MessageType:     interop.MessageTypeJoinReq,
-					ProtocolVersion: "1.1",
+					ProtocolVersion: "1.0",
 				},
 				SenderID:   interop.NetID{0x0, 0x0, 0x2},
 				ReceiverID: interop.EUI64{0x42, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 			},
-			MACVersion: interop.MACVersion(ttnpb.MAC_V1_0_3),
+			MACVersion: interop.MACVersion(ttnpb.MACVersion_MAC_V1_0_3),
 		}
 		buf, err := json.Marshal(req)
 		a.So(err, should.BeNil)
 		res, err := client.Post("https://localhost:9188", "application/json", bytes.NewReader(buf))
 		a.So(err, should.BeNil)
-		a.So(res.StatusCode, should.Equal, http.StatusBadRequest)
+		a.So(res.StatusCode, should.Equal, http.StatusOK)
 		var msg interop.ErrorMessage
 		if !a.So(json.NewDecoder(res.Body).Decode(&msg), should.BeNil) {
 			t.FailNow()
 		}
-		a.So(msg.Result, should.Resemble, interop.Result{ResultCode: interop.ResultUnknownSender})
+		a.So(msg.Result.ResultCode, should.Resemble, interop.ResultUnknownSender)
 	}
 }

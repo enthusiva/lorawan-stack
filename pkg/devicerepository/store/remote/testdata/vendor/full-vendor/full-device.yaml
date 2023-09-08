@@ -11,7 +11,7 @@ firmwareVersions:
   - version: 1.0
     hardwareVersions: [0.1, 0.2]
     profiles:
-      EU863-870: {id: full-profile2}
+      EU863-870: {vendorID: module-maker, id: module-profile}
       US902-928: {id: full-profile, codec: codec}
 sensors: [temperature, gas]
 dimensions:
@@ -36,7 +36,7 @@ videos:
   main: a.mp4
   other: [b.mp4, "https://youtube.com/watch?v=c.mp4"]
 productURL: https://product.vendor.io
-datasheetURL: https://production.vendor.io/datasheet.pdf
+dataSheetURL: https://production.vendor.io/datasheet.pdf
 resellerURLs:
 - name: Reseller 1
   region:

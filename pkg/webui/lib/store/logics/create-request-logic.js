@@ -12,53 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/* eslint-disable no-await-in-loop */
+
 import { createLogic } from 'redux-logic'
-import { defineMessages } from 'react-intl'
+
+import toast from '@ttn-lw/components/toast'
 
 import {
   isUnauthenticatedError,
   isNetworkError,
   isTimeoutError,
-  createFrontendError,
   ingestError,
+  isPermissionDeniedError,
+  isConnectionFailureError,
 } from '@ttn-lw/lib/errors/utils'
 import { clear as clearAccessToken } from '@ttn-lw/lib/access-token'
 import {
+  setLoginStatus,
   setStatusChecking,
   ATTEMPT_RECONNECT,
-  attemptReconnect,
 } from '@ttn-lw/lib/store/actions/status'
-import { getResultActionFromType } from '@ttn-lw/lib/store/actions/attach-promise'
-import { selectIsCheckingStatus, selectIsOnlineStatus } from '@ttn-lw/lib/store/selectors/status'
-import { selectApplicationSiteTitle } from '@ttn-lw/lib/selectors/env'
+import { promisifyDispatch } from '@ttn-lw/lib/store/middleware/request-promise-middleware'
+import attachPromise, { getResultActionFromType } from '@ttn-lw/lib/store/actions/attach-promise'
+import { selectIsCheckingStatus } from '@ttn-lw/lib/store/selectors/status'
+import { TokenError } from '@ttn-lw/lib/errors/custom-errors'
+import errorMessages from '@ttn-lw/lib/errors/error-messages'
 
-const siteTitle = selectApplicationSiteTitle()
-
-const m = defineMessages({
-  applicationIsOfflineTitle: '{applicationName} is offline',
-  applicationIsOfflineMessage:
-    'The action cannot be performed because your host machine is currently offline or has connection issues. Please check your internet connection and try again.',
-})
-
-const offlineError = createFrontendError(
-  { ...m.applicationIsOfflineTitle, values: { applicationName: siteTitle } },
-  m.applicationIsOfflineMessage,
-  'request_denied_application_is_offline',
-)
+let connectionChecking = null
+let lastError
 
 /**
  * Logic creator for request logics, it will handle promise resolution, as well
  * as result action dispatch automatically.
  *
  * @param {object} options - The logic options (to be passed to `createLogic()`).
+ * @param {boolean} options.noCancelOnRouteChange - Flag to disable the decoration
+ * of the `cancelType` option.
  * @param {(string|Function)} successType - The success action type or action creator.
  * @param {(string|Function)} failType - The fail action type or action creator.
+ * @param {(string|Function)} abortType - The abort action type or action creator.
  * @returns {object} The `redux-logic` (decorated) logic.
  */
 const createRequestLogic = (
-  options,
+  { noCancelOnRouteChange, ...options },
   successType = getResultActionFromType(options.type, 'SUCCESS'),
   failType = getResultActionFromType(options.type, 'FAILURE'),
+  abortType = getResultActionFromType(options.type, 'ABORT'),
 ) => {
   if (!successType || !failType) {
     throw new Error('Could not derive result actions from provided options')
@@ -66,6 +65,7 @@ const createRequestLogic = (
 
   let successAction = successType
   let failAction = failType
+  let abortAction = abortType
 
   if (typeof successType === 'string') {
     successAction = payload => ({ type: successType, payload })
@@ -73,76 +73,140 @@ const createRequestLogic = (
   if (typeof failType === 'string') {
     failAction = error => ({ type: failType, error: true, payload: error })
   }
+  if (typeof abortType === 'string') {
+    abortAction = () => ({ type: abortType })
+  }
 
   return createLogic({
     ...options,
+    cancelType: abortType,
     process: async (deps, dispatch, done) => {
-      const { action, getState } = deps
+      const { action, getState, cancelled$, action$ } = deps
       const promiseAttached = action.meta && action.meta._attachPromise
+      const promisifiedDispatch = promisifyDispatch(dispatch)
+      let actionSubscription
 
-      if (!selectIsOnlineStatus(getState())) {
-        // If the application is currently (deemed) offline, skip making the
-        // (ill-fated) request and handle the request as failed.
-        if (promiseAttached) {
-          const {
-            meta: { _reject },
-          } = action
-          _reject(offlineError)
-        }
-
-        dispatch(failAction(offlineError))
-
-        // Additionally issue a reconnect attempt immediately.
-        dispatch(attemptReconnect())
-
-        return done()
+      if (!noCancelOnRouteChange) {
+        // Subscribe to action observable to dispatch an abort action on route changes.
+        actionSubscription = action$.subscribe({
+          next: action => {
+            if (action.type === '@@router/LOCATION_CHANGE') {
+              dispatch(abortAction())
+            }
+          },
+        })
       }
 
-      try {
-        const res = await options.process(deps, dispatch)
+      let success = false
+      let connectionCheckResult = null
+      while (!success) {
+        try {
+          // Check if the internet connection is currently (deemed) interrupted.
+          if (connectionChecking) {
+            const cancellation = new Promise((resolve, reject) => {
+              cancelled$.subscribe({ next: reject, complete: resolve })
+            })
+            try {
+              // Wait until the connection has been re-established or the
+              // request has been aborted, e.g. due to a route change.
+              connectionCheckResult = await Promise.race([connectionChecking, cancellation])
+            } catch (error) {
+              // The request was cancelled, so we cancel
+              // further request execution.
+              break
+            }
 
-        // After successful request, dispatch success action.
-        dispatch(successAction(res))
+            connectionChecking = null
 
-        // If we have a promise attached, resolve it.
-        if (promiseAttached) {
-          const {
-            meta: { _resolve },
-          } = action
-          _resolve(res)
-        }
-      } catch (e) {
-        ingestError(
-          e,
-          { ingestedBy: 'createReqestLogic', requestAction: action },
-          { requestAction: action.type },
-        )
+            // Avoid request loops when connection check detected no connection loss.
+            // Rather bubble up the error so it can stop the request action and be
+            // handled by consuming logic.
+            if (connectionCheckResult?.falseAlert) {
+              throw lastError
+            }
+          }
 
-        if (isUnauthenticatedError(e)) {
+          // Run the logic process.
+          const res = await options.process(deps, promisifiedDispatch)
+          success = true
+
+          // After successful request, dispatch success action.
+          dispatch(successAction(res))
+
+          // If we have a promise attached, resolve it.
+          if (promiseAttached) {
+            const {
+              meta: { _resolve },
+            } = action
+            _resolve(res)
+          }
+        } catch (e) {
+          lastError = e
+
           // If there was an unauthenticated error, the access token is not
-          // valid and we can delete it. Reloading will then initiate the auth
-          // flow.
-          clearAccessToken()
-          window.location.reload()
-        } else if (isNetworkError(e) || isTimeoutError(e)) {
-          // If there was a network error, it could mean that the network
-          // connection is currently interrupted. Setting the online state to
-          // `checking` will trigger respective connection management logics.
-          if (!selectIsCheckingStatus(getState()) && action.type !== ATTEMPT_RECONNECT) {
+          // valid and we can delete it. A "Log back in"-modal will then pop up.
+          if (
+            isUnauthenticatedError(e) ||
+            (e instanceof TokenError && isPermissionDeniedError(e?.cause))
+          ) {
+            clearAccessToken()
+            dispatch(setLoginStatus())
+            break
+            // If there was a network error, it could mean that the network
+            // connection is currently interrupted. Setting the online state to
+            // `checking` will trigger respective connection management logics.
+          } else if (
+            (isNetworkError(e) || isTimeoutError(e)) &&
+            !connectionCheckResult?.falseAlert
+          ) {
             // We only need to set the status and trigger the connection checks
             // if the online status was `online` previously.
-            dispatch(setStatusChecking())
-          }
-        }
+            if (!selectIsCheckingStatus(getState()) && action.type !== ATTEMPT_RECONNECT) {
+              // It is necessary to promisify the dispatch function explicitly again
+              // even though we already have a middleware to do that since`redux-logic`
+              // modifies the dispatch function to return the original input action.
+              connectionChecking = promisifiedDispatch(attachPromise(setStatusChecking()))
+            }
 
-        // Dispatch the failure action and reject the promise, if attached.
-        dispatch(failAction(e))
-        if (promiseAttached) {
-          const {
-            meta: { _reject },
-          } = action
-          _reject(e)
+            // Trigger a retry once the app is back online.
+            continue
+
+            // If the connection failed, the backend is likely updating. We can then
+            // abort the request and display a toast with info about the status page
+            // and ask to try again later.
+          } else if (isConnectionFailureError(e)) {
+            toast({
+              messageGroup: 'connection-failure',
+              message: errorMessages.connectionFailure,
+              preventConsecutive: true,
+              type: toast.types.WARNING,
+            })
+            dispatch(abortAction())
+            break
+          }
+
+          // Pass relevant errors to Sentry.
+          ingestError(
+            e,
+            { ingestedBy: 'createReqestLogic', requestAction: action },
+            { requestAction: action.type },
+          )
+
+          // Dispatch the failure action and reject the promise, if attached.
+          dispatch(failAction(e))
+          if (promiseAttached) {
+            const {
+              meta: { _reject },
+            } = action
+            _reject(e)
+          }
+          // Do not retry if there was a (fatal) error.
+          break
         }
+      }
+
+      if (actionSubscription) {
+        actionSubscription.unsubscribe()
       }
 
       done()

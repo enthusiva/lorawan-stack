@@ -31,7 +31,10 @@ import {
 describe('Applications reducer', () => {
   const defaultState = {
     entities: {},
+    derived: {},
     selectedApplication: null,
+    applicationDeviceCounts: {},
+    mqtt: {},
   }
 
   it('returns the initial state', () => {

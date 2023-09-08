@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mohae/deepcopy"
 	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
@@ -29,57 +28,57 @@ import (
 )
 
 var LoRaWANVersionPairs = map[ttnpb.MACVersion]map[ttnpb.PHYVersion]struct{}{
-	ttnpb.MAC_V1_0: {
-		ttnpb.PHY_V1_0: struct{}{},
+	ttnpb.MACVersion_MAC_V1_0: {
+		ttnpb.PHYVersion_TS001_V1_0: struct{}{},
 	},
-	ttnpb.MAC_V1_0_1: {
-		ttnpb.PHY_V1_0_1: struct{}{},
+	ttnpb.MACVersion_MAC_V1_0_1: {
+		ttnpb.PHYVersion_TS001_V1_0_1: struct{}{},
 	},
-	ttnpb.MAC_V1_0_2: {
-		ttnpb.PHY_V1_0_2_REV_A: struct{}{},
-		ttnpb.PHY_V1_0_2_REV_B: struct{}{},
+	ttnpb.MACVersion_MAC_V1_0_2: {
+		ttnpb.PHYVersion_RP001_V1_0_2:       struct{}{},
+		ttnpb.PHYVersion_RP001_V1_0_2_REV_B: struct{}{},
 	},
-	ttnpb.MAC_V1_0_3: {
-		ttnpb.PHY_V1_0_3_REV_A: struct{}{},
+	ttnpb.MACVersion_MAC_V1_0_3: {
+		ttnpb.PHYVersion_RP001_V1_0_3_REV_A: struct{}{},
 	},
-	ttnpb.MAC_V1_1: {
-		ttnpb.PHY_V1_1_REV_A: struct{}{},
-		ttnpb.PHY_V1_1_REV_B: struct{}{},
+	ttnpb.MACVersion_MAC_V1_1: {
+		ttnpb.PHYVersion_RP001_V1_1_REV_A: struct{}{},
+		ttnpb.PHYVersion_RP001_V1_1_REV_B: struct{}{},
 	},
 }
 
 var LoRaWANBands = func() map[string]map[ttnpb.PHYVersion]*band.Band {
 	bands := make(map[string]map[ttnpb.PHYVersion]*band.Band, len(band.All))
-	for _, b := range band.All {
-		vers := b.Versions()
+	for id, vers := range band.All {
 		m := make(map[ttnpb.PHYVersion]*band.Band, len(vers))
-		for _, ver := range vers {
-			b, err := b.Version(ver)
-			if err != nil {
-				panic(fmt.Errorf("failed to obtain %s band of version %s", b.ID, ver))
-			}
+		for ver, b := range vers {
+			b := b
 			m[ver] = &b
 		}
-		bands[b.ID] = m
+		bands[id] = m
 	}
 	return bands
 }()
 
 var errNoBandVersion = errors.DefineInvalidArgument("no_band_version", "specified version `{ver}` of band `{id}` does not exist")
 
-func DeviceFrequencyPlanAndBand(dev *ttnpb.EndDevice, fps *frequencyplans.Store) (*frequencyplans.FrequencyPlan, *band.Band, error) {
-	fp, err := fps.GetByID(dev.FrequencyPlanID)
+func FrequencyPlanAndBand(frequencyPlanID string, phyVersion ttnpb.PHYVersion, fps *frequencyplans.Store) (*frequencyplans.FrequencyPlan, *band.Band, error) {
+	fp, err := fps.GetByID(frequencyPlanID)
 	if err != nil {
 		return nil, nil, err
 	}
-	b, ok := LoRaWANBands[fp.BandID][dev.LoRaWANPHYVersion]
+	b, ok := LoRaWANBands[fp.BandID][phyVersion]
 	if !ok || b == nil {
 		return nil, nil, errNoBandVersion.WithAttributes(
-			"ver", dev.LoRaWANPHYVersion,
+			"ver", phyVersion,
 			"id", fp.BandID,
 		)
 	}
 	return fp, b, nil
+}
+
+func DeviceFrequencyPlanAndBand(dev *ttnpb.EndDevice, fps *frequencyplans.Store) (*frequencyplans.FrequencyPlan, *band.Band, error) {
+	return FrequencyPlanAndBand(dev.FrequencyPlanId, dev.LorawanPhyVersion, fps)
 }
 
 func DeviceBand(dev *ttnpb.EndDevice, fps *frequencyplans.Store) (*band.Band, error) {
@@ -87,11 +86,11 @@ func DeviceBand(dev *ttnpb.EndDevice, fps *frequencyplans.Store) (*band.Band, er
 	return phy, err
 }
 
-func LastUplink(ups ...*ttnpb.UplinkMessage) *ttnpb.UplinkMessage {
+func LastUplink(ups ...*ttnpb.MACState_UplinkMessage) *ttnpb.MACState_UplinkMessage {
 	return ups[len(ups)-1]
 }
 
-func LastDownlink(downs ...*ttnpb.DownlinkMessage) *ttnpb.DownlinkMessage {
+func LastDownlink(downs ...*ttnpb.MACState_DownlinkMessage) *ttnpb.MACState_DownlinkMessage {
 	return downs[len(downs)-1]
 }
 
@@ -100,15 +99,17 @@ func RXMetadataStats(ctx context.Context, mds []*ttnpb.RxMetadata) (gateways int
 		return 0, 0
 	}
 	gtws := make(map[string]struct{}, len(mds))
-	maxSNR = mds[0].SNR
+	maxSNR = mds[0].Snr
 	for _, md := range mds {
 		if md.PacketBroker != nil {
 			gtws[fmt.Sprintf("%s@%s/%s", md.PacketBroker.ForwarderClusterId, md.PacketBroker.ForwarderNetId, md.PacketBroker.ForwarderTenantId)] = struct{}{}
+		} else if md.GatewayIds != nil {
+			gtws[unique.ID(ctx, md.GatewayIds)] = struct{}{}
 		} else {
-			gtws[unique.ID(ctx, md.GatewayIdentifiers)] = struct{}{}
+			continue // Metadata without PB or Gateway IDs should be invalid so skipping.
 		}
-		if md.SNR > maxSNR {
-			maxSNR = md.SNR
+		if md.Snr > maxSNR {
+			maxSNR = md.Snr
 		}
 	}
 	return len(gtws), maxSNR
@@ -116,20 +117,6 @@ func RXMetadataStats(ctx context.Context, mds []*ttnpb.RxMetadata) (gateways int
 
 func TimePtr(v time.Time) *time.Time {
 	return &v
-}
-
-func EndDevicePtr(v ttnpb.EndDevice) *ttnpb.EndDevice {
-	return &v
-}
-
-// CopyEndDevice returns a deep copy of ttnpb.EndDevice pb.
-func CopyEndDevice(pb *ttnpb.EndDevice) *ttnpb.EndDevice {
-	return deepcopy.Copy(pb).(*ttnpb.EndDevice)
-}
-
-// CopyUplinkMessage returns a deep copy of ttnpb.UplinkMessage pb.
-func CopyUplinkMessage(pb *ttnpb.UplinkMessage) *ttnpb.UplinkMessage {
-	return deepcopy.Copy(pb).(*ttnpb.UplinkMessage)
 }
 
 // FullFCnt returns full FCnt given fCnt, lastFCnt and whether or not 32-bit FCnts are supported.

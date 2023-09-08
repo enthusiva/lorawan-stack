@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _application_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on Application with the rules defined
 // in the proto definition for this message. If any rules are violated, an
@@ -52,7 +49,14 @@ func (m *Application) ValidateFields(paths ...string) error {
 		switch name {
 		case "ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetIds() == nil {
+				return ApplicationValidationError{
+					field:  "ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ApplicationValidationError{
 						field:  "ids",
@@ -64,7 +68,7 @@ func (m *Application) ValidateFields(paths ...string) error {
 
 		case "created_at":
 
-			if v, ok := interface{}(&m.CreatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetCreatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ApplicationValidationError{
 						field:  "created_at",
@@ -76,7 +80,7 @@ func (m *Application) ValidateFields(paths ...string) error {
 
 		case "updated_at":
 
-			if v, ok := interface{}(&m.UpdatedAt).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetUpdatedAt()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ApplicationValidationError{
 						field:  "updated_at",
@@ -175,6 +179,59 @@ func (m *Application) ValidateFields(paths ...string) error {
 
 			}
 
+		case "administrative_contact":
+
+			if v, ok := interface{}(m.GetAdministrativeContact()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ApplicationValidationError{
+						field:  "administrative_contact",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "technical_contact":
+
+			if v, ok := interface{}(m.GetTechnicalContact()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return ApplicationValidationError{
+						field:  "technical_contact",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "network_server_address":
+
+			if !_Application_NetworkServerAddress_Pattern.MatchString(m.GetNetworkServerAddress()) {
+				return ApplicationValidationError{
+					field:  "network_server_address",
+					reason: "value does not match regex pattern \"^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\\\-]*[a-zA-Z0-9])\\\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$\"",
+				}
+			}
+
+		case "application_server_address":
+
+			if !_Application_ApplicationServerAddress_Pattern.MatchString(m.GetApplicationServerAddress()) {
+				return ApplicationValidationError{
+					field:  "application_server_address",
+					reason: "value does not match regex pattern \"^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\\\-]*[a-zA-Z0-9])\\\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$\"",
+				}
+			}
+
+		case "join_server_address":
+
+			if !_Application_JoinServerAddress_Pattern.MatchString(m.GetJoinServerAddress()) {
+				return ApplicationValidationError{
+					field:  "join_server_address",
+					reason: "value does not match regex pattern \"^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\\\-]*[a-zA-Z0-9])\\\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$\"",
+				}
+			}
+
+		case "dev_eui_counter":
+			// no validation rules for DevEuiCounter
 		default:
 			return ApplicationValidationError{
 				field:  name,
@@ -240,6 +297,12 @@ var _ interface {
 } = ApplicationValidationError{}
 
 var _Application_Attributes_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+
+var _Application_NetworkServerAddress_Pattern = regexp.MustCompile("^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$")
+
+var _Application_ApplicationServerAddress_Pattern = regexp.MustCompile("^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$")
+
+var _Application_JoinServerAddress_Pattern = regexp.MustCompile("^(?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])(?::[0-9]{1,5})?$|^$")
 
 // ValidateFields checks the field values on Applications with the rules
 // defined in the proto definition for this message. If any rules are
@@ -337,6 +400,100 @@ var _ interface {
 	ErrorName() string
 } = ApplicationsValidationError{}
 
+// ValidateFields checks the field values on IssueDevEUIResponse with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *IssueDevEUIResponse) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = IssueDevEUIResponseFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "dev_eui":
+
+			if len(m.GetDevEui()) > 0 {
+
+				if len(m.GetDevEui()) != 8 {
+					return IssueDevEUIResponseValidationError{
+						field:  "dev_eui",
+						reason: "value length must be 8 bytes",
+					}
+				}
+
+			}
+
+		default:
+			return IssueDevEUIResponseValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// IssueDevEUIResponseValidationError is the validation error returned by
+// IssueDevEUIResponse.ValidateFields if the designated constraints aren't met.
+type IssueDevEUIResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e IssueDevEUIResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e IssueDevEUIResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e IssueDevEUIResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e IssueDevEUIResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e IssueDevEUIResponseValidationError) ErrorName() string {
+	return "IssueDevEUIResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e IssueDevEUIResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sIssueDevEUIResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = IssueDevEUIResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = IssueDevEUIResponseValidationError{}
+
 // ValidateFields checks the field values on GetApplicationRequest with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -354,7 +511,14 @@ func (m *GetApplicationRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return GetApplicationRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetApplicationRequestValidationError{
 						field:  "application_ids",
@@ -366,7 +530,7 @@ func (m *GetApplicationRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetApplicationRequestValidationError{
 						field:  "field_mask",
@@ -471,7 +635,7 @@ func (m *ListApplicationsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListApplicationsRequestValidationError{
 						field:  "field_mask",
@@ -596,7 +760,14 @@ func (m *CreateApplicationRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application":
 
-			if v, ok := interface{}(&m.Application).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplication() == nil {
+				return CreateApplicationRequestValidationError{
+					field:  "application",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplication()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateApplicationRequestValidationError{
 						field:  "application",
@@ -608,7 +779,14 @@ func (m *CreateApplicationRequest) ValidateFields(paths ...string) error {
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.Collaborator).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return CreateApplicationRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateApplicationRequestValidationError{
 						field:  "collaborator",
@@ -702,7 +880,14 @@ func (m *UpdateApplicationRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application":
 
-			if v, ok := interface{}(&m.Application).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplication() == nil {
+				return UpdateApplicationRequestValidationError{
+					field:  "application",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplication()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateApplicationRequestValidationError{
 						field:  "application",
@@ -714,7 +899,7 @@ func (m *UpdateApplicationRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateApplicationRequestValidationError{
 						field:  "field_mask",
@@ -808,13 +993,29 @@ func (m *ListApplicationAPIKeysRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return ListApplicationAPIKeysRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListApplicationAPIKeysRequestValidationError{
 						field:  "application_ids",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
+				}
+			}
+
+		case "order":
+
+			if _, ok := _ListApplicationAPIKeysRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return ListApplicationAPIKeysRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ api_key_id -api_key_id name -name created_at -created_at expires_at -expires_at]",
 				}
 			}
 
@@ -896,6 +1097,18 @@ var _ interface {
 	ErrorName() string
 } = ListApplicationAPIKeysRequestValidationError{}
 
+var _ListApplicationAPIKeysRequest_Order_InLookup = map[string]struct{}{
+	"":            {},
+	"api_key_id":  {},
+	"-api_key_id": {},
+	"name":        {},
+	"-name":       {},
+	"created_at":  {},
+	"-created_at": {},
+	"expires_at":  {},
+	"-expires_at": {},
+}
+
 // ValidateFields checks the field values on GetApplicationAPIKeyRequest with
 // the rules defined in the proto definition for this message. If any rules
 // are violated, an error is returned.
@@ -913,7 +1126,14 @@ func (m *GetApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return GetApplicationAPIKeyRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetApplicationAPIKeyRequestValidationError{
 						field:  "application_ids",
@@ -924,7 +1144,7 @@ func (m *GetApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "key_id":
-			// no validation rules for KeyID
+			// no validation rules for KeyId
 		default:
 			return GetApplicationAPIKeyRequestValidationError{
 				field:  name,
@@ -1009,7 +1229,14 @@ func (m *CreateApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return CreateApplicationAPIKeyRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return CreateApplicationAPIKeyRequestValidationError{
 						field:  "application_ids",
@@ -1055,6 +1282,29 @@ func (m *CreateApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
 					return CreateApplicationAPIKeyRequestValidationError{
 						field:  fmt.Sprintf("rights[%v]", idx),
 						reason: "value must be one of the defined enum values",
+					}
+				}
+
+			}
+
+		case "expires_at":
+
+			if t := m.GetExpiresAt(); t != nil {
+				ts, err := t.AsTime(), t.CheckValid()
+				if err != nil {
+					return CreateApplicationAPIKeyRequestValidationError{
+						field:  "expires_at",
+						reason: "value is not a valid timestamp",
+						cause:  err,
+					}
+				}
+
+				now := time.Now()
+
+				if ts.Sub(now) <= 0 {
+					return CreateApplicationAPIKeyRequestValidationError{
+						field:  "expires_at",
+						reason: "value must be greater than now",
 					}
 				}
 
@@ -1144,7 +1394,14 @@ func (m *UpdateApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return UpdateApplicationAPIKeyRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateApplicationAPIKeyRequestValidationError{
 						field:  "application_ids",
@@ -1156,10 +1413,29 @@ func (m *UpdateApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
 
 		case "api_key":
 
-			if v, ok := interface{}(&m.APIKey).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApiKey() == nil {
+				return UpdateApplicationAPIKeyRequestValidationError{
+					field:  "api_key",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApiKey()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return UpdateApplicationAPIKeyRequestValidationError{
 						field:  "api_key",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "field_mask":
+
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return UpdateApplicationAPIKeyRequestValidationError{
+						field:  "field_mask",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
@@ -1233,6 +1509,109 @@ var _ interface {
 	ErrorName() string
 } = UpdateApplicationAPIKeyRequestValidationError{}
 
+// ValidateFields checks the field values on DeleteApplicationAPIKeyRequest
+// with the rules defined in the proto definition for this message. If any
+// rules are violated, an error is returned.
+func (m *DeleteApplicationAPIKeyRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DeleteApplicationAPIKeyRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "application_ids":
+
+			if m.GetApplicationIds() == nil {
+				return DeleteApplicationAPIKeyRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteApplicationAPIKeyRequestValidationError{
+						field:  "application_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "key_id":
+			// no validation rules for KeyId
+		default:
+			return DeleteApplicationAPIKeyRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteApplicationAPIKeyRequestValidationError is the validation error
+// returned by DeleteApplicationAPIKeyRequest.ValidateFields if the designated
+// constraints aren't met.
+type DeleteApplicationAPIKeyRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteApplicationAPIKeyRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteApplicationAPIKeyRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteApplicationAPIKeyRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteApplicationAPIKeyRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteApplicationAPIKeyRequestValidationError) ErrorName() string {
+	return "DeleteApplicationAPIKeyRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DeleteApplicationAPIKeyRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteApplicationAPIKeyRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteApplicationAPIKeyRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteApplicationAPIKeyRequestValidationError{}
+
 // ValidateFields checks the field values on
 // ListApplicationCollaboratorsRequest with the rules defined in the proto
 // definition for this message. If any rules are violated, an error is returned.
@@ -1250,7 +1629,14 @@ func (m *ListApplicationCollaboratorsRequest) ValidateFields(paths ...string) er
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return ListApplicationCollaboratorsRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListApplicationCollaboratorsRequestValidationError{
 						field:  "application_ids",
@@ -1271,6 +1657,15 @@ func (m *ListApplicationCollaboratorsRequest) ValidateFields(paths ...string) er
 
 		case "page":
 			// no validation rules for Page
+		case "order":
+
+			if _, ok := _ListApplicationCollaboratorsRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return ListApplicationCollaboratorsRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ id -id -rights rights]",
+				}
+			}
+
 		default:
 			return ListApplicationCollaboratorsRequestValidationError{
 				field:  name,
@@ -1338,6 +1733,14 @@ var _ interface {
 	ErrorName() string
 } = ListApplicationCollaboratorsRequestValidationError{}
 
+var _ListApplicationCollaboratorsRequest_Order_InLookup = map[string]struct{}{
+	"":        {},
+	"id":      {},
+	"-id":     {},
+	"-rights": {},
+	"rights":  {},
+}
+
 // ValidateFields checks the field values on GetApplicationCollaboratorRequest
 // with the rules defined in the proto definition for this message. If any
 // rules are violated, an error is returned.
@@ -1355,7 +1758,14 @@ func (m *GetApplicationCollaboratorRequest) ValidateFields(paths ...string) erro
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return GetApplicationCollaboratorRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetApplicationCollaboratorRequestValidationError{
 						field:  "application_ids",
@@ -1367,7 +1777,14 @@ func (m *GetApplicationCollaboratorRequest) ValidateFields(paths ...string) erro
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.OrganizationOrUserIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return GetApplicationCollaboratorRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetApplicationCollaboratorRequestValidationError{
 						field:  "collaborator",
@@ -1461,7 +1878,14 @@ func (m *SetApplicationCollaboratorRequest) ValidateFields(paths ...string) erro
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return SetApplicationCollaboratorRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SetApplicationCollaboratorRequestValidationError{
 						field:  "application_ids",
@@ -1473,7 +1897,14 @@ func (m *SetApplicationCollaboratorRequest) ValidateFields(paths ...string) erro
 
 		case "collaborator":
 
-			if v, ok := interface{}(&m.Collaborator).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetCollaborator() == nil {
+				return SetApplicationCollaboratorRequestValidationError{
+					field:  "collaborator",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaborator()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SetApplicationCollaboratorRequestValidationError{
 						field:  "collaborator",
@@ -1549,3 +1980,123 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = SetApplicationCollaboratorRequestValidationError{}
+
+// ValidateFields checks the field values on
+// DeleteApplicationCollaboratorRequest with the rules defined in the proto
+// definition for this message. If any rules are violated, an error is returned.
+func (m *DeleteApplicationCollaboratorRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DeleteApplicationCollaboratorRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "application_ids":
+
+			if m.GetApplicationIds() == nil {
+				return DeleteApplicationCollaboratorRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteApplicationCollaboratorRequestValidationError{
+						field:  "application_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "collaborator_ids":
+
+			if m.GetCollaboratorIds() == nil {
+				return DeleteApplicationCollaboratorRequestValidationError{
+					field:  "collaborator_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetCollaboratorIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DeleteApplicationCollaboratorRequestValidationError{
+						field:  "collaborator_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return DeleteApplicationCollaboratorRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteApplicationCollaboratorRequestValidationError is the validation error
+// returned by DeleteApplicationCollaboratorRequest.ValidateFields if the
+// designated constraints aren't met.
+type DeleteApplicationCollaboratorRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteApplicationCollaboratorRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteApplicationCollaboratorRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteApplicationCollaboratorRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteApplicationCollaboratorRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteApplicationCollaboratorRequestValidationError) ErrorName() string {
+	return "DeleteApplicationCollaboratorRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DeleteApplicationCollaboratorRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteApplicationCollaboratorRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteApplicationCollaboratorRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteApplicationCollaboratorRequestValidationError{}

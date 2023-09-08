@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,37 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useCallback, forwardRef, useMemo } from 'react'
 import classnames from 'classnames'
-import bind from 'autobind-decorator'
-import { injectIntl } from 'react-intl'
+import { useIntl } from 'react-intl'
 
 import Link from '@ttn-lw/components/link'
 import Spinner from '@ttn-lw/components/spinner'
+import Icon from '@ttn-lw/components/icon'
 
 import Message from '@ttn-lw/lib/components/message'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 
-import ButtonIcon from './button-icon'
-
 import style from './button.styl'
+
+const filterDataProps = props =>
+  Object.keys(props)
+    .filter(key => key.startsWith('data-'))
+    .reduce((acc, key) => {
+      acc[key] = props[key]
+      return acc
+    }, {})
 
 const assembleClassnames = ({
   message,
   danger,
   warning,
-  secondary,
+  primary,
   naked,
   unstyled,
   icon,
   busy,
-  large,
   className,
   error,
-  raw,
   disabled,
-  responsiveLabel,
 }) => {
   if (unstyled) {
     return className
@@ -50,16 +53,13 @@ const assembleClassnames = ({
   return classnames(style.button, className, {
     [style.danger]: danger,
     [style.warning]: warning,
-    [style.secondary]: secondary,
+    [style.primary]: primary,
     [style.naked]: naked,
     [style.busy]: busy,
     [style.withIcon]: icon !== undefined && message,
     [style.onlyIcon]: icon !== undefined && !message,
     [style.error]: error && !busy,
-    [style.large]: large,
-    [style.raw]: raw,
-    [style.disabled]: disabled,
-    [style.responsiveLabel]: responsiveLabel,
+    [style.disabled]: disabled || busy,
   })
 }
 
@@ -70,70 +70,77 @@ const buttonChildren = props => {
     children
   ) : (
     <>
-      {icon ? <ButtonIcon icon={icon} type="left" /> : null}
+      {icon ? <Icon className={style.icon} icon={icon} /> : null}
       {message ? <Message content={message} className={style.linkButtonMessage} /> : null}
     </>
   )
 
   return (
-    <div className={style.content}>
-      {busy ? <Spinner className={style.spinner} small after={200} /> : null}
+    <>
       {content}
-    </div>
+      {busy ? <Spinner className={style.spinner} small after={200} /> : null}
+    </>
   )
 }
 
-@injectIntl
-class Button extends React.PureComponent {
-  @bind
-  handleClick(evt) {
-    const { busy, disabled, onClick } = this.props
+const Button = forwardRef((props, ref) => {
+  const {
+    autoFocus,
+    disabled,
+    name,
+    type,
+    value,
+    title: rawTitle,
+    busy,
+    onBlur,
+    onClick,
+    form,
+    ...rest
+  } = props
 
-    if (busy || disabled) {
-      return
-    }
+  const dataProps = useMemo(() => filterDataProps(rest), [rest])
 
-    onClick(evt)
+  const handleClick = useCallback(
+    evt => {
+      if (busy || disabled) {
+        return
+      }
+
+      // Passing a value to the onClick handler is useful for components that
+      // are rendered multiple times, e.g. in a list. The value can be used to
+      // identify the component that was clicked.
+      onClick(evt, value)
+    },
+    [busy, disabled, onClick, value],
+  )
+
+  const intl = useIntl()
+
+  let title = rawTitle
+  if (typeof rawTitle === 'object' && rawTitle.id && rawTitle.defaultMessage) {
+    title = intl.formatMessage(title)
   }
 
-  render() {
-    const {
-      autoFocus,
-      disabled,
-      name,
-      type,
-      value,
-      title: rawTitle,
-      intl,
-      busy,
-      onBlur,
-    } = this.props
-
-    let title = rawTitle
-    if (typeof rawTitle === 'object' && rawTitle.id && rawTitle.defaultMessage) {
-      title = intl.formatMessage(title)
-    }
-
-    const htmlProps = { autoFocus, name, type, value, title, onBlur }
-    const buttonClassNames = assembleClassnames(this.props)
-    return (
-      <button
-        className={buttonClassNames}
-        onClick={this.handleClick}
-        children={buttonChildren(this.props)}
-        disabled={busy || disabled}
-        {...htmlProps}
-      />
-    )
-  }
-}
+  const htmlProps = { autoFocus, name, type, value, title, onBlur, form, ...dataProps }
+  const buttonClassNames = assembleClassnames(props)
+  return (
+    <button
+      className={buttonClassNames}
+      onClick={handleClick}
+      children={buttonChildren(props)}
+      disabled={busy || disabled}
+      ref={ref}
+      {...htmlProps}
+    />
+  )
+})
 
 Button.defaultProps = {
   onClick: () => null,
   onBlur: undefined,
 }
 
-Button.Link = props => {
+const LinkButton = props => {
   const { disabled, titleMessage } = props
   const buttonClassNames = assembleClassnames(props)
   const { to } = props
@@ -147,25 +154,22 @@ Button.Link = props => {
     />
   )
 }
-Button.Link.displayName = 'Button.Link'
 
-Button.AnchorLink = props => {
-  const { target, title, name } = props
-  const htmlProps = { target, title, name }
+const AnchorLinkButton = props => {
+  const { target, title, name, href, external, ...rest } = props
+  const dataProps = useMemo(() => filterDataProps(rest), [rest])
+  const htmlProps = { target, title, name, ...dataProps }
   const buttonClassNames = assembleClassnames(props)
   return (
     <Link.Anchor
       className={buttonClassNames}
-      href={props.href}
+      href={href}
       children={buttonChildren(props)}
+      external={external}
       {...htmlProps}
     />
   )
 }
-Button.AnchorLink.displayName = 'Button.AnchorLink'
-
-Button.Icon = ButtonIcon
-Button.Icon.displayName = 'Button.Icon'
 
 const commonPropTypes = {
   /** The message to be displayed within the button. */
@@ -181,23 +185,15 @@ const commonPropTypes = {
    */
   warning: PropTypes.bool,
   /**
-   * A flag specifying whether the `secodnary` styling should applied to the
+   * A flag specifying whether the `primary` styling should applied to the
    * button.
    */
-  secondary: PropTypes.bool,
+  primary: PropTypes.bool,
   /**
    * A flag specifying whether the `naked` styling should applied to the
    * button.
    */
   naked: PropTypes.bool,
-  /**
-   * A flag specifying whether the `raw` styling should applied to the button.
-   */
-  raw: PropTypes.bool,
-  /**
-   * A flag specifying whether the `large` styling should applied to the button.
-   */
-  large: PropTypes.bool,
   /**
    * A flag specifying whether the `error` styling should applied to the button.
    */
@@ -229,8 +225,6 @@ const commonPropTypes = {
   autoFocus: PropTypes.bool,
   /** A message to be evaluated and passed to the <button /> element. */
   title: PropTypes.message,
-  /** A flag specifying whether the button `message` should be responsive. */
-  responsiveLabel: PropTypes.bool,
 }
 
 buttonChildren.propTypes = {
@@ -261,14 +255,20 @@ Button.propTypes = {
   ...commonPropTypes,
 }
 
-Button.Link.propTypes = {
+LinkButton.propTypes = {
   ...commonPropTypes,
   ...Link.propTypes,
 }
 
-Button.AnchorLink.propTypes = {
+Button.Link = LinkButton
+Button.Link.displayName = 'Button.Link'
+
+AnchorLinkButton.propTypes = {
   ...commonPropTypes,
   ...Link.Anchor.propTypes,
 }
+
+Button.AnchorLink = AnchorLinkButton
+Button.AnchorLink.displayName = 'Button.AnchorLink'
 
 export default Button

@@ -16,9 +16,9 @@ package events
 
 import (
 	"context"
-	"time"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type builder struct {
@@ -42,12 +42,12 @@ func (b *builder) With(options ...Option) Builder {
 func (b *builder) New(ctx context.Context, opts ...Option) Event {
 	evt := &event{
 		ctx: ctx,
-		innerEvent: ttnpb.Event{
-			UniqueID:       NewCorrelationID(),
+		innerEvent: &ttnpb.Event{
+			UniqueId:       NewCorrelationID(),
 			Name:           b.definition.name,
-			Time:           time.Now().UTC(),
+			Time:           timestamppb.Now(),
 			Origin:         hostname,
-			CorrelationIDs: CorrelationIDsFromContext(ctx),
+			CorrelationIds: CorrelationIDsFromContext(ctx),
 		},
 	}
 	for _, opt := range b.options {
@@ -59,10 +59,10 @@ func (b *builder) New(ctx context.Context, opts ...Option) Event {
 	return evt
 }
 
-func (b *builder) NewWithIdentifiersAndData(ctx context.Context, ids CombinedIdentifiers, data interface{}) Event {
+func (b *builder) NewWithIdentifiersAndData(ctx context.Context, ids EntityIdentifiers, data any) Event {
 	e := local(b.New(ctx))
 	if ids != nil {
-		e.innerEvent.Identifiers = ids.CombinedIdentifiers().GetEntityIdentifiers()
+		e.innerEvent.Identifiers = append(e.innerEvent.Identifiers, ids.GetEntityIdentifiers())
 	}
 	if data != nil {
 		e.data = data
@@ -70,7 +70,7 @@ func (b *builder) NewWithIdentifiersAndData(ctx context.Context, ids CombinedIde
 	return e
 }
 
-func (b *builder) BindData(data interface{}) Builder {
+func (b *builder) BindData(data any) Builder {
 	return b.With(WithData(data))
 }
 
@@ -82,9 +82,9 @@ type Builder interface {
 	New(ctx context.Context, opts ...Option) Event
 
 	// Convenience function for legacy code. Same as New(ctx, WithIdentifiers(ids), WithData(data)).
-	NewWithIdentifiersAndData(ctx context.Context, ids CombinedIdentifiers, data interface{}) Event
+	NewWithIdentifiersAndData(ctx context.Context, ids EntityIdentifiers, data any) Event
 	// Convenience function for legacy code. Same as With(WithData(data)).
-	BindData(data interface{}) Builder
+	BindData(data any) Builder
 }
 
 // Builders makes it easier to create multiple events at once.

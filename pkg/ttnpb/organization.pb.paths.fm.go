@@ -3,6 +3,13 @@
 package ttnpb
 
 var OrganizationFieldPathsNested = []string{
+	"administrative_contact",
+	"administrative_contact.ids",
+	"administrative_contact.ids.organization_ids",
+	"administrative_contact.ids.organization_ids.organization_id",
+	"administrative_contact.ids.user_ids",
+	"administrative_contact.ids.user_ids.email",
+	"administrative_contact.ids.user_ids.user_id",
 	"attributes",
 	"contact_info",
 	"created_at",
@@ -11,10 +18,18 @@ var OrganizationFieldPathsNested = []string{
 	"ids",
 	"ids.organization_id",
 	"name",
+	"technical_contact",
+	"technical_contact.ids",
+	"technical_contact.ids.organization_ids",
+	"technical_contact.ids.organization_ids.organization_id",
+	"technical_contact.ids.user_ids",
+	"technical_contact.ids.user_ids.email",
+	"technical_contact.ids.user_ids.user_id",
 	"updated_at",
 }
 
 var OrganizationFieldPathsTopLevel = []string{
+	"administrative_contact",
 	"attributes",
 	"contact_info",
 	"created_at",
@@ -22,6 +37,7 @@ var OrganizationFieldPathsTopLevel = []string{
 	"description",
 	"ids",
 	"name",
+	"technical_contact",
 	"updated_at",
 }
 var OrganizationsFieldPathsNested = []string{
@@ -73,6 +89,13 @@ var CreateOrganizationRequestFieldPathsNested = []string{
 	"collaborator.ids.user_ids.email",
 	"collaborator.ids.user_ids.user_id",
 	"organization",
+	"organization.administrative_contact",
+	"organization.administrative_contact.ids",
+	"organization.administrative_contact.ids.organization_ids",
+	"organization.administrative_contact.ids.organization_ids.organization_id",
+	"organization.administrative_contact.ids.user_ids",
+	"organization.administrative_contact.ids.user_ids.email",
+	"organization.administrative_contact.ids.user_ids.user_id",
 	"organization.attributes",
 	"organization.contact_info",
 	"organization.created_at",
@@ -81,6 +104,13 @@ var CreateOrganizationRequestFieldPathsNested = []string{
 	"organization.ids",
 	"organization.ids.organization_id",
 	"organization.name",
+	"organization.technical_contact",
+	"organization.technical_contact.ids",
+	"organization.technical_contact.ids.organization_ids",
+	"organization.technical_contact.ids.organization_ids.organization_id",
+	"organization.technical_contact.ids.user_ids",
+	"organization.technical_contact.ids.user_ids.email",
+	"organization.technical_contact.ids.user_ids.user_id",
 	"organization.updated_at",
 }
 
@@ -91,6 +121,13 @@ var CreateOrganizationRequestFieldPathsTopLevel = []string{
 var UpdateOrganizationRequestFieldPathsNested = []string{
 	"field_mask",
 	"organization",
+	"organization.administrative_contact",
+	"organization.administrative_contact.ids",
+	"organization.administrative_contact.ids.organization_ids",
+	"organization.administrative_contact.ids.organization_ids.organization_id",
+	"organization.administrative_contact.ids.user_ids",
+	"organization.administrative_contact.ids.user_ids.email",
+	"organization.administrative_contact.ids.user_ids.user_id",
 	"organization.attributes",
 	"organization.contact_info",
 	"organization.created_at",
@@ -99,6 +136,13 @@ var UpdateOrganizationRequestFieldPathsNested = []string{
 	"organization.ids",
 	"organization.ids.organization_id",
 	"organization.name",
+	"organization.technical_contact",
+	"organization.technical_contact.ids",
+	"organization.technical_contact.ids.organization_ids",
+	"organization.technical_contact.ids.organization_ids.organization_id",
+	"organization.technical_contact.ids.user_ids",
+	"organization.technical_contact.ids.user_ids.email",
+	"organization.technical_contact.ids.user_ids.user_id",
 	"organization.updated_at",
 }
 
@@ -108,6 +152,7 @@ var UpdateOrganizationRequestFieldPathsTopLevel = []string{
 }
 var ListOrganizationAPIKeysRequestFieldPathsNested = []string{
 	"limit",
+	"order",
 	"organization_ids",
 	"organization_ids.organization_id",
 	"page",
@@ -115,6 +160,7 @@ var ListOrganizationAPIKeysRequestFieldPathsNested = []string{
 
 var ListOrganizationAPIKeysRequestFieldPathsTopLevel = []string{
 	"limit",
+	"order",
 	"organization_ids",
 	"page",
 }
@@ -129,6 +175,7 @@ var GetOrganizationAPIKeyRequestFieldPathsTopLevel = []string{
 	"organization_ids",
 }
 var CreateOrganizationAPIKeyRequestFieldPathsNested = []string{
+	"expires_at",
 	"name",
 	"organization_ids",
 	"organization_ids.organization_id",
@@ -136,6 +183,7 @@ var CreateOrganizationAPIKeyRequestFieldPathsNested = []string{
 }
 
 var CreateOrganizationAPIKeyRequestFieldPathsTopLevel = []string{
+	"expires_at",
 	"name",
 	"organization_ids",
 	"rights",
@@ -143,21 +191,35 @@ var CreateOrganizationAPIKeyRequestFieldPathsTopLevel = []string{
 var UpdateOrganizationAPIKeyRequestFieldPathsNested = []string{
 	"api_key",
 	"api_key.created_at",
+	"api_key.expires_at",
 	"api_key.id",
 	"api_key.key",
 	"api_key.name",
 	"api_key.rights",
 	"api_key.updated_at",
+	"field_mask",
 	"organization_ids",
 	"organization_ids.organization_id",
 }
 
 var UpdateOrganizationAPIKeyRequestFieldPathsTopLevel = []string{
 	"api_key",
+	"field_mask",
+	"organization_ids",
+}
+var DeleteOrganizationAPIKeyRequestFieldPathsNested = []string{
+	"key_id",
+	"organization_ids",
+	"organization_ids.organization_id",
+}
+
+var DeleteOrganizationAPIKeyRequestFieldPathsTopLevel = []string{
+	"key_id",
 	"organization_ids",
 }
 var ListOrganizationCollaboratorsRequestFieldPathsNested = []string{
 	"limit",
+	"order",
 	"organization_ids",
 	"organization_ids.organization_id",
 	"page",
@@ -165,6 +227,7 @@ var ListOrganizationCollaboratorsRequestFieldPathsNested = []string{
 
 var ListOrganizationCollaboratorsRequestFieldPathsTopLevel = []string{
 	"limit",
+	"order",
 	"organization_ids",
 	"page",
 }
@@ -200,5 +263,21 @@ var SetOrganizationCollaboratorRequestFieldPathsNested = []string{
 
 var SetOrganizationCollaboratorRequestFieldPathsTopLevel = []string{
 	"collaborator",
+	"organization_ids",
+}
+var DeleteOrganizationCollaboratorRequestFieldPathsNested = []string{
+	"collaborator_ids",
+	"collaborator_ids.ids",
+	"collaborator_ids.ids.organization_ids",
+	"collaborator_ids.ids.organization_ids.organization_id",
+	"collaborator_ids.ids.user_ids",
+	"collaborator_ids.ids.user_ids.email",
+	"collaborator_ids.ids.user_ids.user_id",
+	"organization_ids",
+	"organization_ids.organization_id",
+}
+
+var DeleteOrganizationCollaboratorRequestFieldPathsTopLevel = []string{
+	"collaborator_ids",
 	"organization_ids",
 }

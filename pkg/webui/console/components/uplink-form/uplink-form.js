@@ -15,6 +15,7 @@
 import React from 'react'
 import { defineMessages } from 'react-intl'
 
+import Notification from '@ttn-lw/components/notification'
 import SubmitButton from '@ttn-lw/components/submit-button'
 import Input from '@ttn-lw/components/input'
 import SubmitBar from '@ttn-lw/components/submit-bar'
@@ -43,14 +44,14 @@ const validationSchema = Yup.object({
   frm_payload: Yup.string().test(
     'len',
     Yup.passValues(sharedMessages.validateHexLength),
-    payload => !Boolean(payload) || payload.length % 2 === 0,
+    payload => !Boolean(payload) || payload.length % 3 === 0,
   ),
 })
 
 const initialValues = { f_port: 1, frm_payload: '' }
 
 const UplinkForm = props => {
-  const { simulateUplink } = props
+  const { simulateUplink, device, skipPayloadCrypto } = props
 
   const [error, setError] = React.useState('')
 
@@ -65,7 +66,10 @@ const UplinkForm = props => {
           rx_metadata: [
             { gateway_ids: { gateway_id: 'test' }, rssi: 42, channel_rssi: 42, snr: 4.2 },
           ],
-          settings: { data_rate: { lora: { bandwidth: 125000, spreading_factor: 7 } } },
+          settings: {
+            data_rate: { lora: { bandwidth: 125000, spreading_factor: 7 } },
+            frequency: 868000000,
+          },
         })
         toast({
           title: sharedMessages.success,
@@ -81,14 +85,20 @@ const UplinkForm = props => {
     [simulateUplink],
   )
 
+  const deviceSimulationDisabled = device.skip_payload_crypto_override ?? skipPayloadCrypto
+
   return (
     <>
+      {deviceSimulationDisabled && (
+        <Notification content={sharedMessages.deviceSimulationDisabledWarning} warning small />
+      )}
       <IntlHelmet title={m.simulateUplink} />
       <Form
         error={error}
         initialValues={initialValues}
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
+        disabled={deviceSimulationDisabled}
       >
         <Form.SubTitle title={m.simulateUplink} />
         <Form.Field
@@ -117,7 +127,13 @@ const UplinkForm = props => {
 }
 
 UplinkForm.propTypes = {
+  device: PropTypes.device.isRequired,
   simulateUplink: PropTypes.func.isRequired,
+  skipPayloadCrypto: PropTypes.bool,
+}
+
+UplinkForm.defaultProps = {
+  skipPayloadCrypto: false,
 }
 
 export default UplinkForm

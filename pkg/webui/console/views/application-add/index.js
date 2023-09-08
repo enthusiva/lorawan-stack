@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,160 +12,73 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useCallback } from 'react'
 import { Container, Col, Row } from 'react-grid-system'
-import { connect } from 'react-redux'
-import bind from 'autobind-decorator'
 import { defineMessages } from 'react-intl'
-import { push } from 'connected-react-router'
-
-import api from '@console/api'
+import { useNavigate } from 'react-router-dom'
 
 import PageTitle from '@ttn-lw/components/page-title'
-import Form from '@ttn-lw/components/form'
-import Input from '@ttn-lw/components/input'
-import SubmitButton from '@ttn-lw/components/submit-button'
-import SubmitBar from '@ttn-lw/components/submit-bar'
+import Link from '@ttn-lw/components/link'
 
-import OwnersSelect from '@console/containers/owners-select'
+import RequireRequest from '@ttn-lw/lib/components/require-request'
+import Message from '@ttn-lw/lib/components/message'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import ApplicationForm from '@console/containers/applications-form'
 
-import Yup from '@ttn-lw/lib/yup'
-import PropTypes from '@ttn-lw/lib/prop-types'
+import Require from '@console/lib/components/require'
+
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import { getApplicationId } from '@ttn-lw/lib/selectors/id'
 
-import { id as applicationIdRegexp } from '@console/lib/regexp'
 import { mayCreateApplications } from '@console/lib/feature-checks'
 
-import { selectUserId, selectUserRights } from '@console/store/selectors/user'
+import { getOrganizationsList } from '@console/store/actions/organizations'
 
 const m = defineMessages({
-  applicationName: 'Application name',
-  appIdPlaceholder: 'my-new-application',
-  appNamePlaceholder: 'My new application',
-  appDescPlaceholder: 'Description for my new application',
-  appDescDescription:
-    'Optional application description; can also be used to save notes about the application',
-  createApplication: 'Create application',
+  appDescription:
+    'Within applications, you can register and manage end devices and their network data. After setting up your device fleet, use one of our many integration options to pass relevant data to your external services.{break}Learn more in our guide on <Link>Adding Applications</Link>.',
 })
 
-const validationSchema = Yup.object().shape({
-  owner_id: Yup.string().required(sharedMessages.validateRequired),
-  application_id: Yup.string()
-    .matches(applicationIdRegexp, Yup.passValues(sharedMessages.validateIdFormat))
-    .min(2, Yup.passValues(sharedMessages.validateTooShort))
-    .max(25, Yup.passValues(sharedMessages.validateTooLong))
-    .required(sharedMessages.validateRequired),
-  name: Yup.string()
-    .min(2, Yup.passValues(sharedMessages.validateTooShort))
-    .max(2000, Yup.passValues(sharedMessages.validateTooLong)),
-  description: Yup.string(),
-})
+const ApplicationAdd = () => {
+  const navigate = useNavigate()
+  const handleSuccess = useCallback(
+    gtwId => {
+      navigate(`/applications/${gtwId}`)
+    },
+    [navigate],
+  )
 
-@withFeatureRequirement(mayCreateApplications, { redirect: '/applications' })
-@connect(
-  state => ({
-    userId: selectUserId(state),
-    rights: selectUserRights(state),
-  }),
-  dispatch => ({
-    navigateToApplication: appId => dispatch(push(`/applications/${appId}`)),
-  }),
-)
-export default class Add extends React.Component {
-  static propTypes = {
-    navigateToApplication: PropTypes.func.isRequired,
-    userId: PropTypes.string.isRequired,
-  }
-
-  constructor(props) {
-    super(props)
-    this.state = {
-      error: '',
-    }
-  }
-
-  @bind
-  async handleSubmit(values, { setSubmitting }) {
-    const { userId, navigateToApplication } = this.props
-    const { owner_id, application_id, name, description } = values
-
-    await this.setState({ error: '' })
-
-    try {
-      const result = await api.application.create(
-        owner_id,
-        {
-          ids: { application_id },
-          name,
-          description,
-        },
-        userId === owner_id,
-      )
-
-      const appId = getApplicationId(result)
-
-      navigateToApplication(appId)
-    } catch (error) {
-      setSubmitting(false)
-
-      await this.setState({ error })
-    }
-  }
-
-  render() {
-    const { error } = this.state
-    const { userId } = this.props
-
-    const initialValues = {
-      application_id: '',
-      name: '',
-      description: '',
-      owner_id: userId,
-    }
-
-    return (
-      <Container>
-        <PageTitle tall title={sharedMessages.addApplication} />
-        <Row>
-          <Col md={10} lg={9}>
-            <Form
-              error={error}
-              onSubmit={this.handleSubmit}
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-            >
-              <OwnersSelect name="owner_id" required autoFocus />
-              <Form.Field
-                title={sharedMessages.appId}
-                name="application_id"
-                placeholder={m.appIdPlaceholder}
-                required
-                component={Input}
-              />
-              <Form.Field
-                title={m.applicationName}
-                name="name"
-                placeholder={m.appNamePlaceholder}
-                component={Input}
-              />
-              <Form.Field
-                title={sharedMessages.description}
-                type="textarea"
-                name="description"
-                placeholder={m.appDescPlaceholder}
-                description={m.appDescDescription}
-                component={Input}
-              />
-              <SubmitBar>
-                <Form.Submit message={m.createApplication} component={SubmitButton} />
-              </SubmitBar>
-            </Form>
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Require featureCheck={mayCreateApplications} otherwise={{ redirect: '/applications' }}>
+      <RequireRequest requestAction={getOrganizationsList()}>
+        <Container>
+          <PageTitle
+            colProps={{ md: 10, lg: 9 }}
+            className="mb-cs-s"
+            title={sharedMessages.createApplication}
+          >
+            <Message
+              component="p"
+              content={m.appDescription}
+              values={{
+                Link: content => (
+                  <Link.DocLink secondary path="/integrations/adding-applications">
+                    {content}
+                  </Link.DocLink>
+                ),
+                break: <br />,
+              }}
+            />
+            <hr className="mb-ls-s" />
+          </PageTitle>
+          <Row>
+            <Col md={10} lg={9}>
+              <ApplicationForm onSuccess={handleSuccess} />
+            </Col>
+          </Row>
+        </Container>
+      </RequireRequest>
+    </Require>
+  )
 }
+
+export default ApplicationAdd

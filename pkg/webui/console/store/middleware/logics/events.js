@@ -16,6 +16,7 @@ import { createLogic } from 'redux-logic'
 
 import ONLINE_STATUS from '@ttn-lw/constants/online-status'
 import CONNECTION_STATUS from '@console/constants/connection-status'
+import EVENT_TAIL from '@console/constants/event-tail'
 
 import { getCombinedDeviceId } from '@ttn-lw/lib/selectors/id'
 import { isUnauthenticatedError, isNetworkError, isTimeoutError } from '@ttn-lw/lib/errors/utils'
@@ -30,6 +31,7 @@ import {
   createEventStreamClosedActionType,
   createGetEventMessageFailureActionType,
   createGetEventMessageSuccessActionType,
+  createSetEventsFilterActionType,
   getEventMessageSuccess,
   getEventMessageFailure,
   startEventsStreamFailure,
@@ -42,6 +44,9 @@ import {
   createEventsStatusSelector,
   createEventsInterruptedSelector,
   createInterruptedStreamsSelector,
+  createLatestEventSelector,
+  createLatestClearedEventSelector,
+  createEventsFilterSelector,
 } from '@console/store/selectors/events'
 import { selectDeviceById } from '@console/store/selectors/devices'
 
@@ -62,6 +67,7 @@ const createEventsConnectLogics = (reducerName, entityName, onEventsStart) => {
   const EVENT_STREAM_CLOSED = createEventStreamClosedActionType(reducerName)
   const GET_EVENT_MESSAGE_FAILURE = createGetEventMessageFailureActionType(reducerName)
   const GET_EVENT_MESSAGE_SUCCESS = createGetEventMessageSuccessActionType(reducerName)
+  const SET_EVENT_FILTER = createSetEventsFilterActionType(reducerName)
   const startEventsSuccess = startEventsStreamSuccess(reducerName)
   const startEventsFailure = startEventsStreamFailure(reducerName)
   const closeEvents = eventStreamClosed(reducerName)
@@ -71,6 +77,9 @@ const createEventsConnectLogics = (reducerName, entityName, onEventsStart) => {
   const selectEntityEventsStatus = createEventsStatusSelector(entityName)
   const selectEntityEventsInterrupted = createEventsInterruptedSelector(entityName)
   const selectInterruptedStreams = createInterruptedStreamsSelector(entityName)
+  const selectLatestEvent = createLatestEventSelector(entityName)
+  const selectLatestClearedEvent = createLatestClearedEventSelector(entityName)
+  const selectEventFilter = createEventsFilterSelector(entityName)
 
   let channel = null
 
@@ -104,15 +113,34 @@ const createEventsConnectLogics = (reducerName, entityName, onEventsStart) => {
         allow(action)
       },
       process: async ({ getState, action }, dispatch) => {
-        const { id } = action
+        const { id, silent } = action
+
+        const idString = typeof action.id === 'object' ? getCombinedDeviceId(action.id) : action.id
+
+        // Only get historical events emitted after the latest event or latest
+        // cleared event in the store to avoid duplicate historical events.
+        const state = getState()
+        const latestEvent = selectLatestEvent(state, idString)
+        const latestClearedEvent = selectLatestClearedEvent(state, idString)
+        const latestEventTime = Boolean(latestEvent) ? latestEvent.time : ''
+        const latestClearedEventTime = Boolean(latestClearedEvent) ? latestClearedEvent.time : ''
+        const after =
+          (latestEventTime > latestClearedEventTime ? latestEventTime : latestClearedEventTime) ||
+          undefined
+        const filter = selectEventFilter(state, idString)
+        const filterRegExp = Boolean(filter) ? filter.filterRegExp : undefined
 
         try {
-          channel = await onEventsStart([id])
+          channel = await onEventsStart([id], filterRegExp, EVENT_TAIL, after)
 
-          channel.on('start', () => dispatch(startEventsSuccess(id)))
+          channel.on('start', () => dispatch(startEventsSuccess(id, { silent })))
           channel.on('chunk', message => dispatch(getEventSuccess(id, message)))
           channel.on('error', error => dispatch(getEventFailure(id, error)))
-          channel.on('close', () => dispatch(closeEvents(id)))
+          channel.on('close', wasClientRequest =>
+            dispatch(closeEvents(id, { silent: wasClientRequest })),
+          )
+
+          channel.open()
         } catch (error) {
           if (isUnauthenticatedError(error)) {
             // The user is no longer authenticated; reinitiate the auth flow
@@ -242,6 +270,25 @@ const createEventsConnectLogics = (reducerName, entityName, onEventsStart) => {
           }
         }
 
+        done()
+      },
+    }),
+    createLogic({
+      type: SET_EVENT_FILTER,
+      process: async ({ action }, dispatch, done) => {
+        if (channel) {
+          try {
+            await channel.close()
+          } catch (error) {
+            if (isNetworkError(error) || isTimeoutError(action.payload)) {
+              dispatch(setStatusChecking())
+            } else {
+              throw error
+            }
+          } finally {
+            dispatch(startEvents(action.id, { silent: true }))
+          }
+        }
         done()
       },
     }),

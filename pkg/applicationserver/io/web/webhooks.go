@@ -18,40 +18,38 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	stdio "io"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
-
-	stdio "io"
+	"unicode/utf8"
 
 	"github.com/gorilla/mux"
+	"github.com/jtacoma/uritemplates"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io"
-	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
-	"go.thethings.network/lorawan-stack/v3/pkg/version"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	ttnweb "go.thethings.network/lorawan-stack/v3/pkg/web"
 	"go.thethings.network/lorawan-stack/v3/pkg/webhandlers"
 	"go.thethings.network/lorawan-stack/v3/pkg/webmiddleware"
-	"google.golang.org/api/googleapi"
+	"go.thethings.network/lorawan-stack/v3/pkg/workerpool"
+	"google.golang.org/protobuf/proto"
 )
 
-const namespace = "applicationserver/io/web"
+const (
+	namespace = "applicationserver/io/web"
 
-var userAgent = "ttn-lw-application-server/" + version.TTN
+	maxResponseSize = (1 << 10) // 1 KiB
+)
 
 // Sink processes HTTP requests.
 type Sink interface {
 	Process(*http.Request) error
-}
-
-// ControllableSink is a controllable Sink.
-type ControllableSink interface {
-	Sink
-	Run(context.Context) error
 }
 
 // HTTPClientSink contains an HTTP client to make outgoing requests.
@@ -59,88 +57,79 @@ type HTTPClientSink struct {
 	*http.Client
 }
 
-var errRequest = errors.DefineUnavailable("request", "request failed with status `{code}`")
+var errRequest = errors.DefineUnavailable("request", "request")
+
+func createRequestErrorDetails(req *http.Request, res *http.Response) []proto.Message {
+	ctx := req.Context()
+	m := map[string]any{
+		"webhook_id": webhookIDFromContext(ctx).WebhookId,
+		"url":        req.URL.String(),
+	}
+	if res != nil {
+		body, _ := stdio.ReadAll(stdio.LimitReader(res.Body, maxResponseSize))
+		m["status_code"] = res.StatusCode
+		if utf8.Valid(body) {
+			m["body"] = string(body)
+		}
+	}
+	detail, err := goproto.Struct(m)
+	if err != nil {
+		log.FromContext(ctx).WithError(err).Error("Failed to marshal request error details")
+		return nil
+	}
+	return []proto.Message{detail}
+}
 
 // Process uses the HTTP client to perform the request.
 func (s *HTTPClientSink) Process(req *http.Request) error {
 	res, err := s.Do(req)
 	if err != nil {
-		return err
+		return errRequest.WithCause(err).WithDetails(createRequestErrorDetails(req, res)...)
 	}
-	defer func() {
-		stdio.Copy(ioutil.Discard, res.Body)
-		res.Body.Close()
-	}()
+	defer res.Body.Close()
+	defer stdio.Copy(stdio.Discard, res.Body) //nolint:errcheck
 	if res.StatusCode >= 200 && res.StatusCode <= 299 {
 		return nil
 	}
-	return errRequest.WithAttributes("code", res.StatusCode)
+	return errRequest.WithDetails(createRequestErrorDetails(req, res)...)
 }
 
-// QueuedSink is a ControllableSink with queue.
-type QueuedSink struct {
-	Target  Sink
-	Queue   chan *http.Request
-	Workers int
+// pooledSink is a Sink with worker pool.
+type pooledSink struct {
+	pool workerpool.WorkerPool[*http.Request]
 }
 
-// Run starts concurrent workers to process messages from the queue.
-// If Target is a ControllableSink, this method runs the target.
-// This method blocks until the target (if controllable) and all workers are done.
-func (s *QueuedSink) Run(ctx context.Context) error {
-	if s.Workers < 1 {
-		s.Workers = 1
+func createPoolHandler(sink Sink) workerpool.Handler[*http.Request] {
+	h := func(ctx context.Context, req *http.Request) {
+		if err := sink.Process(req); err != nil {
+			registerWebhookFailed(ctx, err)
+			log.FromContext(ctx).WithError(err).Warn("Failed to process message")
+		} else {
+			registerWebhookSent(ctx)
+		}
 	}
-	wg := sync.WaitGroup{}
-	if controllable, ok := s.Target.(ControllableSink); ok {
-		wg.Add(1)
-		go func() {
-			if err := controllable.Run(ctx); err != nil && !errors.IsCanceled(err) {
-				log.FromContext(ctx).WithError(err).Error("Target sink failed")
-			}
-			wg.Done()
-		}()
-	}
-	for i := 0; i < s.Workers; i++ {
-		wg.Add(1)
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					wg.Done()
-					return
-				case req := <-s.Queue:
-					registerWebhookDequeued()
-					ctx := req.Context()
-					if err := s.Target.Process(req); err != nil {
-						registerWebhookFailed(err)
-						log.FromContext(ctx).WithError(err).Warn("Failed to process message")
-					} else {
-						registerWebhookSent()
-					}
-				}
-			}
-		}()
-	}
-	<-ctx.Done()
-	wg.Wait()
-	return ctx.Err()
+	return h
 }
 
-var errQueueFull = errors.DefineResourceExhausted("queue_full", "the queue is full")
-
-// Process sends the request to the queue.
-// This method returns immediately. An error is returned when the queue is full.
-func (s *QueuedSink) Process(req *http.Request) error {
-	select {
-	case s.Queue <- req:
-		registerWebhookQueued()
-		return nil
-	default:
-		err := errQueueFull.New()
-		registerWebhookFailed(err)
-		return err
+// NewPooledSink creates a Sink that queues requests and processes them in parallel workers.
+func NewPooledSink(ctx context.Context, c workerpool.Component, sink Sink, workers int, queueSize int) Sink {
+	wp := workerpool.NewWorkerPool(workerpool.Config[*http.Request]{
+		Component:  c,
+		Context:    ctx,
+		Name:       "webhooks",
+		Handler:    createPoolHandler(sink),
+		MaxWorkers: workers,
+		QueueSize:  queueSize,
+	})
+	return &pooledSink{
+		pool: wp,
 	}
+}
+
+// Process sends the request to the workers.
+// This method returns immediately. An error is returned when the workers are too busy.
+func (s *pooledSink) Process(req *http.Request) error {
+	return s.pool.Publish(req.Context(), req)
 }
 
 // Webhooks is an interface for registering incoming webhooks for downlink and creating a subscription to outgoing
@@ -159,7 +148,13 @@ type webhooks struct {
 }
 
 // NewWebhooks returns a new Webhooks.
-func NewWebhooks(ctx context.Context, server io.Server, registry WebhookRegistry, target Sink, downlinks DownlinksConfig) (Webhooks, error) {
+func NewWebhooks(
+	ctx context.Context,
+	server io.Server,
+	registry WebhookRegistry,
+	target Sink,
+	downlinks DownlinksConfig,
+) (Webhooks, error) {
 	ctx = log.NewContextWithField(ctx, "namespace", namespace)
 	w := &webhooks{
 		ctx:       ctx,
@@ -172,27 +167,13 @@ func NewWebhooks(ctx context.Context, server io.Server, registry WebhookRegistry
 	if err != nil {
 		return nil, err
 	}
-	server.StartTask(&component.TaskConfig{
-		Context: ctx,
-		ID:      "run_webhooks",
-		Func: func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-sub.Context().Done():
-					return sub.Context().Err()
-				case up := <-sub.Up():
-					ctx := log.NewContextWithField(up.Context, "namespace", namespace)
-					if err := w.handleUp(ctx, up.ApplicationUp); err != nil {
-						log.FromContext(ctx).WithError(err).Warn("Failed to handle message")
-					}
-				}
-			}
-		},
-		Restart: component.TaskRestartOnFailure,
-		Backoff: component.DefaultTaskBackoffConfig,
+	wp := workerpool.NewWorkerPool(workerpool.Config[*ttnpb.ApplicationUp]{
+		Component: server,
+		Context:   ctx,
+		Name:      "webhooks_fanout",
+		Handler:   workerpool.HandlerFromUplinkHandler(w.handleUp),
 	})
+	sub.Pipe(ctx, server, "webhooks", wp.Publish)
 	return w, nil
 }
 
@@ -200,12 +181,14 @@ func (w *webhooks) Registry() WebhookRegistry { return w.registry }
 
 // RegisterRoutes registers the webhooks to the web server to handle downlink requests.
 func (w *webhooks) RegisterRoutes(server *ttnweb.Server) {
-	router := server.Prefix(ttnpb.HTTPAPIPrefix + "/as/applications/{application_id}/webhooks/{webhook_id}/devices/{device_id}/down").Subrouter()
+	router := server.Prefix(
+		ttnpb.HTTPAPIPrefix + "/as/applications/{application_id}/webhooks/{webhook_id}/devices/{device_id}/down",
+	).Subrouter()
 	router.Use(
 		mux.MiddlewareFunc(webmiddleware.Namespace("applicationserver/io/web")),
 		mux.MiddlewareFunc(webmiddleware.Metadata("Authorization")),
 		w.validateAndFillIDs,
-		w.requireApplicationRights(ttnpb.RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE),
+		w.requireApplicationRights(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE),
 		w.requireRateLimits(),
 	)
 
@@ -223,7 +206,12 @@ const (
 	domainHeader = "X-Tts-Domain"
 )
 
-func (w *webhooks) createDownlinkURL(ctx context.Context, webhookID ttnpb.ApplicationWebhookIdentifiers, devID ttnpb.EndDeviceIdentifiers, op string) string {
+func (w *webhooks) downlinkURL(
+	_ context.Context,
+	webhookID *ttnpb.ApplicationWebhookIdentifiers,
+	devID *ttnpb.EndDeviceIdentifiers,
+	op string,
+) string {
 	downlinks := w.downlinks
 	baseURL := downlinks.PublicTLSAddress
 	if baseURL == "" {
@@ -231,14 +219,14 @@ func (w *webhooks) createDownlinkURL(ctx context.Context, webhookID ttnpb.Applic
 	}
 	return fmt.Sprintf(downlinkOperationURLFormat,
 		baseURL,
-		webhookID.ApplicationID,
-		webhookID.WebhookID,
-		devID.DeviceID,
+		webhookID.ApplicationIds.ApplicationId,
+		webhookID.WebhookId,
+		devID.DeviceId,
 		op,
 	)
 }
 
-func (w *webhooks) createDomain(ctx context.Context) string {
+func (w *webhooks) domain(_ context.Context) string {
 	downlinks := w.downlinks
 	baseURL := downlinks.PublicTLSAddress
 	if baseURL == "" {
@@ -252,89 +240,144 @@ func (w *webhooks) createDomain(ctx context.Context) string {
 }
 
 func (w *webhooks) handleUp(ctx context.Context, msg *ttnpb.ApplicationUp) error {
-	hooks, err := w.registry.List(ctx, msg.ApplicationIdentifiers,
+	ctx = log.NewContextWithField(ctx, "namespace", namespace)
+	hooks, err := w.registry.List(ctx, msg.EndDeviceIds.ApplicationIds,
 		[]string{
 			"base_url",
 			"downlink_ack",
 			"downlink_api_key",
 			"downlink_failed",
 			"downlink_nack",
-			"downlink_queued",
 			"downlink_queue_invalidated",
+			"downlink_queued",
 			"downlink_sent",
+			"field_mask",
 			"format",
 			"headers",
+			"health_status",
 			"join_accept",
 			"location_solved",
 			"service_data",
 			"uplink_message",
+			"uplink_normalized",
 		},
 	)
 	if err != nil {
 		return err
 	}
+	ctx = withDeviceID(ctx, msg.EndDeviceIds)
 	wg := sync.WaitGroup{}
 	for i := range hooks {
 		hook := hooks[i]
-		logger := log.FromContext(ctx).WithField("hook", hook.WebhookID)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		ctx := withWebhookID(ctx, hook.Ids)
+		ctx = WithCachedHealthStatus(ctx, hook.HealthStatus)
+		logger := log.FromContext(ctx).WithField("hook", hook.Ids.WebhookId)
+		f := func(ctx context.Context) error {
 			req, err := w.newRequest(ctx, msg, hook)
 			if err != nil {
 				logger.WithError(err).Warn("Failed to create request")
-				return
+				return err
 			}
 			if req == nil {
-				return
+				return nil
 			}
 			logger.WithField("url", req.URL).Debug("Process message")
 			if err := w.target.Process(req); err != nil {
+				registerWebhookFailed(ctx, err)
 				logger.WithError(err).Warn("Failed to process message")
+				return err
 			}
-		}()
+			return nil
+		}
+		wg.Add(1)
+		w.server.StartTask(&task.Config{
+			Context: ctx,
+			ID:      "execute_webhook",
+			Func:    f,
+			Done:    wg.Done,
+			Restart: task.RestartNever,
+			Backoff: task.DefaultBackoffConfig,
+		})
 	}
 	wg.Wait()
 	return nil
 }
 
-func (w *webhooks) newRequest(ctx context.Context, msg *ttnpb.ApplicationUp, hook *ttnpb.ApplicationWebhook) (*http.Request, error) {
-	var cfg *ttnpb.ApplicationWebhook_Message
+func webhookMessage(
+	msg *ttnpb.ApplicationUp, hook *ttnpb.ApplicationWebhook,
+) *ttnpb.ApplicationWebhook_Message {
 	switch msg.Up.(type) {
 	case *ttnpb.ApplicationUp_UplinkMessage:
-		cfg = hook.UplinkMessage
+		return hook.UplinkMessage
+	case *ttnpb.ApplicationUp_UplinkNormalized:
+		return hook.UplinkNormalized
 	case *ttnpb.ApplicationUp_JoinAccept:
-		cfg = hook.JoinAccept
+		return hook.JoinAccept
 	case *ttnpb.ApplicationUp_DownlinkAck:
-		cfg = hook.DownlinkAck
+		return hook.DownlinkAck
 	case *ttnpb.ApplicationUp_DownlinkNack:
-		cfg = hook.DownlinkNack
+		return hook.DownlinkNack
 	case *ttnpb.ApplicationUp_DownlinkSent:
-		cfg = hook.DownlinkSent
+		return hook.DownlinkSent
 	case *ttnpb.ApplicationUp_DownlinkFailed:
-		cfg = hook.DownlinkFailed
+		return hook.DownlinkFailed
 	case *ttnpb.ApplicationUp_DownlinkQueued:
-		cfg = hook.DownlinkQueued
+		return hook.DownlinkQueued
 	case *ttnpb.ApplicationUp_DownlinkQueueInvalidated:
-		cfg = hook.DownlinkQueueInvalidated
+		return hook.DownlinkQueueInvalidated
 	case *ttnpb.ApplicationUp_LocationSolved:
-		cfg = hook.LocationSolved
+		return hook.LocationSolved
 	case *ttnpb.ApplicationUp_ServiceData:
-		cfg = hook.ServiceData
+		return hook.ServiceData
 	}
+	return nil
+}
+
+func webhookUplinkMessageMask(msg *ttnpb.ApplicationUp) string {
+	switch msg.Up.(type) {
+	case *ttnpb.ApplicationUp_UplinkMessage:
+		return "up.uplink_message"
+	case *ttnpb.ApplicationUp_UplinkNormalized:
+		return "up.uplink_normalized"
+	case *ttnpb.ApplicationUp_JoinAccept:
+		return "up.join_accept"
+	case *ttnpb.ApplicationUp_DownlinkAck:
+		return "up.downlink_ack"
+	case *ttnpb.ApplicationUp_DownlinkNack:
+		return "up.downlink_nack"
+	case *ttnpb.ApplicationUp_DownlinkSent:
+		return "up.downlink_sent"
+	case *ttnpb.ApplicationUp_DownlinkFailed:
+		return "up.downlink_failed"
+	case *ttnpb.ApplicationUp_DownlinkQueued:
+		return "up.downlink_queued"
+	case *ttnpb.ApplicationUp_DownlinkQueueInvalidated:
+		return "up.downlink_queue_invalidated"
+	case *ttnpb.ApplicationUp_LocationSolved:
+		return "up.location_solved"
+	case *ttnpb.ApplicationUp_ServiceData:
+		return "up.service_data"
+	}
+	return ""
+}
+
+// newRequest returns an HTTP request.
+// This method returns nil, nil if the hook is not configured for the message.
+func (w *webhooks) newRequest(
+	ctx context.Context, msg *ttnpb.ApplicationUp, hook *ttnpb.ApplicationWebhook,
+) (*http.Request, error) {
+	cfg := webhookMessage(msg, hook)
 	if cfg == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
-	baseURL, err := url.Parse(hook.BaseURL)
+	baseURL, err := expandVariables(hook.BaseUrl, msg)
 	if err != nil {
 		return nil, err
 	}
-	expandVariables(baseURL, msg)
-	pathURL, err := url.Parse(cfg.Path)
+	pathURL, err := expandVariables(cfg.Path, msg)
 	if err != nil {
 		return nil, err
 	}
-	expandVariables(pathURL, msg)
 	if strings.HasPrefix(pathURL.Path, "/") {
 		// Trim the leading slash, in order to ensure that the path is not
 		// interpreted as relative to the root of the URL.
@@ -355,6 +398,19 @@ func (w *webhooks) newRequest(ctx context.Context, msg *ttnpb.ApplicationUp, hoo
 	if !ok {
 		return nil, errFormatNotFound.WithAttributes("format", hook.Format)
 	}
+	deviceIDs := msg.EndDeviceIds
+	if paths := hook.FieldMask.GetPaths(); len(paths) > 0 {
+		mask := webhookUplinkMessageMask(msg)
+		included := ttnpb.IncludeFields(paths, mask)
+		// Filter active oneof field paths by removing all `up` fields
+		// and appending paths related to the active oneof `up` field
+		paths = append(ttnpb.ExcludeSubFields(paths, "up"), included...)
+		up := &ttnpb.ApplicationUp{}
+		if err := up.SetFields(msg, paths...); err != nil {
+			return nil, err
+		}
+		msg = up
+	}
 	buf, err := format.FromUp(msg)
 	if err != nil {
 		return nil, err
@@ -366,16 +422,15 @@ func (w *webhooks) newRequest(ctx context.Context, msg *ttnpb.ApplicationUp, hoo
 	for key, value := range hook.Headers {
 		req.Header.Set(key, value)
 	}
-	if hook.DownlinkAPIKey != "" {
-		req.Header.Set(downlinkKeyHeader, hook.DownlinkAPIKey)
-		req.Header.Set(downlinkPushHeader, w.createDownlinkURL(ctx, hook.ApplicationWebhookIdentifiers, msg.EndDeviceIdentifiers, "push"))
-		req.Header.Set(downlinkReplaceHeader, w.createDownlinkURL(ctx, hook.ApplicationWebhookIdentifiers, msg.EndDeviceIdentifiers, "replace"))
+	if hook.DownlinkApiKey != "" {
+		req.Header.Set(downlinkKeyHeader, hook.DownlinkApiKey)
+		req.Header.Set(downlinkPushHeader, w.downlinkURL(ctx, hook.Ids, deviceIDs, "push"))
+		req.Header.Set(downlinkReplaceHeader, w.downlinkURL(ctx, hook.Ids, deviceIDs, "replace"))
 	}
-	if domain := w.createDomain(ctx); domain != "" {
+	if domain := w.domain(ctx); domain != "" {
 		req.Header.Set(domainHeader, domain)
 	}
 	req.Header.Set("Content-Type", format.ContentType)
-	req.Header.Set("User-Agent", userAgent)
 	return req, nil
 }
 
@@ -383,17 +438,20 @@ var (
 	errWebhookNotFound = errors.DefineNotFound("webhook_not_found", "webhook not found")
 	errReadBody        = errors.DefineCanceled("read_body", "read body")
 	errDecodeBody      = errors.DefineInvalidArgument("decode_body", "decode body")
+	errValidateBody    = errors.DefineInvalidArgument("validate_body", "validate body")
 )
 
-func (w *webhooks) handleDown(op func(io.Server, context.Context, ttnpb.EndDeviceIdentifiers, []*ttnpb.ApplicationDownlink) error) http.Handler {
+func (w *webhooks) handleDown(
+	op func(io.Server, context.Context, *ttnpb.EndDeviceIdentifiers, []*ttnpb.ApplicationDownlink) error,
+) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		devID := deviceIDFromContext(ctx)
 		hookID := webhookIDFromContext(ctx)
 		logger := log.FromContext(ctx).WithFields(log.Fields(
-			"application_id", devID.ApplicationID,
-			"device_id", devID.DeviceID,
-			"webhook_id", hookID.WebhookID,
+			"application_id", devID.ApplicationIds.ApplicationId,
+			"device_id", devID.DeviceId,
+			"webhook_id", hookID.WebhookId,
 		))
 
 		hook, err := w.registry.Get(ctx, hookID, []string{"format"})
@@ -410,7 +468,7 @@ func (w *webhooks) handleDown(op func(io.Server, context.Context, ttnpb.EndDevic
 			webhandlers.Error(res, req, errFormatNotFound.WithAttributes("format", hook.Format))
 			return
 		}
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := stdio.ReadAll(req.Body)
 		if err != nil {
 			webhandlers.Error(res, req, errReadBody.WithCause(err))
 			return
@@ -418,6 +476,10 @@ func (w *webhooks) handleDown(op func(io.Server, context.Context, ttnpb.EndDevic
 		items, err := format.ToDownlinks(body)
 		if err != nil {
 			webhandlers.Error(res, req, errDecodeBody.WithCause(err))
+			return
+		}
+		if err := items.ValidateFields(); err != nil {
+			webhandlers.Error(res, req, errValidateBody.WithCause(err))
 			return
 		}
 		logger.Debug("Perform downlink queue operation")
@@ -430,25 +492,33 @@ func (w *webhooks) handleDown(op func(io.Server, context.Context, ttnpb.EndDevic
 	})
 }
 
-func expandVariables(url *url.URL, up *ttnpb.ApplicationUp) {
+func expandVariables(u string, up *ttnpb.ApplicationUp) (*url.URL, error) {
 	var joinEUI, devEUI, devAddr string
-	if up.JoinEUI != nil {
-		joinEUI = up.JoinEUI.String()
+	if up.EndDeviceIds.JoinEui != nil {
+		joinEUI = types.MustEUI64(up.EndDeviceIds.JoinEui).String()
 	}
-	if up.DevEUI != nil {
-		devEUI = up.DevEUI.String()
+	if up.EndDeviceIds.DevEui != nil {
+		devEUI = types.MustEUI64(up.EndDeviceIds.DevEui).String()
 	}
-	if up.DevAddr != nil {
-		devAddr = up.DevAddr.String()
+	if up.EndDeviceIds.DevAddr != nil {
+		devAddr = types.MustDevAddr(up.EndDeviceIds.DevAddr).String()
 	}
-	googleapi.Expand(url, map[string]string{
-		"appID":         up.ApplicationID,
-		"applicationID": up.ApplicationID,
+	tmpl, err := uritemplates.Parse(u)
+	if err != nil {
+		return nil, err
+	}
+	expanded, err := tmpl.Expand(map[string]any{
+		"appID":         up.EndDeviceIds.ApplicationIds.ApplicationId,
+		"applicationID": up.EndDeviceIds.ApplicationIds.ApplicationId,
 		"appEUI":        joinEUI,
 		"joinEUI":       joinEUI,
-		"devID":         up.DeviceID,
-		"deviceID":      up.DeviceID,
+		"devID":         up.EndDeviceIds.DeviceId,
+		"deviceID":      up.EndDeviceIds.DeviceId,
 		"devEUI":        devEUI,
 		"devAddr":       devAddr,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return url.Parse(expanded)
 }

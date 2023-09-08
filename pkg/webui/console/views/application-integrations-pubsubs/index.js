@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,54 +13,59 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
-import { Switch, Route } from 'react-router'
+import { Routes, Route, useParams } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import ErrorView from '@ttn-lw/lib/components/error-view'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import ApplicationPubsubEdit from '@console/views/application-integrations-pubsub-edit'
 import ApplicationPubsubAdd from '@console/views/application-integrations-pubsub-add'
 import ApplicationPubsubsList from '@console/views/application-integrations-pubsubs-list'
 import SubViewError from '@console/views/sub-view-error'
 
-import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import { pathId as pathIdRegexp } from '@ttn-lw/lib/regexp'
 
 import { mayViewApplicationEvents } from '@console/lib/feature-checks'
 
-import { selectSelectedApplicationId } from '@console/store/selectors/applications'
-
-@connect(state => ({ appId: selectSelectedApplicationId(state) }))
-@withFeatureRequirement(mayViewApplicationEvents, {
-  redirect: ({ appId }) => `/applications/${appId}`,
-})
-@withBreadcrumb('apps.single.integrations.pubsubs', ({ appId }) => (
-  <Breadcrumb
-    path={`/applications/${appId}/integrations/pubsubs`}
-    content={sharedMessages.pubsubs}
-  />
-))
-export default class ApplicationPubsubs extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
-
-  render() {
-    const { match } = this.props
-
-    return (
-      <ErrorView ErrorComponent={SubViewError}>
-        <Switch>
-          <Route exact path={`${match.path}`} component={ApplicationPubsubsList} />
-          <Route exact path={`${match.path}/add`} component={ApplicationPubsubAdd} />
-          <Route path={`${match.path}/:pubsubId`} component={ApplicationPubsubEdit} />
-        </Switch>
+const ApplicationPubsubs = () => {
+  const { appId } = useParams()
+  useBreadcrumbs(
+    'apps.single.integrations.pubsubs',
+    <Breadcrumb
+      path={`/applications/${appId}/integrations/pubsubs`}
+      content={sharedMessages.pubsubs}
+    />,
+  )
+  return (
+    <Require
+      featureCheck={mayViewApplicationEvents}
+      otherwise={{ redirect: `/applications/${appId}` }}
+    >
+      <ErrorView errorRender={SubViewError}>
+        <Routes>
+          <Route index Component={ApplicationPubsubsList} />
+          <Route path="add" Component={ApplicationPubsubAdd} />
+          <Route
+            path=":pubsubId"
+            element={
+              <ValidateRouteParam
+                check={{ pubsubId: pathIdRegexp }}
+                Component={ApplicationPubsubEdit}
+              />
+            }
+          />
+          <Route path="*" element={<GenericNotFound />} />
+        </Routes>
       </ErrorView>
-    )
-  }
+    </Require>
+  )
 }
+
+export default ApplicationPubsubs

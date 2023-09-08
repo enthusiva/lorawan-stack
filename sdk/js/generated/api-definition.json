@@ -1,7 +1,7 @@
 {
   "ApplicationAccess": {
     "ListRights": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "get",
@@ -13,7 +13,7 @@
       ]
     },
     "CreateAPIKey": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "post",
@@ -26,7 +26,7 @@
       ]
     },
     "ListAPIKeys": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "get",
@@ -38,7 +38,7 @@
       ]
     },
     "GetAPIKey": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "get",
@@ -51,7 +51,7 @@
       ]
     },
     "UpdateAPIKey": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "put",
@@ -62,10 +62,32 @@
             "api_key.id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "created_at",
+        "expires_at",
+        "id",
+        "key",
+        "name",
+        "rights",
+        "updated_at"
+      ]
+    },
+    "DeleteAPIKey": {
+      "file": "ttn/lorawan/v3/application_services.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/applications/{application_ids.application_id}/api-keys/{key_id}",
+          "parameters": [
+            "application_ids.application_id",
+            "key_id"
+          ]
+        }
       ]
     },
     "GetCollaborator": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "",
@@ -91,7 +113,7 @@
       ]
     },
     "SetCollaborator": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "put",
@@ -104,7 +126,7 @@
       ]
     },
     "ListCollaborators": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "get",
@@ -114,11 +136,37 @@
           ]
         }
       ]
+    },
+    "DeleteCollaborator": {
+      "file": "ttn/lorawan/v3/application_services.proto",
+      "http": [
+        {
+          "method": "",
+          "pattern": "",
+          "parameters": []
+        },
+        {
+          "method": "delete",
+          "pattern": "/applications/{application_ids.application_id}/collaborator/user/{collaborator_ids.user_ids.user_id}",
+          "parameters": [
+            "application_ids.application_id",
+            "collaborator_ids.user_ids.user_id"
+          ]
+        },
+        {
+          "method": "delete",
+          "pattern": "/applications/{application_ids.application_id}/collaborator/organization/{collaborator_ids.organization_ids.organization_id}",
+          "parameters": [
+            "application_ids.application_id",
+            "collaborator_ids.organization_ids.organization_id"
+          ]
+        }
+      ]
     }
   },
   "ApplicationRegistry": {
     "Create": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "post",
@@ -139,7 +187,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "get",
@@ -150,19 +198,37 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
+        "application_server_address",
         "attributes",
         "contact_info",
         "created_at",
         "deleted_at",
         "description",
+        "dev_eui_counter",
         "ids",
         "ids.application_id",
+        "join_server_address",
         "name",
+        "network_server_address",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "get",
@@ -185,19 +251,37 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
+        "application_server_address",
         "attributes",
         "contact_info",
         "created_at",
         "deleted_at",
         "description",
+        "dev_eui_counter",
         "ids",
         "ids.application_id",
+        "join_server_address",
         "name",
+        "network_server_address",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "Update": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "put",
@@ -209,6 +293,14 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
+        "application_server_address",
         "attributes",
         "contact_info",
         "created_at",
@@ -216,12 +308,21 @@
         "description",
         "ids",
         "ids.application_id",
+        "join_server_address",
         "name",
+        "network_server_address",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "delete",
@@ -233,7 +334,7 @@
       ]
     },
     "Restore": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "post",
@@ -245,7 +346,7 @@
       ]
     },
     "Purge": {
-      "file": "lorawan-stack/api/application_services.proto",
+      "file": "ttn/lorawan/v3/application_services.proto",
       "http": [
         {
           "method": "delete",
@@ -255,15 +356,27 @@
           ]
         }
       ]
+    },
+    "IssueDevEUI": {
+      "file": "ttn/lorawan/v3/application_services.proto",
+      "http": [
+        {
+          "method": "post",
+          "pattern": "/applications/{application_id}/dev-eui",
+          "parameters": [
+            "application_id"
+          ]
+        }
+      ]
     }
   },
   "AppAs": {
     "Subscribe": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": []
     },
     "DownlinkQueuePush": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "post",
@@ -277,7 +390,7 @@
       ]
     },
     "DownlinkQueueReplace": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "post",
@@ -291,7 +404,7 @@
       ]
     },
     "DownlinkQueueList": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "get",
@@ -304,7 +417,7 @@
       ]
     },
     "GetMQTTConnectionInfo": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "get",
@@ -316,7 +429,7 @@
       ]
     },
     "SimulateUplink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "post",
@@ -330,7 +443,7 @@
       ]
     },
     "EncodeDownlink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "post",
@@ -344,7 +457,7 @@
       ]
     },
     "DecodeUplink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "post",
@@ -358,7 +471,7 @@
       ]
     },
     "DecodeDownlink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "post",
@@ -374,7 +487,7 @@
   },
   "As": {
     "GetLink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "get",
@@ -397,7 +510,7 @@
       ]
     },
     "SetLink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "put",
@@ -421,7 +534,7 @@
       ]
     },
     "DeleteLink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "delete",
@@ -433,7 +546,7 @@
       ]
     },
     "GetLinkStats": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "get",
@@ -445,7 +558,7 @@
       ]
     },
     "GetConfiguration": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "get",
@@ -455,9 +568,23 @@
       ]
     }
   },
+  "AsEndDeviceBatchRegistry": {
+    "Delete": {
+      "file": "ttn/lorawan/v3/applicationserver.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/as/applications/{application_ids.application_id}/devices/batch",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        }
+      ]
+    }
+  },
   "AsEndDeviceRegistry": {
     "Get": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "get",
@@ -488,6 +615,7 @@
         "pending_session.keys.app_s_key.key",
         "pending_session.keys.session_key_id",
         "pending_session.last_a_f_cnt_down",
+        "serial_number",
         "session",
         "session.dev_addr",
         "session.keys",
@@ -497,6 +625,9 @@
         "session.last_a_f_cnt_down",
         "skip_payload_crypto",
         "skip_payload_crypto_override",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "version_ids",
         "version_ids.band_id",
         "version_ids.brand_id",
@@ -506,7 +637,7 @@
       ]
     },
     "Set": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "put",
@@ -538,6 +669,7 @@
         "ids.dev_eui",
         "ids.device_id",
         "ids.join_eui",
+        "serial_number",
         "session.dev_addr",
         "session.keys.app_s_key",
         "session.keys.app_s_key.key",
@@ -545,6 +677,9 @@
         "session.last_a_f_cnt_down",
         "skip_payload_crypto",
         "skip_payload_crypto_override",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "version_ids",
         "version_ids.band_id",
         "version_ids.brand_id",
@@ -554,7 +689,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": [
         {
           "method": "delete",
@@ -569,13 +704,13 @@
   },
   "NsAs": {
     "HandleUplink": {
-      "file": "lorawan-stack/api/applicationserver.proto",
+      "file": "ttn/lorawan/v3/applicationserver.proto",
       "http": []
     }
   },
   "ApplicationUpStorage": {
     "GetStoredApplicationUp": {
-      "file": "lorawan-stack/api/applicationserver_integrations_storage.proto",
+      "file": "ttn/lorawan/v3/applicationserver_integrations_storage.proto",
       "http": [
         {
           "method": "get",
@@ -614,6 +749,9 @@
         "up.downlink_ack.class_b_c.absolute_time",
         "up.downlink_ack.class_b_c.gateways",
         "up.downlink_ack.confirmed",
+        "up.downlink_ack.confirmed_retry",
+        "up.downlink_ack.confirmed_retry.attempt",
+        "up.downlink_ack.confirmed_retry.max_attempts",
         "up.downlink_ack.correlation_ids",
         "up.downlink_ack.decoded_payload",
         "up.downlink_ack.decoded_payload_warnings",
@@ -628,6 +766,9 @@
         "up.downlink_failed.downlink.class_b_c.absolute_time",
         "up.downlink_failed.downlink.class_b_c.gateways",
         "up.downlink_failed.downlink.confirmed",
+        "up.downlink_failed.downlink.confirmed_retry",
+        "up.downlink_failed.downlink.confirmed_retry.attempt",
+        "up.downlink_failed.downlink.confirmed_retry.max_attempts",
         "up.downlink_failed.downlink.correlation_ids",
         "up.downlink_failed.downlink.decoded_payload",
         "up.downlink_failed.downlink.decoded_payload_warnings",
@@ -655,6 +796,9 @@
         "up.downlink_nack.class_b_c.absolute_time",
         "up.downlink_nack.class_b_c.gateways",
         "up.downlink_nack.confirmed",
+        "up.downlink_nack.confirmed_retry",
+        "up.downlink_nack.confirmed_retry.attempt",
+        "up.downlink_nack.confirmed_retry.max_attempts",
         "up.downlink_nack.correlation_ids",
         "up.downlink_nack.decoded_payload",
         "up.downlink_nack.decoded_payload_warnings",
@@ -672,6 +816,9 @@
         "up.downlink_queued.class_b_c.absolute_time",
         "up.downlink_queued.class_b_c.gateways",
         "up.downlink_queued.confirmed",
+        "up.downlink_queued.confirmed_retry",
+        "up.downlink_queued.confirmed_retry.attempt",
+        "up.downlink_queued.confirmed_retry.max_attempts",
         "up.downlink_queued.correlation_ids",
         "up.downlink_queued.decoded_payload",
         "up.downlink_queued.decoded_payload_warnings",
@@ -685,6 +832,9 @@
         "up.downlink_sent.class_b_c.absolute_time",
         "up.downlink_sent.class_b_c.gateways",
         "up.downlink_sent.confirmed",
+        "up.downlink_sent.confirmed_retry",
+        "up.downlink_sent.confirmed_retry.attempt",
+        "up.downlink_sent.confirmed_retry.max_attempts",
         "up.downlink_sent.correlation_ids",
         "up.downlink_sent.decoded_payload",
         "up.downlink_sent.decoded_payload_warnings",
@@ -728,19 +878,31 @@
         "up.uplink_message.frm_payload",
         "up.uplink_message.last_a_f_cnt_down",
         "up.uplink_message.locations",
+        "up.uplink_message.network_ids",
+        "up.uplink_message.network_ids.cluster_address",
+        "up.uplink_message.network_ids.cluster_id",
+        "up.uplink_message.network_ids.net_id",
+        "up.uplink_message.network_ids.tenant_address",
+        "up.uplink_message.network_ids.tenant_id",
+        "up.uplink_message.normalized_payload",
+        "up.uplink_message.normalized_payload_warnings",
         "up.uplink_message.received_at",
         "up.uplink_message.rx_metadata",
         "up.uplink_message.session_key_id",
         "up.uplink_message.settings",
-        "up.uplink_message.settings.coding_rate",
+        "up.uplink_message.settings.concentrator_timestamp",
         "up.uplink_message.settings.data_rate",
         "up.uplink_message.settings.data_rate.modulation",
         "up.uplink_message.settings.data_rate.modulation.fsk",
         "up.uplink_message.settings.data_rate.modulation.fsk.bit_rate",
         "up.uplink_message.settings.data_rate.modulation.lora",
         "up.uplink_message.settings.data_rate.modulation.lora.bandwidth",
+        "up.uplink_message.settings.data_rate.modulation.lora.coding_rate",
         "up.uplink_message.settings.data_rate.modulation.lora.spreading_factor",
-        "up.uplink_message.settings.data_rate_index",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss.coding_rate",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss.modulation_type",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss.operating_channel_width",
         "up.uplink_message.settings.downlink",
         "up.uplink_message.settings.downlink.antenna_index",
         "up.uplink_message.settings.downlink.invert_polarization",
@@ -749,6 +911,58 @@
         "up.uplink_message.settings.frequency",
         "up.uplink_message.settings.time",
         "up.uplink_message.settings.timestamp",
+        "up.uplink_message.version_ids",
+        "up.uplink_message.version_ids.band_id",
+        "up.uplink_message.version_ids.brand_id",
+        "up.uplink_message.version_ids.firmware_version",
+        "up.uplink_message.version_ids.hardware_version",
+        "up.uplink_message.version_ids.model_id",
+        "up.uplink_normalized",
+        "up.uplink_normalized.confirmed",
+        "up.uplink_normalized.consumed_airtime",
+        "up.uplink_normalized.f_cnt",
+        "up.uplink_normalized.f_port",
+        "up.uplink_normalized.frm_payload",
+        "up.uplink_normalized.locations",
+        "up.uplink_normalized.network_ids",
+        "up.uplink_normalized.network_ids.cluster_address",
+        "up.uplink_normalized.network_ids.cluster_id",
+        "up.uplink_normalized.network_ids.net_id",
+        "up.uplink_normalized.network_ids.tenant_address",
+        "up.uplink_normalized.network_ids.tenant_id",
+        "up.uplink_normalized.normalized_payload",
+        "up.uplink_normalized.normalized_payload_warnings",
+        "up.uplink_normalized.received_at",
+        "up.uplink_normalized.rx_metadata",
+        "up.uplink_normalized.session_key_id",
+        "up.uplink_normalized.settings",
+        "up.uplink_normalized.settings.concentrator_timestamp",
+        "up.uplink_normalized.settings.data_rate",
+        "up.uplink_normalized.settings.data_rate.modulation",
+        "up.uplink_normalized.settings.data_rate.modulation.fsk",
+        "up.uplink_normalized.settings.data_rate.modulation.fsk.bit_rate",
+        "up.uplink_normalized.settings.data_rate.modulation.lora",
+        "up.uplink_normalized.settings.data_rate.modulation.lora.bandwidth",
+        "up.uplink_normalized.settings.data_rate.modulation.lora.coding_rate",
+        "up.uplink_normalized.settings.data_rate.modulation.lora.spreading_factor",
+        "up.uplink_normalized.settings.data_rate.modulation.lrfhss",
+        "up.uplink_normalized.settings.data_rate.modulation.lrfhss.coding_rate",
+        "up.uplink_normalized.settings.data_rate.modulation.lrfhss.modulation_type",
+        "up.uplink_normalized.settings.data_rate.modulation.lrfhss.operating_channel_width",
+        "up.uplink_normalized.settings.downlink",
+        "up.uplink_normalized.settings.downlink.antenna_index",
+        "up.uplink_normalized.settings.downlink.invert_polarization",
+        "up.uplink_normalized.settings.downlink.tx_power",
+        "up.uplink_normalized.settings.enable_crc",
+        "up.uplink_normalized.settings.frequency",
+        "up.uplink_normalized.settings.time",
+        "up.uplink_normalized.settings.timestamp",
+        "up.uplink_normalized.version_ids",
+        "up.uplink_normalized.version_ids.band_id",
+        "up.uplink_normalized.version_ids.brand_id",
+        "up.uplink_normalized.version_ids.firmware_version",
+        "up.uplink_normalized.version_ids.hardware_version",
+        "up.uplink_normalized.version_ids.model_id",
         "up.uplink_message.app_s_key",
         "up.uplink_message.app_s_key.encrypted_key",
         "up.uplink_message.app_s_key.kek_label",
@@ -762,19 +976,31 @@
         "up.uplink_message.frm_payload",
         "up.uplink_message.last_a_f_cnt_down",
         "up.uplink_message.locations",
+        "up.uplink_message.network_ids",
+        "up.uplink_message.network_ids.cluster_address",
+        "up.uplink_message.network_ids.cluster_id",
+        "up.uplink_message.network_ids.net_id",
+        "up.uplink_message.network_ids.tenant_address",
+        "up.uplink_message.network_ids.tenant_id",
+        "up.uplink_message.normalized_payload",
+        "up.uplink_message.normalized_payload_warnings",
         "up.uplink_message.received_at",
         "up.uplink_message.rx_metadata",
         "up.uplink_message.session_key_id",
         "up.uplink_message.settings",
-        "up.uplink_message.settings.coding_rate",
+        "up.uplink_message.settings.concentrator_timestamp",
         "up.uplink_message.settings.data_rate",
         "up.uplink_message.settings.data_rate.modulation",
         "up.uplink_message.settings.data_rate.modulation.fsk",
         "up.uplink_message.settings.data_rate.modulation.fsk.bit_rate",
         "up.uplink_message.settings.data_rate.modulation.lora",
         "up.uplink_message.settings.data_rate.modulation.lora.bandwidth",
+        "up.uplink_message.settings.data_rate.modulation.lora.coding_rate",
         "up.uplink_message.settings.data_rate.modulation.lora.spreading_factor",
-        "up.uplink_message.settings.data_rate_index",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss.coding_rate",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss.modulation_type",
+        "up.uplink_message.settings.data_rate.modulation.lrfhss.operating_channel_width",
         "up.uplink_message.settings.downlink",
         "up.uplink_message.settings.downlink.antenna_index",
         "up.uplink_message.settings.downlink.invert_polarization",
@@ -783,6 +1009,12 @@
         "up.uplink_message.settings.frequency",
         "up.uplink_message.settings.time",
         "up.uplink_message.settings.timestamp",
+        "up.uplink_message.version_ids",
+        "up.uplink_message.version_ids.band_id",
+        "up.uplink_message.version_ids.brand_id",
+        "up.uplink_message.version_ids.firmware_version",
+        "up.uplink_message.version_ids.hardware_version",
+        "up.uplink_message.version_ids.model_id",
         "up.join_accept.app_s_key",
         "up.join_accept.app_s_key.encrypted_key",
         "up.join_accept.app_s_key.kek_label",
@@ -795,6 +1027,9 @@
         "up.downlink_ack.class_b_c.absolute_time",
         "up.downlink_ack.class_b_c.gateways",
         "up.downlink_ack.confirmed",
+        "up.downlink_ack.confirmed_retry",
+        "up.downlink_ack.confirmed_retry.attempt",
+        "up.downlink_ack.confirmed_retry.max_attempts",
         "up.downlink_ack.correlation_ids",
         "up.downlink_ack.decoded_payload",
         "up.downlink_ack.decoded_payload_warnings",
@@ -807,6 +1042,9 @@
         "up.downlink_nack.class_b_c.absolute_time",
         "up.downlink_nack.class_b_c.gateways",
         "up.downlink_nack.confirmed",
+        "up.downlink_nack.confirmed_retry",
+        "up.downlink_nack.confirmed_retry.attempt",
+        "up.downlink_nack.confirmed_retry.max_attempts",
         "up.downlink_nack.correlation_ids",
         "up.downlink_nack.decoded_payload",
         "up.downlink_nack.decoded_payload_warnings",
@@ -819,6 +1057,9 @@
         "up.downlink_sent.class_b_c.absolute_time",
         "up.downlink_sent.class_b_c.gateways",
         "up.downlink_sent.confirmed",
+        "up.downlink_sent.confirmed_retry",
+        "up.downlink_sent.confirmed_retry.attempt",
+        "up.downlink_sent.confirmed_retry.max_attempts",
         "up.downlink_sent.correlation_ids",
         "up.downlink_sent.decoded_payload",
         "up.downlink_sent.decoded_payload_warnings",
@@ -832,6 +1073,9 @@
         "up.downlink_failed.downlink.class_b_c.absolute_time",
         "up.downlink_failed.downlink.class_b_c.gateways",
         "up.downlink_failed.downlink.confirmed",
+        "up.downlink_failed.downlink.confirmed_retry",
+        "up.downlink_failed.downlink.confirmed_retry.attempt",
+        "up.downlink_failed.downlink.confirmed_retry.max_attempts",
         "up.downlink_failed.downlink.correlation_ids",
         "up.downlink_failed.downlink.decoded_payload",
         "up.downlink_failed.downlink.decoded_payload_warnings",
@@ -858,6 +1102,9 @@
         "up.downlink_queued.class_b_c.absolute_time",
         "up.downlink_queued.class_b_c.gateways",
         "up.downlink_queued.confirmed",
+        "up.downlink_queued.confirmed_retry",
+        "up.downlink_queued.confirmed_retry.attempt",
+        "up.downlink_queued.confirmed_retry.max_attempts",
         "up.downlink_queued.correlation_ids",
         "up.downlink_queued.decoded_payload",
         "up.downlink_queued.decoded_payload_warnings",
@@ -880,11 +1127,33 @@
         "up.service_data.data",
         "up.service_data.service"
       ]
+    },
+    "GetStoredApplicationUpCount": {
+      "file": "ttn/lorawan/v3/applicationserver_integrations_storage.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/as/applications/{end_device_ids.application_ids.application_id}/devices/{end_device_ids.device_id}/packages/storage/{type}/count",
+          "parameters": [
+            "end_device_ids.application_ids.application_id",
+            "end_device_ids.device_id",
+            "type"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/as/applications/{application_ids.application_id}/packages/storage/{type}/count",
+          "parameters": [
+            "application_ids.application_id",
+            "type"
+          ]
+        }
+      ]
     }
   },
   "ApplicationPackageRegistry": {
     "List": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "get",
@@ -897,7 +1166,7 @@
       ]
     },
     "GetAssociation": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "get",
@@ -926,7 +1195,7 @@
       ]
     },
     "ListAssociations": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "get",
@@ -954,7 +1223,7 @@
       ]
     },
     "SetAssociation": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "put",
@@ -984,7 +1253,7 @@
       ]
     },
     "DeleteAssociation": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "delete",
@@ -998,7 +1267,7 @@
       ]
     },
     "GetDefaultAssociation": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "get",
@@ -1021,7 +1290,7 @@
       ]
     },
     "ListDefaultAssociations": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "get",
@@ -1043,7 +1312,7 @@
       ]
     },
     "SetDefaultAssociation": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "put",
@@ -1067,7 +1336,7 @@
       ]
     },
     "DeleteDefaultAssociation": {
-      "file": "lorawan-stack/api/applicationserver_packages.proto",
+      "file": "ttn/lorawan/v3/applicationserver_packages.proto",
       "http": [
         {
           "method": "delete",
@@ -1082,7 +1351,7 @@
   },
   "ApplicationPubSubRegistry": {
     "GetFormats": {
-      "file": "lorawan-stack/api/applicationserver_pubsub.proto",
+      "file": "ttn/lorawan/v3/applicationserver_pubsub.proto",
       "http": [
         {
           "method": "get",
@@ -1092,7 +1361,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/applicationserver_pubsub.proto",
+      "file": "ttn/lorawan/v3/applicationserver_pubsub.proto",
       "http": [
         {
           "method": "get",
@@ -1164,11 +1433,13 @@
         "service_data.topic",
         "updated_at",
         "uplink_message",
-        "uplink_message.topic"
+        "uplink_message.topic",
+        "uplink_normalized",
+        "uplink_normalized.topic"
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/applicationserver_pubsub.proto",
+      "file": "ttn/lorawan/v3/applicationserver_pubsub.proto",
       "http": [
         {
           "method": "get",
@@ -1239,11 +1510,13 @@
         "service_data.topic",
         "updated_at",
         "uplink_message",
-        "uplink_message.topic"
+        "uplink_message.topic",
+        "uplink_normalized",
+        "uplink_normalized.topic"
       ]
     },
     "Set": {
-      "file": "lorawan-stack/api/applicationserver_pubsub.proto",
+      "file": "ttn/lorawan/v3/applicationserver_pubsub.proto",
       "http": [
         {
           "method": "put",
@@ -1324,11 +1597,13 @@
         "service_data.topic",
         "updated_at",
         "uplink_message",
-        "uplink_message.topic"
+        "uplink_message.topic",
+        "uplink_normalized",
+        "uplink_normalized.topic"
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/applicationserver_pubsub.proto",
+      "file": "ttn/lorawan/v3/applicationserver_pubsub.proto",
       "http": [
         {
           "method": "delete",
@@ -1343,7 +1618,7 @@
   },
   "ApplicationWebhookRegistry": {
     "GetFormats": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "get",
@@ -1353,7 +1628,7 @@
       ]
     },
     "GetTemplate": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "get",
@@ -1380,6 +1655,7 @@
         "downlink_queued.path",
         "downlink_sent",
         "downlink_sent.path",
+        "field_mask",
         "fields",
         "format",
         "headers",
@@ -1395,11 +1671,13 @@
         "service_data",
         "service_data.path",
         "uplink_message",
-        "uplink_message.path"
+        "uplink_message.path",
+        "uplink_normalized",
+        "uplink_normalized.path"
       ]
     },
     "ListTemplates": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "get",
@@ -1424,6 +1702,7 @@
         "downlink_queued.path",
         "downlink_sent",
         "downlink_sent.path",
+        "field_mask",
         "fields",
         "format",
         "headers",
@@ -1439,11 +1718,13 @@
         "service_data",
         "service_data.path",
         "uplink_message",
-        "uplink_message.path"
+        "uplink_message.path",
+        "uplink_normalized",
+        "uplink_normalized.path"
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "get",
@@ -1470,8 +1751,29 @@
         "downlink_queued.path",
         "downlink_sent",
         "downlink_sent.path",
+        "field_mask",
         "format",
         "headers",
+        "health_status",
+        "health_status.status",
+        "health_status.status.healthy",
+        "health_status.status.unhealthy",
+        "health_status.status.unhealthy.failed_attempts",
+        "health_status.status.unhealthy.last_failed_attempt_at",
+        "health_status.status.unhealthy.last_failed_attempt_details",
+        "health_status.status.unhealthy.last_failed_attempt_details.attributes",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.attributes",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.correlation_id",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.message_format",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.name",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.namespace",
+        "health_status.status.unhealthy.last_failed_attempt_details.code",
+        "health_status.status.unhealthy.last_failed_attempt_details.correlation_id",
+        "health_status.status.unhealthy.last_failed_attempt_details.details",
+        "health_status.status.unhealthy.last_failed_attempt_details.message_format",
+        "health_status.status.unhealthy.last_failed_attempt_details.name",
+        "health_status.status.unhealthy.last_failed_attempt_details.namespace",
         "ids",
         "ids.application_ids",
         "ids.application_ids.application_id",
@@ -1487,11 +1789,13 @@
         "template_ids.template_id",
         "updated_at",
         "uplink_message",
-        "uplink_message.path"
+        "uplink_message.path",
+        "uplink_normalized",
+        "uplink_normalized.path"
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "get",
@@ -1517,8 +1821,29 @@
         "downlink_queued.path",
         "downlink_sent",
         "downlink_sent.path",
+        "field_mask",
         "format",
         "headers",
+        "health_status",
+        "health_status.status",
+        "health_status.status.healthy",
+        "health_status.status.unhealthy",
+        "health_status.status.unhealthy.failed_attempts",
+        "health_status.status.unhealthy.last_failed_attempt_at",
+        "health_status.status.unhealthy.last_failed_attempt_details",
+        "health_status.status.unhealthy.last_failed_attempt_details.attributes",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.attributes",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.correlation_id",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.message_format",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.name",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.namespace",
+        "health_status.status.unhealthy.last_failed_attempt_details.code",
+        "health_status.status.unhealthy.last_failed_attempt_details.correlation_id",
+        "health_status.status.unhealthy.last_failed_attempt_details.details",
+        "health_status.status.unhealthy.last_failed_attempt_details.message_format",
+        "health_status.status.unhealthy.last_failed_attempt_details.name",
+        "health_status.status.unhealthy.last_failed_attempt_details.namespace",
         "ids",
         "ids.application_ids",
         "ids.application_ids.application_id",
@@ -1534,11 +1859,13 @@
         "template_ids.template_id",
         "updated_at",
         "uplink_message",
-        "uplink_message.path"
+        "uplink_message.path",
+        "uplink_normalized",
+        "uplink_normalized.path"
       ]
     },
     "Set": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "put",
@@ -1574,8 +1901,29 @@
         "downlink_queued.path",
         "downlink_sent",
         "downlink_sent.path",
+        "field_mask",
         "format",
         "headers",
+        "health_status",
+        "health_status.status",
+        "health_status.status.healthy",
+        "health_status.status.unhealthy",
+        "health_status.status.unhealthy.failed_attempts",
+        "health_status.status.unhealthy.last_failed_attempt_at",
+        "health_status.status.unhealthy.last_failed_attempt_details",
+        "health_status.status.unhealthy.last_failed_attempt_details.attributes",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.attributes",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.correlation_id",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.message_format",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.name",
+        "health_status.status.unhealthy.last_failed_attempt_details.cause.namespace",
+        "health_status.status.unhealthy.last_failed_attempt_details.code",
+        "health_status.status.unhealthy.last_failed_attempt_details.correlation_id",
+        "health_status.status.unhealthy.last_failed_attempt_details.details",
+        "health_status.status.unhealthy.last_failed_attempt_details.message_format",
+        "health_status.status.unhealthy.last_failed_attempt_details.name",
+        "health_status.status.unhealthy.last_failed_attempt_details.namespace",
         "ids",
         "ids.application_ids",
         "ids.application_ids.application_id",
@@ -1591,11 +1939,13 @@
         "template_ids.template_id",
         "updated_at",
         "uplink_message",
-        "uplink_message.path"
+        "uplink_message.path",
+        "uplink_normalized",
+        "uplink_normalized.path"
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/applicationserver_web.proto",
+      "file": "ttn/lorawan/v3/applicationserver_web.proto",
       "http": [
         {
           "method": "delete",
@@ -1610,7 +1960,7 @@
   },
   "ClientAccess": {
     "ListRights": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "get",
@@ -1622,7 +1972,7 @@
       ]
     },
     "GetCollaborator": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "",
@@ -1648,7 +1998,7 @@
       ]
     },
     "SetCollaborator": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "put",
@@ -1661,7 +2011,7 @@
       ]
     },
     "ListCollaborators": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "get",
@@ -1671,11 +2021,37 @@
           ]
         }
       ]
+    },
+    "DeleteCollaborator": {
+      "file": "ttn/lorawan/v3/client_services.proto",
+      "http": [
+        {
+          "method": "",
+          "pattern": "",
+          "parameters": []
+        },
+        {
+          "method": "delete",
+          "pattern": "/clients/{client_ids.client_id}/collaborators/user/{collaborator_ids.user_ids.user_id}",
+          "parameters": [
+            "client_ids.client_id",
+            "collaborator_ids.user_ids.user_id"
+          ]
+        },
+        {
+          "method": "delete",
+          "pattern": "/clients/{client_ids.client_id}/collaborators/organization/{collaborator_ids.organization_ids.organization_id}",
+          "parameters": [
+            "client_ids.client_id",
+            "collaborator_ids.organization_ids.organization_id"
+          ]
+        }
+      ]
     }
   },
   "ClientRegistry": {
     "Create": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "post",
@@ -1696,7 +2072,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "get",
@@ -1707,6 +2083,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -1723,11 +2106,18 @@
         "skip_authorization",
         "state",
         "state_description",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "get",
@@ -1750,6 +2140,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -1766,11 +2163,18 @@
         "skip_authorization",
         "state",
         "state_description",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "Update": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "put",
@@ -1782,6 +2186,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -1799,11 +2210,18 @@
         "skip_authorization",
         "state",
         "state_description",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "delete",
@@ -1815,7 +2233,7 @@
       ]
     },
     "Restore": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "post",
@@ -1827,7 +2245,7 @@
       ]
     },
     "Purge": {
-      "file": "lorawan-stack/api/client_services.proto",
+      "file": "ttn/lorawan/v3/client_services.proto",
       "http": [
         {
           "method": "delete",
@@ -1841,7 +2259,7 @@
   },
   "Configuration": {
     "ListFrequencyPlans": {
-      "file": "lorawan-stack/api/configuration_services.proto",
+      "file": "ttn/lorawan/v3/configuration_services.proto",
       "http": [
         {
           "method": "get",
@@ -1849,25 +2267,87 @@
           "parameters": []
         }
       ]
+    },
+    "GetPhyVersions": {
+      "file": "ttn/lorawan/v3/configuration_services.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/configuration/phy-versions",
+          "parameters": []
+        }
+      ]
+    },
+    "ListBands": {
+      "file": "ttn/lorawan/v3/configuration_services.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/configuration/bands",
+          "parameters": []
+        },
+        {
+          "method": "get",
+          "pattern": "/configuration/bands/{band_id}",
+          "parameters": [
+            "band_id"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/configuration/bands/{band_id}/{phy_version}",
+          "parameters": [
+            "band_id",
+            "phy_version"
+          ]
+        }
+      ]
     }
   },
   "ContactInfoRegistry": {
     "RequestValidation": {
-      "file": "lorawan-stack/api/contact_info.proto",
+      "file": "ttn/lorawan/v3/contact_info.proto",
       "http": [
         {
           "method": "post",
           "pattern": "/contact_info/validation",
+          "body": "*",
           "parameters": []
         }
       ]
     },
     "Validate": {
-      "file": "lorawan-stack/api/contact_info.proto",
+      "file": "ttn/lorawan/v3/contact_info.proto",
       "http": [
         {
           "method": "patch",
           "pattern": "/contact_info/validation",
+          "body": "*",
+          "parameters": []
+        }
+      ]
+    }
+  },
+  "EndDeviceBatchClaimingServer": {
+    "Unclaim": {
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/edcs/claim/{application_ids.application_id}/devices/batch",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        }
+      ]
+    },
+    "GetInfoByJoinEUIs": {
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
+      "http": [
+        {
+          "method": "post",
+          "pattern": "/edcs/claim/info/batch",
+          "body": "*",
           "parameters": []
         }
       ]
@@ -1875,7 +2355,7 @@
   },
   "EndDeviceClaimingServer": {
     "Claim": {
-      "file": "lorawan-stack/api/deviceclaimingserver.proto",
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
       "http": [
         {
           "method": "post",
@@ -1885,8 +2365,45 @@
         }
       ]
     },
+    "Unclaim": {
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/edcs/claim/{application_ids.application_id}/devices/{device_id}",
+          "parameters": [
+            "application_ids.application_id",
+            "device_id"
+          ]
+        }
+      ]
+    },
+    "GetInfoByJoinEUI": {
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
+      "http": [
+        {
+          "method": "post",
+          "pattern": "/edcs/claim/info",
+          "body": "*",
+          "parameters": []
+        }
+      ]
+    },
+    "GetClaimStatus": {
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/edcs/claim/{application_ids.application_id}/devices/{device_id}",
+          "parameters": [
+            "application_ids.application_id",
+            "device_id"
+          ]
+        }
+      ]
+    },
     "AuthorizeApplication": {
-      "file": "lorawan-stack/api/deviceclaimingserver.proto",
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
       "http": [
         {
           "method": "post",
@@ -1899,7 +2416,7 @@
       ]
     },
     "UnauthorizeApplication": {
-      "file": "lorawan-stack/api/deviceclaimingserver.proto",
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
       "http": [
         {
           "method": "delete",
@@ -1913,7 +2430,7 @@
   },
   "GatewayClaimingServer": {
     "Claim": {
-      "file": "lorawan-stack/api/deviceclaimingserver.proto",
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
       "http": [
         {
           "method": "post",
@@ -1924,7 +2441,7 @@
       ]
     },
     "AuthorizeGateway": {
-      "file": "lorawan-stack/api/deviceclaimingserver.proto",
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
       "http": [
         {
           "method": "post",
@@ -1937,7 +2454,7 @@
       ]
     },
     "UnauthorizeGateway": {
-      "file": "lorawan-stack/api/deviceclaimingserver.proto",
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
       "http": [
         {
           "method": "delete",
@@ -1947,12 +2464,28 @@
           ]
         }
       ]
+    },
+    "GetInfoByGatewayEUI": {
+      "file": "ttn/lorawan/v3/deviceclaimingserver.proto",
+      "http": [
+        {
+          "method": "post",
+          "pattern": "/gcls/claim/info",
+          "body": "*",
+          "parameters": []
+        }
+      ]
     }
   },
   "DeviceRepository": {
     "ListBrands": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands",
+          "parameters": []
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands",
@@ -1973,8 +2506,15 @@
       ]
     },
     "GetBrand": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{brand_id}",
+          "parameters": [
+            "brand_id"
+          ]
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands/{brand_id}",
@@ -1996,13 +2536,17 @@
       ]
     },
     "ListModels": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
         {
           "method": "get",
-          "pattern": "/dr/applications/{application_ids.application_id}/brands/{brand_id}/models",
+          "pattern": "/dr/models",
+          "parameters": []
+        },
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{brand_id}/models",
           "parameters": [
-            "application_ids.application_id",
             "brand_id"
           ]
         },
@@ -2011,6 +2555,14 @@
           "pattern": "/dr/applications/{application_ids.application_id}/models",
           "parameters": [
             "application_ids.application_id"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/dr/applications/{application_ids.application_id}/brands/{brand_id}/models",
+          "parameters": [
+            "application_ids.application_id",
+            "brand_id"
           ]
         }
       ],
@@ -2057,8 +2609,16 @@
       ]
     },
     "GetModel": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{brand_id}/models/{model_id}",
+          "parameters": [
+            "brand_id",
+            "model_id"
+          ]
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands/{brand_id}/models/{model_id}",
@@ -2112,8 +2672,26 @@
       ]
     },
     "GetTemplate": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/template",
+          "parameters": [
+            "version_ids.brand_id",
+            "version_ids.model_id",
+            "version_ids.firmware_version",
+            "version_ids.band_id"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/dr/vendors/{end_device_profile_ids.vendor_id}/profiles/{end_device_profile_ids.vendor_profile_id}/template",
+          "parameters": [
+            "end_device_profile_ids.vendor_id",
+            "end_device_profile_ids.vendor_profile_id"
+          ]
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/template",
@@ -2124,12 +2702,31 @@
             "version_ids.firmware_version",
             "version_ids.band_id"
           ]
+        },
+        {
+          "method": "get",
+          "pattern": "/dr/applications/{application_ids.application_id}/vendors/{end_device_profile_ids.vendor_id}/profiles/{end_device_profile_ids.vendor_profile_id}/template",
+          "parameters": [
+            "application_ids.application_id",
+            "end_device_profile_ids.vendor_id",
+            "end_device_profile_ids.vendor_profile_id"
+          ]
         }
       ]
     },
     "GetUplinkDecoder": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/formatters/uplink/decoder",
+          "parameters": [
+            "version_ids.brand_id",
+            "version_ids.model_id",
+            "version_ids.firmware_version",
+            "version_ids.band_id"
+          ]
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/formatters/uplink/decoder",
@@ -2141,11 +2738,27 @@
             "version_ids.band_id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "codec_id",
+        "examples",
+        "formatter",
+        "formatter_parameter"
       ]
     },
     "GetDownlinkDecoder": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/formatters/downlink/decoder",
+          "parameters": [
+            "version_ids.brand_id",
+            "version_ids.model_id",
+            "version_ids.firmware_version",
+            "version_ids.band_id"
+          ]
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/formatters/downlink/decoder",
@@ -2157,11 +2770,27 @@
             "version_ids.band_id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "codec_id",
+        "examples",
+        "formatter",
+        "formatter_parameter"
       ]
     },
     "GetDownlinkEncoder": {
-      "file": "lorawan-stack/api/devicerepository.proto",
+      "file": "ttn/lorawan/v3/devicerepository.proto",
       "http": [
+        {
+          "method": "get",
+          "pattern": "/dr/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/formatters/downlink/encoder",
+          "parameters": [
+            "version_ids.brand_id",
+            "version_ids.model_id",
+            "version_ids.firmware_version",
+            "version_ids.band_id"
+          ]
+        },
         {
           "method": "get",
           "pattern": "/dr/applications/{application_ids.application_id}/brands/{version_ids.brand_id}/models/{version_ids.model_id}/{version_ids.firmware_version}/{version_ids.band_id}/formatters/downlink/encoder",
@@ -2173,12 +2802,79 @@
             "version_ids.band_id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "codec_id",
+        "examples",
+        "formatter",
+        "formatter_parameter"
+      ]
+    }
+  },
+  "EndDeviceBatchRegistry": {
+    "Get": {
+      "file": "ttn/lorawan/v3/end_device_services.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/applications/{application_ids.application_id}/devices/batch",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        }
+      ],
+      "allowedFieldMaskPaths": [
+        "activated_at",
+        "application_server_address",
+        "attributes",
+        "created_at",
+        "claim_authentication_code",
+        "claim_authentication_code.value",
+        "claim_authentication_code.valid_to",
+        "claim_authentication_code.valid_from",
+        "description",
+        "ids",
+        "ids.application_ids",
+        "ids.application_ids.application_id",
+        "ids.dev_eui",
+        "ids.device_id",
+        "ids.join_eui",
+        "join_server_address",
+        "locations",
+        "name",
+        "network_server_address",
+        "serial_number",
+        "service_profile_id",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
+        "updated_at",
+        "version_ids",
+        "version_ids.band_id",
+        "version_ids.brand_id",
+        "version_ids.firmware_version",
+        "version_ids.hardware_version",
+        "version_ids.model_id",
+        "picture",
+        "last_seen_at"
+      ]
+    },
+    "Delete": {
+      "file": "ttn/lorawan/v3/end_device_services.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/applications/{application_ids.application_id}/devices/batch",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        }
       ]
     }
   },
   "EndDeviceRegistry": {
     "Create": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "post",
@@ -2191,7 +2887,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "get",
@@ -2203,9 +2899,14 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "activated_at",
         "application_server_address",
         "attributes",
         "created_at",
+        "claim_authentication_code",
+        "claim_authentication_code.value",
+        "claim_authentication_code.valid_to",
+        "claim_authentication_code.valid_from",
         "description",
         "ids",
         "ids.application_ids",
@@ -2217,7 +2918,11 @@
         "locations",
         "name",
         "network_server_address",
+        "serial_number",
         "service_profile_id",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "updated_at",
         "version_ids",
         "version_ids.band_id",
@@ -2225,15 +2930,16 @@
         "version_ids.firmware_version",
         "version_ids.hardware_version",
         "version_ids.model_id",
-        "picture"
+        "picture",
+        "last_seen_at"
       ]
     },
     "GetIdentifiersForEUIs": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": []
     },
     "List": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "get",
@@ -2244,9 +2950,14 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "activated_at",
         "application_server_address",
         "attributes",
         "created_at",
+        "claim_authentication_code",
+        "claim_authentication_code.value",
+        "claim_authentication_code.valid_to",
+        "claim_authentication_code.valid_from",
         "description",
         "ids",
         "ids.application_ids",
@@ -2258,7 +2969,11 @@
         "locations",
         "name",
         "network_server_address",
+        "serial_number",
         "service_profile_id",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "updated_at",
         "version_ids",
         "version_ids.band_id",
@@ -2266,11 +2981,12 @@
         "version_ids.firmware_version",
         "version_ids.hardware_version",
         "version_ids.model_id",
-        "picture"
+        "picture",
+        "last_seen_at"
       ]
     },
     "Update": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "put",
@@ -2283,28 +2999,39 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "activated_at",
         "application_server_address",
         "attributes",
+        "claim_authentication_code",
+        "claim_authentication_code.value",
+        "claim_authentication_code.valid_to",
+        "claim_authentication_code.valid_from",
         "description",
-        "ids",
-        "ids.dev_eui",
-        "ids.join_eui",
         "join_server_address",
         "locations",
         "name",
         "network_server_address",
+        "serial_number",
         "service_profile_id",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "version_ids",
         "version_ids.band_id",
         "version_ids.brand_id",
         "version_ids.firmware_version",
         "version_ids.hardware_version",
         "version_ids.model_id",
-        "picture"
+        "picture",
+        "last_seen_at"
       ]
     },
+    "BatchUpdateLastSeen": {
+      "file": "ttn/lorawan/v3/end_device_services.proto",
+      "http": []
+    },
     "Delete": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "delete",
@@ -2319,7 +3046,7 @@
   },
   "EndDeviceTemplateConverter": {
     "ListFormats": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "get",
@@ -2329,7 +3056,7 @@
       ]
     },
     "Convert": {
-      "file": "lorawan-stack/api/end_device_services.proto",
+      "file": "ttn/lorawan/v3/end_device_services.proto",
       "http": [
         {
           "method": "post",
@@ -2343,7 +3070,7 @@
   },
   "Events": {
     "Stream": {
-      "file": "lorawan-stack/api/events.proto",
+      "file": "ttn/lorawan/v3/events.proto",
       "http": [
         {
           "method": "post",
@@ -2353,11 +3080,52 @@
           "stream": true
         }
       ]
+    },
+    "FindRelated": {
+      "file": "ttn/lorawan/v3/events.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/events/related",
+          "parameters": []
+        }
+      ]
+    }
+  },
+  "GatewayConfigurationService": {
+    "GetGatewayConfiguration": {
+      "file": "ttn/lorawan/v3/gateway_configuration.proto",
+      "http": [
+        {
+          "method": "",
+          "pattern": "",
+          "parameters": []
+        },
+        {
+          "method": "get",
+          "pattern": "/gcs/gateways/configuration/{gateway_ids.gateway_id}/{format}/{filename}",
+          "parameters": [
+            "gateway_ids.gateway_id",
+            "format",
+            "filename"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/gcs/gateways/configuration/{gateway_ids.gateway_id}/{format}/{type}/{filename}",
+          "parameters": [
+            "gateway_ids.gateway_id",
+            "format",
+            "type",
+            "filename"
+          ]
+        }
+      ]
     }
   },
   "GatewayAccess": {
     "ListRights": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "get",
@@ -2369,7 +3137,7 @@
       ]
     },
     "CreateAPIKey": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "post",
@@ -2382,7 +3150,7 @@
       ]
     },
     "ListAPIKeys": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "get",
@@ -2394,7 +3162,7 @@
       ]
     },
     "GetAPIKey": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "get",
@@ -2407,7 +3175,7 @@
       ]
     },
     "UpdateAPIKey": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "put",
@@ -2418,10 +3186,32 @@
             "api_key.id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "created_at",
+        "expires_at",
+        "id",
+        "key",
+        "name",
+        "rights",
+        "updated_at"
+      ]
+    },
+    "DeleteAPIKey": {
+      "file": "ttn/lorawan/v3/gateway_services.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/gateways/{gateway_ids.gateway_id}/api-keys/{key_id}",
+          "parameters": [
+            "gateway_ids.gateway_id",
+            "key_id"
+          ]
+        }
       ]
     },
     "GetCollaborator": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "",
@@ -2447,7 +3237,7 @@
       ]
     },
     "SetCollaborator": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "put",
@@ -2460,7 +3250,7 @@
       ]
     },
     "ListCollaborators": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "get",
@@ -2470,17 +3260,43 @@
           ]
         }
       ]
+    },
+    "DeleteCollaborator": {
+      "file": "ttn/lorawan/v3/gateway_services.proto",
+      "http": [
+        {
+          "method": "",
+          "pattern": "",
+          "parameters": []
+        },
+        {
+          "method": "delete",
+          "pattern": "/gateways/{gateway_ids.gateway_id}/collaborators/user/{collaborator_ids.user_ids.user_id}",
+          "parameters": [
+            "gateway_ids.gateway_id",
+            "collaborator_ids.user_ids.user_id"
+          ]
+        },
+        {
+          "method": "delete",
+          "pattern": "/gateways/{gateway_ids.gateway_id}/collaborators/organization/{collaborator_ids.organization_ids.organization_id}",
+          "parameters": [
+            "gateway_ids.gateway_id",
+            "collaborator_ids.organization_ids.organization_id"
+          ]
+        }
+      ]
     }
   },
   "GatewayConfigurator": {
     "PullConfiguration": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": []
     }
   },
   "GatewayRegistry": {
     "Create": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "post",
@@ -2501,7 +3317,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "get",
@@ -2512,6 +3328,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "antennas",
         "attributes",
         "auto_update",
@@ -2525,6 +3348,7 @@
         "created_at",
         "deleted_at",
         "description",
+        "disable_packet_broker_forwarding",
         "downlink_path_constraint",
         "enforce_duty_cycle",
         "frequency_plan_id",
@@ -2537,6 +3361,8 @@
         "lbs_lns_secret.key_id",
         "lbs_lns_secret.value",
         "location_public",
+        "lrfhss",
+        "lrfhss.supported",
         "name",
         "require_authenticated_connection",
         "schedule_anytime_delay",
@@ -2546,6 +3372,13 @@
         "target_cups_key.key_id",
         "target_cups_key.value",
         "target_cups_uri",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "update_channel",
         "update_location_from_status",
         "updated_at",
@@ -2557,11 +3390,11 @@
       ]
     },
     "GetIdentifiersForEUI": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": []
     },
     "List": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "get",
@@ -2584,6 +3417,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "antennas",
         "attributes",
         "auto_update",
@@ -2597,6 +3437,7 @@
         "created_at",
         "deleted_at",
         "description",
+        "disable_packet_broker_forwarding",
         "downlink_path_constraint",
         "enforce_duty_cycle",
         "frequency_plan_id",
@@ -2609,6 +3450,8 @@
         "lbs_lns_secret.key_id",
         "lbs_lns_secret.value",
         "location_public",
+        "lrfhss",
+        "lrfhss.supported",
         "name",
         "require_authenticated_connection",
         "schedule_anytime_delay",
@@ -2618,6 +3461,13 @@
         "target_cups_key.key_id",
         "target_cups_key.value",
         "target_cups_uri",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "update_channel",
         "update_location_from_status",
         "updated_at",
@@ -2629,7 +3479,7 @@
       ]
     },
     "Update": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "put",
@@ -2641,6 +3491,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "antennas",
         "attributes",
         "auto_update",
@@ -2654,6 +3511,7 @@
         "created_at",
         "deleted_at",
         "description",
+        "disable_packet_broker_forwarding",
         "downlink_path_constraint",
         "enforce_duty_cycle",
         "frequency_plan_id",
@@ -2666,6 +3524,8 @@
         "lbs_lns_secret.key_id",
         "lbs_lns_secret.value",
         "location_public",
+        "lrfhss",
+        "lrfhss.supported",
         "name",
         "require_authenticated_connection",
         "schedule_anytime_delay",
@@ -2675,6 +3535,13 @@
         "target_cups_key.key_id",
         "target_cups_key.value",
         "target_cups_uri",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "update_channel",
         "update_location_from_status",
         "updated_at",
@@ -2686,7 +3553,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "delete",
@@ -2698,7 +3565,7 @@
       ]
     },
     "Restore": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "post",
@@ -2710,7 +3577,7 @@
       ]
     },
     "Purge": {
-      "file": "lorawan-stack/api/gateway_services.proto",
+      "file": "ttn/lorawan/v3/gateway_services.proto",
       "http": [
         {
           "method": "delete",
@@ -2724,7 +3591,7 @@
   },
   "Gs": {
     "GetGatewayConnectionStats": {
-      "file": "lorawan-stack/api/gatewayserver.proto",
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
       "http": [
         {
           "method": "get",
@@ -2734,19 +3601,58 @@
           ]
         }
       ]
+    },
+    "BatchGetGatewayConnectionStats": {
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
+      "http": [
+        {
+          "method": "post",
+          "pattern": "/gs/gateways/connection/stats",
+          "body": "*",
+          "parameters": []
+        }
+      ],
+      "allowedFieldMaskPaths": [
+        "connected_at",
+        "disconnected_at",
+        "downlink_count",
+        "gateway_remote_address",
+        "gateway_remote_address.ip",
+        "last_downlink_received_at",
+        "last_status",
+        "last_status.advanced",
+        "last_status.antenna_locations",
+        "last_status.boot_time",
+        "last_status.ip",
+        "last_status.metrics",
+        "last_status.time",
+        "last_status.versions",
+        "last_status_received_at",
+        "last_tx_acknowledgment_received_at",
+        "last_uplink_received_at",
+        "protocol",
+        "round_trip_times",
+        "round_trip_times.count",
+        "round_trip_times.max",
+        "round_trip_times.median",
+        "round_trip_times.min",
+        "sub_bands",
+        "tx_acknowledgment_count",
+        "uplink_count"
+      ]
     }
   },
   "GtwGs": {
     "LinkGateway": {
-      "file": "lorawan-stack/api/gatewayserver.proto",
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
       "http": []
     },
     "GetConcentratorConfig": {
-      "file": "lorawan-stack/api/gatewayserver.proto",
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
       "http": []
     },
     "GetMQTTConnectionInfo": {
-      "file": "lorawan-stack/api/gatewayserver.proto",
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
       "http": [
         {
           "method": "get",
@@ -2758,7 +3664,7 @@
       ]
     },
     "GetMQTTV2ConnectionInfo": {
-      "file": "lorawan-stack/api/gatewayserver.proto",
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
       "http": [
         {
           "method": "get",
@@ -2772,13 +3678,13 @@
   },
   "NsGs": {
     "ScheduleDownlink": {
-      "file": "lorawan-stack/api/gatewayserver.proto",
+      "file": "ttn/lorawan/v3/gatewayserver.proto",
       "http": []
     }
   },
   "EntityAccess": {
     "AuthInfo": {
-      "file": "lorawan-stack/api/identityserver.proto",
+      "file": "ttn/lorawan/v3/identityserver.proto",
       "http": [
         {
           "method": "get",
@@ -2790,7 +3696,7 @@
   },
   "Is": {
     "GetConfiguration": {
-      "file": "lorawan-stack/api/identityserver.proto",
+      "file": "ttn/lorawan/v3/identityserver.proto",
       "http": [
         {
           "method": "get",
@@ -2800,9 +3706,15 @@
       ]
     }
   },
+  "AppJs": {
+    "GetAppSKey": {
+      "file": "ttn/lorawan/v3/joinserver.proto",
+      "http": []
+    }
+  },
   "ApplicationActivationSettingRegistry": {
     "Get": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "get",
@@ -2823,7 +3735,7 @@
       ]
     },
     "Set": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "post",
@@ -2845,7 +3757,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "delete",
@@ -2868,23 +3780,23 @@
   },
   "ApplicationCryptoService": {
     "DeriveAppSKey": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "GetAppKey": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     }
   },
   "AsJs": {
     "GetAppSKey": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     }
   },
   "Js": {
     "GetJoinEUIPrefixes": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "get",
@@ -2892,11 +3804,35 @@
           "parameters": []
         }
       ]
+    },
+    "GetDefaultJoinEUI": {
+      "file": "ttn/lorawan/v3/joinserver.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/js/default_join_eui",
+          "parameters": []
+        }
+      ]
+    }
+  },
+  "JsEndDeviceBatchRegistry": {
+    "Delete": {
+      "file": "ttn/lorawan/v3/joinserver.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/js/applications/{application_ids.application_id}/devices/batch",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        }
+      ]
     }
   },
   "JsEndDeviceRegistry": {
     "Get": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "get",
@@ -2911,10 +3847,6 @@
         "application_server_address",
         "application_server_id",
         "application_server_kek_label",
-        "claim_authentication_code",
-        "claim_authentication_code.value",
-        "claim_authentication_code.valid_to",
-        "claim_authentication_code.valid_from",
         "ids",
         "ids.application_ids",
         "ids.application_ids.application_id",
@@ -2942,7 +3874,7 @@
       ]
     },
     "Set": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "put",
@@ -2966,10 +3898,6 @@
         "application_server_address",
         "application_server_id",
         "application_server_kek_label",
-        "claim_authentication_code",
-        "claim_authentication_code.value",
-        "claim_authentication_code.valid_to",
-        "claim_authentication_code.valid_from",
         "ids",
         "ids.application_ids",
         "ids.application_ids.application_id",
@@ -2996,7 +3924,7 @@
       ]
     },
     "Provision": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "put",
@@ -3010,7 +3938,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": [
         {
           "method": "delete",
@@ -3025,81 +3953,67 @@
   },
   "NetworkCryptoService": {
     "JoinRequestMIC": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "JoinAcceptMIC": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "EncryptJoinAccept": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "EncryptRejoinAccept": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "DeriveNwkSKeys": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "GetNwkKey": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     }
   },
   "NsJs": {
     "HandleJoin": {
-      "file": "lorawan-stack/api/joinserver.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     },
     "GetNwkSKeys": {
-      "file": "lorawan-stack/api/joinserver.proto",
-      "http": []
-    }
-  },
-  "MessageProcessor": {
-    "EncodeDownlink": {
-      "file": "lorawan-stack/api/message_services.proto",
-      "http": []
-    },
-    "DecodeUplink": {
-      "file": "lorawan-stack/api/message_services.proto",
-      "http": []
-    },
-    "DecodeDownlink": {
-      "file": "lorawan-stack/api/message_services.proto",
+      "file": "ttn/lorawan/v3/joinserver.proto",
       "http": []
     }
   },
   "AsNs": {
     "DownlinkQueueReplace": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": []
     },
     "DownlinkQueuePush": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": []
     },
     "DownlinkQueueList": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": []
     }
   },
   "GsNs": {
     "HandleUplink": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": []
     },
     "ReportTxAcknowledgment": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": []
     }
   },
   "Ns": {
     "GenerateDevAddr": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": [
         {
           "method": "get",
@@ -3107,11 +4021,58 @@
           "parameters": []
         }
       ]
+    },
+    "GetDefaultMACSettings": {
+      "file": "ttn/lorawan/v3/networkserver.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/ns/default_mac_settings/{frequency_plan_id}/{lorawan_phy_version}",
+          "parameters": [
+            "frequency_plan_id",
+            "lorawan_phy_version"
+          ]
+        }
+      ]
+    },
+    "GetNetID": {
+      "file": "ttn/lorawan/v3/networkserver.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/ns/net_id",
+          "parameters": []
+        }
+      ]
+    },
+    "GetDeviceAddressPrefixes": {
+      "file": "ttn/lorawan/v3/networkserver.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/ns/dev_addr_prefixes",
+          "parameters": []
+        }
+      ]
+    }
+  },
+  "NsEndDeviceBatchRegistry": {
+    "Delete": {
+      "file": "ttn/lorawan/v3/networkserver.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/ns/applications/{application_ids.application_id}/devices/batch",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        }
+      ]
     }
   },
   "NsEndDeviceRegistry": {
     "Get": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": [
         {
           "method": "get",
@@ -3138,10 +4099,32 @@
         "lorawan_phy_version",
         "lorawan_version",
         "mac_settings",
+        "mac_settings.adr",
+        "mac_settings.adr.mode",
+        "mac_settings.adr.mode.disabled",
+        "mac_settings.adr.mode.dynamic",
+        "mac_settings.adr.mode.dynamic.channel_steering",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode.disabled",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode.lora_narrow",
+        "mac_settings.adr.mode.dynamic.margin",
+        "mac_settings.adr.mode.dynamic.max_data_rate_index",
+        "mac_settings.adr.mode.dynamic.max_data_rate_index.value",
+        "mac_settings.adr.mode.dynamic.max_nb_trans",
+        "mac_settings.adr.mode.dynamic.max_tx_power_index",
+        "mac_settings.adr.mode.dynamic.min_data_rate_index",
+        "mac_settings.adr.mode.dynamic.min_data_rate_index.value",
+        "mac_settings.adr.mode.dynamic.min_nb_trans",
+        "mac_settings.adr.mode.dynamic.min_tx_power_index",
+        "mac_settings.adr.mode.static",
+        "mac_settings.adr.mode.static.data_rate_index",
+        "mac_settings.adr.mode.static.nb_trans",
+        "mac_settings.adr.mode.static.tx_power_index",
         "mac_settings.adr_margin",
         "mac_settings.beacon_frequency",
         "mac_settings.beacon_frequency.value",
         "mac_settings.class_b_timeout",
+        "mac_settings.class_b_c_downlink_interval",
         "mac_settings.class_c_timeout",
         "mac_settings.desired_adr_ack_delay_exponent",
         "mac_settings.desired_adr_ack_delay_exponent.value",
@@ -3151,6 +4134,8 @@
         "mac_settings.desired_beacon_frequency.value",
         "mac_settings.desired_max_duty_cycle",
         "mac_settings.desired_max_duty_cycle.value",
+        "mac_settings.desired_max_eirp",
+        "mac_settings.desired_max_eirp.value",
         "mac_settings.desired_ping_slot_data_rate_index",
         "mac_settings.desired_ping_slot_data_rate_index.value",
         "mac_settings.desired_ping_slot_frequency",
@@ -3182,12 +4167,18 @@
         "mac_settings.rx2_data_rate_index.value",
         "mac_settings.rx2_frequency",
         "mac_settings.rx2_frequency.value",
+        "mac_settings.schedule_downlinks",
+        "mac_settings.schedule_downlinks.value",
         "mac_settings.status_count_periodicity",
         "mac_settings.status_time_periodicity",
         "mac_settings.supports_32_bit_f_cnt",
         "mac_settings.supports_32_bit_f_cnt.value",
         "mac_settings.use_adr",
         "mac_settings.use_adr.value",
+        "mac_settings.uplink_dwell_time",
+        "mac_settings.uplink_dwell_time.value",
+        "mac_settings.downlink_dwell_time",
+        "mac_settings.downlink_dwell_time.value",
         "mac_state",
         "mac_state.current_parameters",
         "mac_state.current_parameters.adr_ack_delay_exponent",
@@ -3262,6 +4253,7 @@
         "mac_state.ping_slot_periodicity.value",
         "mac_state.queued_responses",
         "mac_state.recent_downlinks",
+        "mac_state.recent_mac_command_identifiers",
         "mac_state.recent_uplinks",
         "mac_state.rejected_adr_data_rate_indexes",
         "mac_state.rejected_adr_tx_power_indexes",
@@ -3369,6 +4361,7 @@
         "pending_mac_state.queued_join_accept.request.downlink_settings.rx2_dr",
         "pending_mac_state.queued_join_accept.request.rx_delay",
         "pending_mac_state.recent_downlinks",
+        "pending_mac_state.recent_mac_command_identifiers",
         "pending_mac_state.recent_uplinks",
         "pending_mac_state.rejected_adr_data_rate_indexes",
         "pending_mac_state.rejected_adr_tx_power_indexes",
@@ -3413,7 +4406,7 @@
       ]
     },
     "Set": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": [
         {
           "method": "put",
@@ -3447,10 +4440,32 @@
         "lorawan_phy_version",
         "lorawan_version",
         "mac_settings",
+        "mac_settings.adr",
+        "mac_settings.adr.mode",
+        "mac_settings.adr.mode.disabled",
+        "mac_settings.adr.mode.dynamic",
+        "mac_settings.adr.mode.dynamic.channel_steering",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode.disabled",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode.lora_narrow",
+        "mac_settings.adr.mode.dynamic.margin",
+        "mac_settings.adr.mode.dynamic.max_data_rate_index",
+        "mac_settings.adr.mode.dynamic.max_data_rate_index.value",
+        "mac_settings.adr.mode.dynamic.max_nb_trans",
+        "mac_settings.adr.mode.dynamic.max_tx_power_index",
+        "mac_settings.adr.mode.dynamic.min_data_rate_index",
+        "mac_settings.adr.mode.dynamic.min_data_rate_index.value",
+        "mac_settings.adr.mode.dynamic.min_nb_trans",
+        "mac_settings.adr.mode.dynamic.min_tx_power_index",
+        "mac_settings.adr.mode.static",
+        "mac_settings.adr.mode.static.data_rate_index",
+        "mac_settings.adr.mode.static.nb_trans",
+        "mac_settings.adr.mode.static.tx_power_index",
         "mac_settings.adr_margin",
         "mac_settings.beacon_frequency",
         "mac_settings.beacon_frequency.value",
         "mac_settings.class_b_timeout",
+        "mac_settings.class_b_c_downlink_interval",
         "mac_settings.class_c_timeout",
         "mac_settings.desired_adr_ack_delay_exponent",
         "mac_settings.desired_adr_ack_delay_exponent.value",
@@ -3460,6 +4475,8 @@
         "mac_settings.desired_beacon_frequency.value",
         "mac_settings.desired_max_duty_cycle",
         "mac_settings.desired_max_duty_cycle.value",
+        "mac_settings.desired_max_eirp",
+        "mac_settings.desired_max_eirp.value",
         "mac_settings.desired_ping_slot_data_rate_index",
         "mac_settings.desired_ping_slot_data_rate_index.value",
         "mac_settings.desired_ping_slot_frequency",
@@ -3491,12 +4508,18 @@
         "mac_settings.rx2_data_rate_index.value",
         "mac_settings.rx2_frequency",
         "mac_settings.rx2_frequency.value",
+        "mac_settings.schedule_downlinks",
+        "mac_settings.schedule_downlinks.value",
         "mac_settings.status_count_periodicity",
         "mac_settings.status_time_periodicity",
         "mac_settings.supports_32_bit_f_cnt",
         "mac_settings.supports_32_bit_f_cnt.value",
         "mac_settings.use_adr",
         "mac_settings.use_adr.value",
+        "mac_settings.uplink_dwell_time",
+        "mac_settings.uplink_dwell_time.value",
+        "mac_settings.downlink_dwell_time",
+        "mac_settings.downlink_dwell_time.value",
         "mac_state",
         "mac_state.current_parameters",
         "mac_state.current_parameters.adr_ack_delay_exponent",
@@ -3571,6 +4594,7 @@
         "mac_state.ping_slot_periodicity.value",
         "mac_state.queued_responses",
         "mac_state.recent_downlinks",
+        "mac_state.recent_mac_command_identifiers",
         "mac_state.recent_uplinks",
         "mac_state.rejected_adr_data_rate_indexes",
         "mac_state.rejected_adr_tx_power_indexes",
@@ -3678,6 +4702,7 @@
         "pending_mac_state.queued_join_accept.request.downlink_settings.rx2_dr",
         "pending_mac_state.queued_join_accept.request.rx_delay",
         "pending_mac_state.recent_downlinks",
+        "pending_mac_state.recent_mac_command_identifiers",
         "pending_mac_state.recent_uplinks",
         "pending_mac_state.rejected_adr_data_rate_indexes",
         "pending_mac_state.rejected_adr_tx_power_indexes",
@@ -3694,6 +4719,7 @@
         "pending_session.keys.s_nwk_s_int_key",
         "pending_session.keys.s_nwk_s_int_key.key",
         "pending_session.keys.session_key_id",
+        "serial_number",
         "session",
         "session.dev_addr",
         "session.keys",
@@ -3711,6 +4737,9 @@
         "supports_class_b",
         "supports_class_c",
         "supports_join",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "version_ids",
         "version_ids.band_id",
         "version_ids.brand_id",
@@ -3720,7 +4749,7 @@
       ]
     },
     "ResetFactoryDefaults": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": [
         {
           "method": "patch",
@@ -3748,10 +4777,32 @@
         "lorawan_phy_version",
         "lorawan_version",
         "mac_settings",
+        "mac_settings.adr",
+        "mac_settings.adr.mode",
+        "mac_settings.adr.mode.disabled",
+        "mac_settings.adr.mode.dynamic",
+        "mac_settings.adr.mode.dynamic.channel_steering",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode.disabled",
+        "mac_settings.adr.mode.dynamic.channel_steering.mode.lora_narrow",
+        "mac_settings.adr.mode.dynamic.margin",
+        "mac_settings.adr.mode.dynamic.max_data_rate_index",
+        "mac_settings.adr.mode.dynamic.max_data_rate_index.value",
+        "mac_settings.adr.mode.dynamic.max_nb_trans",
+        "mac_settings.adr.mode.dynamic.max_tx_power_index",
+        "mac_settings.adr.mode.dynamic.min_data_rate_index",
+        "mac_settings.adr.mode.dynamic.min_data_rate_index.value",
+        "mac_settings.adr.mode.dynamic.min_nb_trans",
+        "mac_settings.adr.mode.dynamic.min_tx_power_index",
+        "mac_settings.adr.mode.static",
+        "mac_settings.adr.mode.static.data_rate_index",
+        "mac_settings.adr.mode.static.nb_trans",
+        "mac_settings.adr.mode.static.tx_power_index",
         "mac_settings.adr_margin",
         "mac_settings.beacon_frequency",
         "mac_settings.beacon_frequency.value",
         "mac_settings.class_b_timeout",
+        "mac_settings.class_b_c_downlink_interval",
         "mac_settings.class_c_timeout",
         "mac_settings.desired_adr_ack_delay_exponent",
         "mac_settings.desired_adr_ack_delay_exponent.value",
@@ -3761,6 +4812,8 @@
         "mac_settings.desired_beacon_frequency.value",
         "mac_settings.desired_max_duty_cycle",
         "mac_settings.desired_max_duty_cycle.value",
+        "mac_settings.desired_max_eirp",
+        "mac_settings.desired_max_eirp.value",
         "mac_settings.desired_ping_slot_data_rate_index",
         "mac_settings.desired_ping_slot_data_rate_index.value",
         "mac_settings.desired_ping_slot_frequency",
@@ -3792,12 +4845,18 @@
         "mac_settings.rx2_data_rate_index.value",
         "mac_settings.rx2_frequency",
         "mac_settings.rx2_frequency.value",
+        "mac_settings.schedule_downlinks",
+        "mac_settings.schedule_downlinks.value",
         "mac_settings.status_count_periodicity",
         "mac_settings.status_time_periodicity",
         "mac_settings.supports_32_bit_f_cnt",
         "mac_settings.supports_32_bit_f_cnt.value",
         "mac_settings.use_adr",
         "mac_settings.use_adr.value",
+        "mac_settings.uplink_dwell_time",
+        "mac_settings.uplink_dwell_time.value",
+        "mac_settings.downlink_dwell_time",
+        "mac_settings.downlink_dwell_time.value",
         "mac_state",
         "mac_state.current_parameters",
         "mac_state.current_parameters.adr_ack_delay_exponent",
@@ -3872,6 +4931,7 @@
         "mac_state.ping_slot_periodicity.value",
         "mac_state.queued_responses",
         "mac_state.recent_downlinks",
+        "mac_state.recent_mac_command_identifiers",
         "mac_state.recent_uplinks",
         "mac_state.rejected_adr_data_rate_indexes",
         "mac_state.rejected_adr_tx_power_indexes",
@@ -3979,6 +5039,7 @@
         "pending_mac_state.queued_join_accept.request.downlink_settings.rx2_dr",
         "pending_mac_state.queued_join_accept.request.rx_delay",
         "pending_mac_state.recent_downlinks",
+        "pending_mac_state.recent_mac_command_identifiers",
         "pending_mac_state.recent_uplinks",
         "pending_mac_state.rejected_adr_data_rate_indexes",
         "pending_mac_state.rejected_adr_tx_power_indexes",
@@ -4023,7 +5084,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/networkserver.proto",
+      "file": "ttn/lorawan/v3/networkserver.proto",
       "http": [
         {
           "method": "delete",
@@ -4036,9 +5097,45 @@
       ]
     }
   },
+  "NotificationService": {
+    "Create": {
+      "file": "ttn/lorawan/v3/notification_service.proto",
+      "http": []
+    },
+    "List": {
+      "file": "ttn/lorawan/v3/notification_service.proto",
+      "http": [
+        {
+          "method": "",
+          "pattern": "",
+          "parameters": []
+        },
+        {
+          "method": "get",
+          "pattern": "/users/{receiver_ids.user_id}/notifications",
+          "parameters": [
+            "receiver_ids.user_id"
+          ]
+        }
+      ]
+    },
+    "UpdateStatus": {
+      "file": "ttn/lorawan/v3/notification_service.proto",
+      "http": [
+        {
+          "method": "patch",
+          "pattern": "/users/{receiver_ids.user_id}/notifications",
+          "body": "*",
+          "parameters": [
+            "receiver_ids.user_id"
+          ]
+        }
+      ]
+    }
+  },
   "OAuthAuthorizationRegistry": {
     "List": {
-      "file": "lorawan-stack/api/oauth_services.proto",
+      "file": "ttn/lorawan/v3/oauth_services.proto",
       "http": [
         {
           "method": "get",
@@ -4050,7 +5147,7 @@
       ]
     },
     "ListTokens": {
-      "file": "lorawan-stack/api/oauth_services.proto",
+      "file": "ttn/lorawan/v3/oauth_services.proto",
       "http": [
         {
           "method": "get",
@@ -4063,7 +5160,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/oauth_services.proto",
+      "file": "ttn/lorawan/v3/oauth_services.proto",
       "http": [
         {
           "method": "delete",
@@ -4076,7 +5173,7 @@
       ]
     },
     "DeleteToken": {
-      "file": "lorawan-stack/api/oauth_services.proto",
+      "file": "ttn/lorawan/v3/oauth_services.proto",
       "http": [
         {
           "method": "delete",
@@ -4092,7 +5189,7 @@
   },
   "OrganizationAccess": {
     "ListRights": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "get",
@@ -4104,7 +5201,7 @@
       ]
     },
     "CreateAPIKey": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "post",
@@ -4117,7 +5214,7 @@
       ]
     },
     "ListAPIKeys": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "get",
@@ -4129,7 +5226,7 @@
       ]
     },
     "GetAPIKey": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "get",
@@ -4142,7 +5239,7 @@
       ]
     },
     "UpdateAPIKey": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "put",
@@ -4153,10 +5250,32 @@
             "api_key.id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "created_at",
+        "expires_at",
+        "id",
+        "key",
+        "name",
+        "rights",
+        "updated_at"
+      ]
+    },
+    "DeleteAPIKey": {
+      "file": "ttn/lorawan/v3/organization_services.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/organizations/{organization_ids.organization_id}/api-keys/{key_id}",
+          "parameters": [
+            "organization_ids.organization_id",
+            "key_id"
+          ]
+        }
       ]
     },
     "GetCollaborator": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "",
@@ -4174,7 +5293,7 @@
       ]
     },
     "SetCollaborator": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "put",
@@ -4187,7 +5306,7 @@
       ]
     },
     "ListCollaborators": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "get",
@@ -4197,11 +5316,24 @@
           ]
         }
       ]
+    },
+    "DeleteCollaborator": {
+      "file": "ttn/lorawan/v3/organization_services.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/organizations/{organization_ids.organization_id}/collaborators/user/{collaborator_ids.user_ids.user_id}",
+          "parameters": [
+            "organization_ids.organization_id",
+            "collaborator_ids.user_ids.user_id"
+          ]
+        }
+      ]
     }
   },
   "OrganizationRegistry": {
     "Create": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "post",
@@ -4214,7 +5346,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "get",
@@ -4225,6 +5357,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -4233,11 +5372,18 @@
         "ids",
         "ids.organization_id",
         "name",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "get",
@@ -4253,6 +5399,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -4261,11 +5414,18 @@
         "ids",
         "ids.organization_id",
         "name",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "Update": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "put",
@@ -4277,6 +5437,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -4285,11 +5452,18 @@
         "ids",
         "ids.organization_id",
         "name",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "delete",
@@ -4301,7 +5475,7 @@
       ]
     },
     "Restore": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "post",
@@ -4313,7 +5487,7 @@
       ]
     },
     "Purge": {
-      "file": "lorawan-stack/api/organization_services.proto",
+      "file": "ttn/lorawan/v3/organization_services.proto",
       "http": [
         {
           "method": "delete",
@@ -4327,19 +5501,37 @@
   },
   "GsPba": {
     "PublishUplink": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": []
+    },
+    "UpdateGateway": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [],
+      "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "antennas",
+        "frequency_plan_ids",
+        "ids",
+        "ids.eui",
+        "ids.gateway_id",
+        "location_public",
+        "online",
+        "rx_rate",
+        "status_public",
+        "technical_contact",
+        "tx_rate"
+      ]
     }
   },
   "NsPba": {
     "PublishDownlink": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": []
     }
   },
   "Pba": {
     "GetInfo": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "get",
@@ -4349,22 +5541,24 @@
       ]
     },
     "Register": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "put",
           "pattern": "/pba/registration",
+          "body": "*",
           "parameters": []
         },
         {
           "method": "post",
           "pattern": "/pba/registration",
+          "body": "*",
           "parameters": []
         }
       ]
     },
     "Deregister": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "delete",
@@ -4373,45 +5567,8 @@
         }
       ]
     },
-    "GetHomeNetworkDefaultRoutingPolicy": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
-      "http": [
-        {
-          "method": "get",
-          "pattern": "/pba/home-networks/policies/default",
-          "parameters": []
-        }
-      ]
-    },
-    "SetHomeNetworkDefaultRoutingPolicy": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
-      "http": [
-        {
-          "method": "put",
-          "pattern": "/pba/home-networks/policies/default",
-          "body": "*",
-          "parameters": []
-        },
-        {
-          "method": "post",
-          "pattern": "/pba/home-networks/policies/default",
-          "body": "*",
-          "parameters": []
-        }
-      ]
-    },
-    "DeleteHomeNetworkDefaultRoutingPolicy": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
-      "http": [
-        {
-          "method": "delete",
-          "pattern": "/pba/home-networks/policies/default",
-          "parameters": []
-        }
-      ]
-    },
     "ListHomeNetworkRoutingPolicies": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "get",
@@ -4421,7 +5578,7 @@
       ]
     },
     "GetHomeNetworkRoutingPolicy": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "get",
@@ -4441,7 +5598,7 @@
       ]
     },
     "SetHomeNetworkRoutingPolicy": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "put",
@@ -4480,7 +5637,7 @@
       ]
     },
     "DeleteHomeNetworkRoutingPolicy": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "delete",
@@ -4499,8 +5656,92 @@
         }
       ]
     },
+    "GetHomeNetworkDefaultRoutingPolicy": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/pba/home-networks/policies/default",
+          "parameters": []
+        }
+      ]
+    },
+    "SetHomeNetworkDefaultRoutingPolicy": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "put",
+          "pattern": "/pba/home-networks/policies/default",
+          "body": "*",
+          "parameters": []
+        },
+        {
+          "method": "post",
+          "pattern": "/pba/home-networks/policies/default",
+          "body": "*",
+          "parameters": []
+        }
+      ]
+    },
+    "DeleteHomeNetworkDefaultRoutingPolicy": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/pba/home-networks/policies/default",
+          "parameters": []
+        }
+      ]
+    },
+    "GetHomeNetworkDefaultGatewayVisibility": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/pba/home-networks/gateway-visibilities/default",
+          "parameters": []
+        }
+      ]
+    },
+    "SetHomeNetworkDefaultGatewayVisibility": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "put",
+          "pattern": "/pba/home-networks/gateway-visibilities/default",
+          "body": "*",
+          "parameters": []
+        },
+        {
+          "method": "post",
+          "pattern": "/pba/home-networks/gateway-visibilities/default",
+          "body": "*",
+          "parameters": []
+        }
+      ]
+    },
+    "DeleteHomeNetworkDefaultGatewayVisibility": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/pba/home-networks/gateway-visibilities/default",
+          "parameters": []
+        }
+      ]
+    },
+    "ListNetworks": {
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/pba/networks",
+          "parameters": []
+        }
+      ]
+    },
     "ListHomeNetworks": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "get",
@@ -4510,7 +5751,7 @@
       ]
     },
     "ListForwarderRoutingPolicies": {
-      "file": "lorawan-stack/api/packetbrokeragent.proto",
+      "file": "ttn/lorawan/v3/packetbrokeragent.proto",
       "http": [
         {
           "method": "get",
@@ -4522,7 +5763,7 @@
   },
   "EndDeviceQRCodeGenerator": {
     "GetFormat": {
-      "file": "lorawan-stack/api/qrcodegenerator.proto",
+      "file": "ttn/lorawan/v3/qrcodegenerator.proto",
       "http": [
         {
           "method": "get",
@@ -4534,7 +5775,7 @@
       ]
     },
     "ListFormats": {
-      "file": "lorawan-stack/api/qrcodegenerator.proto",
+      "file": "ttn/lorawan/v3/qrcodegenerator.proto",
       "http": [
         {
           "method": "get",
@@ -4544,7 +5785,7 @@
       ]
     },
     "Generate": {
-      "file": "lorawan-stack/api/qrcodegenerator.proto",
+      "file": "ttn/lorawan/v3/qrcodegenerator.proto",
       "http": [
         {
           "method": "post",
@@ -4553,11 +5794,30 @@
           "parameters": []
         }
       ]
+    },
+    "Parse": {
+      "file": "ttn/lorawan/v3/qrcodegenerator.proto",
+      "http": [
+        {
+          "method": "post",
+          "pattern": "/qr-codes/end-devices/parse",
+          "body": "*",
+          "parameters": []
+        },
+        {
+          "method": "post",
+          "pattern": "/qr-codes/end-devices/{format_id}/parse",
+          "body": "*",
+          "parameters": [
+            "format_id"
+          ]
+        }
+      ]
     }
   },
   "EndDeviceRegistrySearch": {
     "SearchEndDevices": {
-      "file": "lorawan-stack/api/search_services.proto",
+      "file": "ttn/lorawan/v3/search_services.proto",
       "http": [
         {
           "method": "get",
@@ -4568,9 +5828,14 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "activated_at",
         "application_server_address",
         "attributes",
         "created_at",
+        "claim_authentication_code",
+        "claim_authentication_code.value",
+        "claim_authentication_code.valid_to",
+        "claim_authentication_code.valid_from",
         "description",
         "ids",
         "ids.application_ids",
@@ -4582,7 +5847,11 @@
         "locations",
         "name",
         "network_server_address",
+        "serial_number",
         "service_profile_id",
+        "lora_alliance_profile_ids",
+        "lora_alliance_profile_ids.vendor_id",
+        "lora_alliance_profile_ids.vendor_profile_id",
         "updated_at",
         "version_ids",
         "version_ids.band_id",
@@ -4590,13 +5859,14 @@
         "version_ids.firmware_version",
         "version_ids.hardware_version",
         "version_ids.model_id",
-        "picture"
+        "picture",
+        "last_seen_at"
       ]
     }
   },
   "EntityRegistrySearch": {
     "SearchApplications": {
-      "file": "lorawan-stack/api/search_services.proto",
+      "file": "ttn/lorawan/v3/search_services.proto",
       "http": [
         {
           "method": "get",
@@ -4605,19 +5875,37 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
+        "application_server_address",
         "attributes",
         "contact_info",
         "created_at",
         "deleted_at",
         "description",
+        "dev_eui_counter",
         "ids",
         "ids.application_id",
+        "join_server_address",
         "name",
+        "network_server_address",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "SearchClients": {
-      "file": "lorawan-stack/api/search_services.proto",
+      "file": "ttn/lorawan/v3/search_services.proto",
       "http": [
         {
           "method": "get",
@@ -4626,6 +5914,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -4642,11 +5937,18 @@
         "skip_authorization",
         "state",
         "state_description",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "SearchGateways": {
-      "file": "lorawan-stack/api/search_services.proto",
+      "file": "ttn/lorawan/v3/search_services.proto",
       "http": [
         {
           "method": "get",
@@ -4655,6 +5957,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "antennas",
         "attributes",
         "auto_update",
@@ -4668,6 +5977,7 @@
         "created_at",
         "deleted_at",
         "description",
+        "disable_packet_broker_forwarding",
         "downlink_path_constraint",
         "enforce_duty_cycle",
         "frequency_plan_id",
@@ -4680,6 +5990,8 @@
         "lbs_lns_secret.key_id",
         "lbs_lns_secret.value",
         "location_public",
+        "lrfhss",
+        "lrfhss.supported",
         "name",
         "require_authenticated_connection",
         "schedule_anytime_delay",
@@ -4689,6 +6001,13 @@
         "target_cups_key.key_id",
         "target_cups_key.value",
         "target_cups_uri",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "update_channel",
         "update_location_from_status",
         "updated_at",
@@ -4700,7 +6019,7 @@
       ]
     },
     "SearchOrganizations": {
-      "file": "lorawan-stack/api/search_services.proto",
+      "file": "ttn/lorawan/v3/search_services.proto",
       "http": [
         {
           "method": "get",
@@ -4709,6 +6028,13 @@
         }
       ],
       "allowedFieldMaskPaths": [
+        "administrative_contact",
+        "administrative_contact.ids",
+        "administrative_contact.ids.organization_ids",
+        "administrative_contact.ids.organization_ids.organization_id",
+        "administrative_contact.ids.user_ids",
+        "administrative_contact.ids.user_ids.email",
+        "administrative_contact.ids.user_ids.user_id",
         "attributes",
         "contact_info",
         "created_at",
@@ -4717,11 +6043,18 @@
         "ids",
         "ids.organization_id",
         "name",
+        "technical_contact",
+        "technical_contact.ids",
+        "technical_contact.ids.organization_ids",
+        "technical_contact.ids.organization_ids.organization_id",
+        "technical_contact.ids.user_ids",
+        "technical_contact.ids.user_ids.email",
+        "technical_contact.ids.user_ids.user_id",
         "updated_at"
       ]
     },
     "SearchUsers": {
-      "file": "lorawan-stack/api/search_services.proto",
+      "file": "ttn/lorawan/v3/search_services.proto",
       "http": [
         {
           "method": "get",
@@ -4755,11 +6088,49 @@
         "temporary_password_expires_at",
         "updated_at"
       ]
+    },
+    "SearchAccounts": {
+      "file": "ttn/lorawan/v3/search_services.proto",
+      "http": [
+        {
+          "method": "get",
+          "pattern": "/search/accounts",
+          "parameters": []
+        },
+        {
+          "method": "get",
+          "pattern": "/applications/{application_ids.application_id}/collaborators/search",
+          "parameters": [
+            "application_ids.application_id"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/clients/{client_ids.client_id}/collaborators/search",
+          "parameters": [
+            "client_ids.client_id"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/gateways/{gateway_ids.gateway_id}/collaborators/search",
+          "parameters": [
+            "gateway_ids.gateway_id"
+          ]
+        },
+        {
+          "method": "get",
+          "pattern": "/organizations/{organization_ids.organization_id}/collaborators/search",
+          "parameters": [
+            "organization_ids.organization_id"
+          ]
+        }
+      ]
     }
   },
   "UserAccess": {
     "ListRights": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -4771,7 +6142,7 @@
       ]
     },
     "CreateAPIKey": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "post",
@@ -4784,7 +6155,7 @@
       ]
     },
     "ListAPIKeys": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -4796,7 +6167,7 @@
       ]
     },
     "GetAPIKey": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -4809,7 +6180,7 @@
       ]
     },
     "UpdateAPIKey": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "put",
@@ -4820,10 +6191,32 @@
             "api_key.id"
           ]
         }
+      ],
+      "allowedFieldMaskPaths": [
+        "created_at",
+        "expires_at",
+        "id",
+        "key",
+        "name",
+        "rights",
+        "updated_at"
+      ]
+    },
+    "DeleteAPIKey": {
+      "file": "ttn/lorawan/v3/user_services.proto",
+      "http": [
+        {
+          "method": "delete",
+          "pattern": "/users/{user_ids.user_id}/api-keys/{key_id}",
+          "parameters": [
+            "user_ids.user_id",
+            "key_id"
+          ]
+        }
       ]
     },
     "CreateLoginToken": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "post",
@@ -4837,7 +6230,7 @@
   },
   "UserInvitationRegistry": {
     "Send": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "post",
@@ -4848,7 +6241,7 @@
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -4858,7 +6251,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "delete",
@@ -4870,7 +6263,7 @@
   },
   "UserRegistry": {
     "Create": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "post",
@@ -4881,7 +6274,7 @@
       ]
     },
     "Get": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -4919,7 +6312,7 @@
       ]
     },
     "List": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -4955,7 +6348,7 @@
       ]
     },
     "Update": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "put",
@@ -4994,7 +6387,7 @@
       ]
     },
     "CreateTemporaryPassword": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "post",
@@ -5006,7 +6399,7 @@
       ]
     },
     "UpdatePassword": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "put",
@@ -5019,7 +6412,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "delete",
@@ -5031,7 +6424,7 @@
       ]
     },
     "Restore": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "post",
@@ -5043,7 +6436,7 @@
       ]
     },
     "Purge": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "delete",
@@ -5057,7 +6450,7 @@
   },
   "UserSessionRegistry": {
     "List": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "get",
@@ -5069,7 +6462,7 @@
       ]
     },
     "Delete": {
-      "file": "lorawan-stack/api/user_services.proto",
+      "file": "ttn/lorawan/v3/user_services.proto",
       "http": [
         {
           "method": "delete",

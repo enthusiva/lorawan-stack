@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-	time "time"
-
-	types "github.com/gogo/protobuf/types"
-)
+import fmt "fmt"
 
 func (dst *Organization) SetFields(src *Organization, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -15,19 +10,26 @@ func (dst *Organization) SetFields(src *Organization, paths ...string) error {
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "created_at":
@@ -37,8 +39,7 @@ func (dst *Organization) SetFields(src *Organization, paths ...string) error {
 			if src != nil {
 				dst.CreatedAt = src.CreatedAt
 			} else {
-				var zero time.Time
-				dst.CreatedAt = zero
+				dst.CreatedAt = nil
 			}
 		case "updated_at":
 			if len(subs) > 0 {
@@ -47,8 +48,7 @@ func (dst *Organization) SetFields(src *Organization, paths ...string) error {
 			if src != nil {
 				dst.UpdatedAt = src.UpdatedAt
 			} else {
-				var zero time.Time
-				dst.UpdatedAt = zero
+				dst.UpdatedAt = nil
 			}
 		case "deleted_at":
 			if len(subs) > 0 {
@@ -97,6 +97,56 @@ func (dst *Organization) SetFields(src *Organization, paths ...string) error {
 			} else {
 				dst.ContactInfo = nil
 			}
+		case "administrative_contact":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationOrUserIdentifiers
+				if (src == nil || src.AdministrativeContact == nil) && dst.AdministrativeContact == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.AdministrativeContact
+				}
+				if dst.AdministrativeContact != nil {
+					newDst = dst.AdministrativeContact
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.AdministrativeContact = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.AdministrativeContact = src.AdministrativeContact
+				} else {
+					dst.AdministrativeContact = nil
+				}
+			}
+		case "technical_contact":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationOrUserIdentifiers
+				if (src == nil || src.TechnicalContact == nil) && dst.TechnicalContact == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.TechnicalContact
+				}
+				if dst.TechnicalContact != nil {
+					newDst = dst.TechnicalContact
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.TechnicalContact = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.TechnicalContact = src.TechnicalContact
+				} else {
+					dst.TechnicalContact = nil
+				}
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -131,19 +181,26 @@ func (dst *GetOrganizationRequest) SetFields(src *GetOrganizationRequest, paths 
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "field_mask":
@@ -153,8 +210,7 @@ func (dst *GetOrganizationRequest) SetFields(src *GetOrganizationRequest, paths 
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -199,8 +255,7 @@ func (dst *ListOrganizationsRequest) SetFields(src *ListOrganizationsRequest, pa
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 		case "order":
 			if len(subs) > 0 {
@@ -256,10 +311,18 @@ func (dst *CreateOrganizationRequest) SetFields(src *CreateOrganizationRequest, 
 		case "organization":
 			if len(subs) > 0 {
 				var newDst, newSrc *Organization
-				if src != nil {
-					newSrc = &src.Organization
+				if (src == nil || src.Organization == nil) && dst.Organization == nil {
+					continue
 				}
-				newDst = &dst.Organization
+				if src != nil {
+					newSrc = src.Organization
+				}
+				if dst.Organization != nil {
+					newDst = dst.Organization
+				} else {
+					newDst = &Organization{}
+					dst.Organization = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -267,17 +330,24 @@ func (dst *CreateOrganizationRequest) SetFields(src *CreateOrganizationRequest, 
 				if src != nil {
 					dst.Organization = src.Organization
 				} else {
-					var zero Organization
-					dst.Organization = zero
+					dst.Organization = nil
 				}
 			}
 		case "collaborator":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationOrUserIdentifiers
-				if src != nil {
-					newSrc = &src.Collaborator
+				if (src == nil || src.Collaborator == nil) && dst.Collaborator == nil {
+					continue
 				}
-				newDst = &dst.Collaborator
+				if src != nil {
+					newSrc = src.Collaborator
+				}
+				if dst.Collaborator != nil {
+					newDst = dst.Collaborator
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.Collaborator = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -285,8 +355,7 @@ func (dst *CreateOrganizationRequest) SetFields(src *CreateOrganizationRequest, 
 				if src != nil {
 					dst.Collaborator = src.Collaborator
 				} else {
-					var zero OrganizationOrUserIdentifiers
-					dst.Collaborator = zero
+					dst.Collaborator = nil
 				}
 			}
 
@@ -303,10 +372,18 @@ func (dst *UpdateOrganizationRequest) SetFields(src *UpdateOrganizationRequest, 
 		case "organization":
 			if len(subs) > 0 {
 				var newDst, newSrc *Organization
-				if src != nil {
-					newSrc = &src.Organization
+				if (src == nil || src.Organization == nil) && dst.Organization == nil {
+					continue
 				}
-				newDst = &dst.Organization
+				if src != nil {
+					newSrc = src.Organization
+				}
+				if dst.Organization != nil {
+					newDst = dst.Organization
+				} else {
+					newDst = &Organization{}
+					dst.Organization = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -314,8 +391,7 @@ func (dst *UpdateOrganizationRequest) SetFields(src *UpdateOrganizationRequest, 
 				if src != nil {
 					dst.Organization = src.Organization
 				} else {
-					var zero Organization
-					dst.Organization = zero
+					dst.Organization = nil
 				}
 			}
 		case "field_mask":
@@ -325,8 +401,7 @@ func (dst *UpdateOrganizationRequest) SetFields(src *UpdateOrganizationRequest, 
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -342,20 +417,37 @@ func (dst *ListOrganizationAPIKeysRequest) SetFields(src *ListOrganizationAPIKey
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
+			}
+		case "order":
+			if len(subs) > 0 {
+				return fmt.Errorf("'order' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Order = src.Order
+			} else {
+				var zero string
+				dst.Order = zero
 			}
 		case "limit":
 			if len(subs) > 0 {
@@ -391,19 +483,26 @@ func (dst *GetOrganizationAPIKeyRequest) SetFields(src *GetOrganizationAPIKeyReq
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "key_id":
@@ -411,10 +510,10 @@ func (dst *GetOrganizationAPIKeyRequest) SetFields(src *GetOrganizationAPIKeyReq
 				return fmt.Errorf("'key_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.KeyID = src.KeyID
+				dst.KeyId = src.KeyId
 			} else {
 				var zero string
-				dst.KeyID = zero
+				dst.KeyId = zero
 			}
 
 		default:
@@ -430,19 +529,26 @@ func (dst *CreateOrganizationAPIKeyRequest) SetFields(src *CreateOrganizationAPI
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "name":
@@ -464,6 +570,15 @@ func (dst *CreateOrganizationAPIKeyRequest) SetFields(src *CreateOrganizationAPI
 			} else {
 				dst.Rights = nil
 			}
+		case "expires_at":
+			if len(subs) > 0 {
+				return fmt.Errorf("'expires_at' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.ExpiresAt = src.ExpiresAt
+			} else {
+				dst.ExpiresAt = nil
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -478,38 +593,107 @@ func (dst *UpdateOrganizationAPIKeyRequest) SetFields(src *UpdateOrganizationAPI
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "api_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *APIKey
-				if src != nil {
-					newSrc = &src.APIKey
+				if (src == nil || src.ApiKey == nil) && dst.ApiKey == nil {
+					continue
 				}
-				newDst = &dst.APIKey
+				if src != nil {
+					newSrc = src.ApiKey
+				}
+				if dst.ApiKey != nil {
+					newDst = dst.ApiKey
+				} else {
+					newDst = &APIKey{}
+					dst.ApiKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.APIKey = src.APIKey
+					dst.ApiKey = src.ApiKey
 				} else {
-					var zero APIKey
-					dst.APIKey = zero
+					dst.ApiKey = nil
 				}
+			}
+		case "field_mask":
+			if len(subs) > 0 {
+				return fmt.Errorf("'field_mask' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.FieldMask = src.FieldMask
+			} else {
+				dst.FieldMask = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *DeleteOrganizationAPIKeyRequest) SetFields(src *DeleteOrganizationAPIKeyRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "organization_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.OrganizationIds = src.OrganizationIds
+				} else {
+					dst.OrganizationIds = nil
+				}
+			}
+		case "key_id":
+			if len(subs) > 0 {
+				return fmt.Errorf("'key_id' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.KeyId = src.KeyId
+			} else {
+				var zero string
+				dst.KeyId = zero
 			}
 
 		default:
@@ -525,19 +709,26 @@ func (dst *ListOrganizationCollaboratorsRequest) SetFields(src *ListOrganization
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "limit":
@@ -560,6 +751,16 @@ func (dst *ListOrganizationCollaboratorsRequest) SetFields(src *ListOrganization
 				var zero uint32
 				dst.Page = zero
 			}
+		case "order":
+			if len(subs) > 0 {
+				return fmt.Errorf("'order' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.Order = src.Order
+			} else {
+				var zero string
+				dst.Order = zero
+			}
 
 		default:
 			return fmt.Errorf("invalid field: '%s'", name)
@@ -574,37 +775,51 @@ func (dst *GetOrganizationCollaboratorRequest) SetFields(src *GetOrganizationCol
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "collaborator":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationOrUserIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationOrUserIdentifiers
+				if (src == nil || src.Collaborator == nil) && dst.Collaborator == nil {
+					continue
 				}
-				newDst = &dst.OrganizationOrUserIdentifiers
+				if src != nil {
+					newSrc = src.Collaborator
+				}
+				if dst.Collaborator != nil {
+					newDst = dst.Collaborator
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.Collaborator = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationOrUserIdentifiers = src.OrganizationOrUserIdentifiers
+					dst.Collaborator = src.Collaborator
 				} else {
-					var zero OrganizationOrUserIdentifiers
-					dst.OrganizationOrUserIdentifiers = zero
+					dst.Collaborator = nil
 				}
 			}
 
@@ -621,28 +836,43 @@ func (dst *SetOrganizationCollaboratorRequest) SetFields(src *SetOrganizationCol
 		case "organization_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *OrganizationIdentifiers
-				if src != nil {
-					newSrc = &src.OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
 				}
-				newDst = &dst.OrganizationIdentifiers
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.OrganizationIdentifiers = src.OrganizationIdentifiers
+					dst.OrganizationIds = src.OrganizationIds
 				} else {
-					var zero OrganizationIdentifiers
-					dst.OrganizationIdentifiers = zero
+					dst.OrganizationIds = nil
 				}
 			}
 		case "collaborator":
 			if len(subs) > 0 {
 				var newDst, newSrc *Collaborator
-				if src != nil {
-					newSrc = &src.Collaborator
+				if (src == nil || src.Collaborator == nil) && dst.Collaborator == nil {
+					continue
 				}
-				newDst = &dst.Collaborator
+				if src != nil {
+					newSrc = src.Collaborator
+				}
+				if dst.Collaborator != nil {
+					newDst = dst.Collaborator
+				} else {
+					newDst = &Collaborator{}
+					dst.Collaborator = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -650,8 +880,68 @@ func (dst *SetOrganizationCollaboratorRequest) SetFields(src *SetOrganizationCol
 				if src != nil {
 					dst.Collaborator = src.Collaborator
 				} else {
-					var zero Collaborator
-					dst.Collaborator = zero
+					dst.Collaborator = nil
+				}
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
+func (dst *DeleteOrganizationCollaboratorRequest) SetFields(src *DeleteOrganizationCollaboratorRequest, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "organization_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationIdentifiers
+				if (src == nil || src.OrganizationIds == nil) && dst.OrganizationIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.OrganizationIds
+				}
+				if dst.OrganizationIds != nil {
+					newDst = dst.OrganizationIds
+				} else {
+					newDst = &OrganizationIdentifiers{}
+					dst.OrganizationIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.OrganizationIds = src.OrganizationIds
+				} else {
+					dst.OrganizationIds = nil
+				}
+			}
+		case "collaborator_ids":
+			if len(subs) > 0 {
+				var newDst, newSrc *OrganizationOrUserIdentifiers
+				if (src == nil || src.CollaboratorIds == nil) && dst.CollaboratorIds == nil {
+					continue
+				}
+				if src != nil {
+					newSrc = src.CollaboratorIds
+				}
+				if dst.CollaboratorIds != nil {
+					newDst = dst.CollaboratorIds
+				} else {
+					newDst = &OrganizationOrUserIdentifiers{}
+					dst.CollaboratorIds = newDst
+				}
+				if err := newDst.SetFields(newSrc, subs...); err != nil {
+					return err
+				}
+			} else {
+				if src != nil {
+					dst.CollaboratorIds = src.CollaboratorIds
+				} else {
+					dst.CollaboratorIds = nil
 				}
 			}
 

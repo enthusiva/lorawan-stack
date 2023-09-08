@@ -14,12 +14,21 @@
 
 import React from 'react'
 import PropTypes from 'prop-types'
-import { Map, Marker, TileLayer } from 'react-leaflet'
+import {
+  MapContainer,
+  Marker,
+  CircleMarker,
+  Circle,
+  TileLayer,
+  useMapEvent,
+  useMap,
+} from 'react-leaflet'
 import classnames from 'classnames'
-import Leaflet from 'leaflet'
-import bind from 'autobind-decorator'
+import Leaflet, { latLngBounds } from 'leaflet'
+import shadowImg from 'leaflet/dist/images/marker-shadow.png'
 
 import MarkerIcon from '@assets/auxiliary-icons/location_pin.svg'
+import COLORS from '@ttn-lw/constants/colors'
 
 import style from './map.styl'
 
@@ -35,116 +44,163 @@ Leaflet.Icon.Default.mergeOptions({
   shadowAnchor: [8, 37],
   popupAnchor: [0, -40],
   // eslint-disable-next-line import/no-commonjs
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+  shadowUrl: shadowImg,
 })
 
-const tileLayer = (
-  <TileLayer
-    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
-  />
-)
 const defaultMinZoom = 7
 
-export default class LocationMap extends React.Component {
-  static propTypes = {
-    className: PropTypes.string,
-    clickable: PropTypes.bool,
-    // `LeafletConfig` is an object which can contain any number of properties
-    // defined by the leaflet plugin and is used to overwrite the default
-    // configuration of leaflet.
-    leafletConfig: PropTypes.shape({
-      zoom: PropTypes.number,
-    }),
-    mapCenter: PropTypes.arrayOf(PropTypes.number),
-    mapRef: PropTypes.string,
-    // `markers` is an array of objects containing a specific properties.
-    markers: PropTypes.arrayOf(
-      // `position` is a object containing two properties latitude and longitude which are both numbers.
-      PropTypes.shape({
-        position: PropTypes.shape({
-          longitude: PropTypes.number,
-          latitude: PropTypes.number,
-        }),
-      }),
-    ),
-    onClick: PropTypes.func,
-    // `widget` is a boolean used to add a class name to the map container div for styling.
-    widget: PropTypes.bool,
+const MarkerRenderer = ({ marker }) => {
+  if (!marker) {
+    return null
   }
 
-  static defaultProps = {
-    leafletConfig: {},
-    className: undefined,
-    widget: false,
-    markers: [],
-    onClick: () => null,
-    mapCenter: undefined,
-    clickable: false,
-    mapRef: 'map',
+  const hasAccuracy = typeof marker.accuracy === 'number'
+  const children = (
+    <>
+      {typeof marker.accuracy === 'number' && (
+        <Circle
+          center={[marker.position.latitude, marker.position.longitude]}
+          radius={marker.accuracy}
+          weight={1}
+          fillOpacity={0.1}
+        />
+      )}
+      {marker.children}
+    </>
+  )
+  return hasAccuracy ? (
+    <CircleMarker
+      key={`marker-${marker.position.latitude}-${marker.position.longitude}`}
+      center={[marker.position.latitude, marker.position.longitude]}
+      radius={8}
+      children={children}
+      color="#ffffff"
+      fillColor={COLORS.C_ACTIVE_BLUE}
+      fillOpacity={1}
+    />
+  ) : (
+    <Marker
+      key={`marker-${marker.position.latitude}-${marker.position.longitude}`}
+      position={[marker.position.latitude, marker.position.longitude]}
+      children={children}
+    />
+  )
+}
+
+const Controller = ({ onClick, centerOnMarkers, markers, bounds }) => {
+  const map = useMap()
+
+  useMapEvent('click', onClick)
+  // Fix incomplete tile loading in some rare cases.
+  map.invalidateSize()
+  // Attach click handler.
+  if (centerOnMarkers && markers.length > 1) {
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 })
+  }
+  return markers.map(marker => (
+    <MarkerRenderer
+      key={`${marker.position.latitude}-${marker.position.longitude}`}
+      marker={marker}
+    />
+  ))
+}
+
+const LocationMap = props => {
+  const {
+    className,
+    mapCenter,
+    clickable,
+    widget,
+    markers,
+    leafletConfig,
+    centerOnMarkers,
+    ...rest
+  } = props
+
+  const bounds = latLngBounds(
+    markers.map(marker => [marker.position.latitude, marker.position.longitude]),
+  )
+
+  const hasValidCoordinates = mapCenter instanceof Array && mapCenter.length === 2
+
+  let center = [0, 0]
+
+  if (centerOnMarkers && markers.length >= 1) {
+    center = bounds.getCenter()
+  } else if (hasValidCoordinates) {
+    center = mapCenter
   }
 
-  constructor(props) {
-    super(props)
-
-    this.state = {
-      zoomLevel: props.leafletConfig.zoom,
-    }
-  }
-
-  // Fix the issue where tiles sometimes partially load.
-  @bind
-  componentDidMount() {
-    const map = this.refs.map.leafletElement
-    setTimeout(() => {
-      map.invalidateSize()
-    }, 250)
-  }
-
-  @bind
-  onZoomEvent(event) {
-    this.setState({ zoomLevel: event.target._zoom })
-  }
-
-  render() {
-    const {
-      className,
-      mapCenter,
-      clickable,
-      widget,
-      markers,
-      leafletConfig,
-      mapRef,
-      onClick,
-    } = this.props
-    const { zoomLevel } = this.state
-    return (
-      <div className={classnames(style.container, className)} data-test-id="location-map">
-        <Map
-          ref={mapRef}
+  return (
+    <div
+      className={classnames(style.container, className, { [style.widget]: widget })}
+      data-test-id="location-map"
+    >
+      {hasValidCoordinates && (
+        <MapContainer
           className={classnames(style.map, {
-            [style.widget]: widget,
             [style.click]: clickable,
           })}
           minZoom={defaultMinZoom}
-          onZoomend={this.onZoomEvent}
-          onClick={onClick}
+          center={center}
           {...leafletConfig}
-          zoom={zoomLevel}
-          center={mapCenter}
         >
-          {tileLayer}
-          {markers.map(
-            marker =>
-              marker && (
-                <Marker
-                  key={`marker-${marker.position.latitude}-${marker.position.altitude}`}
-                  position={[marker.position.latitude, marker.position.longitude]}
-                />
-              ),
-          )}
-        </Map>
-      </div>
-    )
-  }
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+            noWrap
+          />
+          <Controller
+            bounds={bounds}
+            centerOnMarkers={centerOnMarkers}
+            markers={markers}
+            {...rest}
+          />
+        </MapContainer>
+      )}
+    </div>
+  )
 }
+
+LocationMap.defaultProps = {
+  centerOnMarkers: true,
+  leafletConfig: {},
+  className: undefined,
+  widget: false,
+  markers: [],
+  onClick: () => null,
+  mapCenter: undefined,
+  clickable: false,
+}
+
+MarkerRenderer.propTypes = {
+  marker: PropTypes.shape({
+    position: PropTypes.shape({
+      longitude: PropTypes.number,
+      latitude: PropTypes.number,
+    }),
+    accuracy: PropTypes.number,
+    children: PropTypes.node,
+  }).isRequired,
+}
+
+LocationMap.propTypes = {
+  // Whether the map should center on the provided markers (if exist), once loaded (regardless of `mapCenter`).
+  centerOnMarkers: PropTypes.bool,
+  className: PropTypes.string,
+  clickable: PropTypes.bool,
+  // `LeafletConfig` is an object which can contain any number of properties
+  // defined by the leaflet plugin and is used to overwrite the default
+  // configuration of leaflet.
+  leafletConfig: PropTypes.shape({
+    zoom: PropTypes.number,
+  }),
+  mapCenter: PropTypes.arrayOf(PropTypes.number),
+  // `markers` is an array of objects containing a specific properties.
+  markers: PropTypes.arrayOf(MarkerRenderer.propTypes.marker),
+  onClick: PropTypes.func,
+  // `widget` is a boolean used to add a class name to the map container div for styling.
+  widget: PropTypes.bool,
+}
+
+export default LocationMap

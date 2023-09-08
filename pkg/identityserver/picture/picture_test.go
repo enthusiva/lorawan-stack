@@ -23,7 +23,7 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/picture"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
@@ -80,7 +80,7 @@ func TestMakeSquare(t *testing.T) {
 	}
 }
 
-func beSameColorAs(actual interface{}, expected ...interface{}) (message string) {
+func beSameColorAs(actual any, expected ...any) (message string) {
 	actualR, actualG, actualB, actualA := actual.(color.Color).RGBA()
 	expectedR, expectedG, expectedB, expectedA := expected[0].(color.Color).RGBA()
 	if eq := should.Equal(actualR, expectedR); eq != "" {
@@ -104,7 +104,7 @@ func TestStore(t *testing.T) {
 	ctx := test.Context()
 	var blobConfig config.BlobConfig
 	blobConfig.Provider, blobConfig.Local.Directory = "local", "."
-	bucket, _ := blobConfig.Bucket(ctx, "testdata")
+	bucket, _ := blobConfig.Bucket(ctx, "testdata", test.HTTPClientProvider)
 
 	pic, err := picture.Store(ctx, bucket, "picture", &ttnpb.Picture{
 		Sizes: map[uint32]string{

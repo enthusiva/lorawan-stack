@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,49 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
-import { Switch, Route } from 'react-router'
+import React from 'react'
+import { Routes, Route } from 'react-router-dom'
 
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import Breadcrumbs from '@ttn-lw/components/breadcrumbs'
 
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
-import NotFoundRoute from '@ttn-lw/lib/components/not-found-route'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import UserAdd from '@console/views/admin-user-management-add'
 import UserEdit from '@console/views/admin-user-management-edit'
+import InvitationSend from '@console/views/admin-user-management-invitation-send'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
+import { userPathId as userPathIdRegexp } from '@ttn-lw/lib/regexp'
 
 import { mayManageUsers } from '@console/lib/feature-checks'
 
 import UserManagement from './admin-user-management'
 
-@withFeatureRequirement(mayManageUsers, { redirect: '/' })
-@withBreadcrumb('admin.user-management', () => {
-  return <Breadcrumb path={'/admin/user-management'} content={sharedMessages.userManagement} />
-})
-export default class UserManagementRouter extends Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
-  render() {
-    const { match } = this.props
-    return (
-      <React.Fragment>
-        <Breadcrumbs />
-        <IntlHelmet title={sharedMessages.userManagement} />
-        <Switch>
-          <Route exact path={`${match.path}`} component={UserManagement} />
-          <Route path={`${match.path}/add`} component={UserAdd} />
-          <Route path={`${match.path}/:userId`} component={UserEdit} />
-          <NotFoundRoute />
-        </Switch>
-      </React.Fragment>
-    )
-  }
+const UserManagementRouter = () => {
+  useBreadcrumbs(
+    'admin-panel.user-management',
+    <Breadcrumb path="/admin-panel/user-management" content={sharedMessages.userManagement} />,
+  )
+  return (
+    <Require featureCheck={mayManageUsers} otherwise={{ redirect: '/' }}>
+      <IntlHelmet title={sharedMessages.userManagement} />
+      <Routes>
+        <Route index Component={UserManagement} />
+        <Route path="add" Component={UserAdd} />
+        <Route path="invitations/add" Component={InvitationSend} />
+        <Route
+          path=":userId/*"
+          element={<ValidateRouteParam check={{ userId: userPathIdRegexp }} Component={UserEdit} />}
+        />
+        <Route path="*" Component={GenericNotFound} />
+      </Routes>
+    </Require>
+  )
 }
+
+export default UserManagementRouter

@@ -18,7 +18,7 @@ const env = {
   siteName: 'Storybook',
   siteTitle: 'Storybook',
   config: {
-    documentationBaseUrl: 'https://thethingsstack.io',
+    documentationBaseUrl: 'https://thethingsindustries.com/docs',
   },
   csrfToken: '',
 }

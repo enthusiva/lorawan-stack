@@ -19,13 +19,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
-	echo "github.com/labstack/echo/v4"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
@@ -54,7 +53,7 @@ func TestLogger(t *testing.T) {
 
 	mem := memory.New()
 
-	logger := log.NewLogger(log.WithHandler(mem))
+	logger := log.NewLogger(mem)
 
 	// Component logger
 	{
@@ -81,9 +80,8 @@ func TestHTTP(t *testing.T) {
 
 	workingRoutePath := "/ok"
 	workingRoute := registererFunc(func(s *web.Server) {
-		s.GET(workingRoutePath, func(c echo.Context) error {
-			c.JSON(http.StatusOK, "OK")
-			return nil
+		s.Router().Path(workingRoutePath).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
 		})
 	})
 
@@ -144,7 +142,7 @@ func TestHTTP(t *testing.T) {
 		a.So(err, should.BeNil)
 
 		certPool := x509.NewCertPool()
-		certContent, err := ioutil.ReadFile("testdata/serverca.pem")
+		certContent, err := os.ReadFile("testdata/serverca.pem")
 		a.So(err, should.BeNil)
 		certPool.AppendCertsFromPEM(certContent)
 		client := http.Client{

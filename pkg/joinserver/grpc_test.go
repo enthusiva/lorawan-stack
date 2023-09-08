@@ -17,7 +17,7 @@ package joinserver_test
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	. "go.thethings.network/lorawan-stack/v3/pkg/joinserver"
@@ -41,10 +41,10 @@ func TestGetJoinEUIPrefixes(t *testing.T) {
 				{EUI64: types.EUI64{0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00}, Length: 56},
 			},
 			Response: &ttnpb.JoinEUIPrefixes{
-				Prefixes: []ttnpb.JoinEUIPrefix{
-					{JoinEUI: types.EUI64{0xff, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, Length: 12},
-					{JoinEUI: types.EUI64{0x10, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, Length: 12},
-					{JoinEUI: types.EUI64{0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00}, Length: 56},
+				Prefixes: []*ttnpb.JoinEUIPrefix{
+					{JoinEui: types.EUI64{0xff, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes(), Length: 12},
+					{JoinEui: types.EUI64{0x10, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes(), Length: 12},
+					{JoinEui: types.EUI64{0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00}.Bytes(), Length: 56},
 				},
 			},
 		},
@@ -56,10 +56,10 @@ func TestGetJoinEUIPrefixes(t *testing.T) {
 				{EUI64: types.EUI64{0x11, 0xff, 0x11, 0xff, 0x11, 0xff, 0x11, 0x00}, Length: 56},
 			},
 			Response: &ttnpb.JoinEUIPrefixes{
-				Prefixes: []ttnpb.JoinEUIPrefix{
-					{JoinEUI: types.EUI64{0xaf, 0xb2, 0x11, 0x00, 0x4f, 0x99, 0x75, 0x01}, Length: 1},
-					{JoinEUI: types.EUI64{0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, Length: 40},
-					{JoinEUI: types.EUI64{0x11, 0xff, 0x11, 0xff, 0x11, 0xff, 0x11, 0x00}, Length: 56},
+				Prefixes: []*ttnpb.JoinEUIPrefix{
+					{JoinEui: types.EUI64{0xaf, 0xb2, 0x11, 0x00, 0x4f, 0x99, 0x75, 0x01}.Bytes(), Length: 1},
+					{JoinEui: types.EUI64{0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}.Bytes(), Length: 40},
+					{JoinEui: types.EUI64{0x11, 0xff, 0x11, 0xff, 0x11, 0xff, 0x11, 0x00}.Bytes(), Length: 56},
 				},
 			},
 		},
@@ -71,10 +71,10 @@ func TestGetJoinEUIPrefixes(t *testing.T) {
 				{EUI64: types.EUI64{0x45, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00}, Length: 16},
 			},
 			Response: &ttnpb.JoinEUIPrefixes{
-				Prefixes: []ttnpb.JoinEUIPrefix{
-					{JoinEUI: types.EUI64{0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56}, Length: 4},
-					{JoinEUI: types.EUI64{0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x45}, Length: 8},
-					{JoinEUI: types.EUI64{0x45, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00}, Length: 16},
+				Prefixes: []*ttnpb.JoinEUIPrefix{
+					{JoinEui: types.EUI64{0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56}.Bytes(), Length: 4},
+					{JoinEui: types.EUI64{0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x45}.Bytes(), Length: 8},
+					{JoinEui: types.EUI64{0x45, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00}.Bytes(), Length: 16},
 				},
 			},
 		},
@@ -86,11 +86,53 @@ func TestGetJoinEUIPrefixes(t *testing.T) {
 				componenttest.NewComponent(t, &component.Config{}),
 				&Config{
 					JoinEUIPrefixes: tc.JoinEUIPrefixes,
-				})).(*JoinServer)
+					DevNonceLimit:   defaultDevNonceLimit,
+				}))
 			componenttest.StartComponent(t, js.Component)
 			defer js.Close()
 
 			resp, err := ttnpb.NewJsClient(js.LoopbackConn()).GetJoinEUIPrefixes(test.Context(), ttnpb.Empty)
+			if a.So(err, should.BeNil) {
+				a.So(resp, should.Resemble, tc.Response)
+			}
+		})
+	}
+}
+
+func TestGetDefaultJoinEUI(t *testing.T) {
+	for _, tc := range []struct {
+		Name           string
+		DefaultJoinEUI types.EUI64
+		Response       *ttnpb.GetDefaultJoinEUIResponse
+	}{
+		{
+			Name:           "Default",
+			DefaultJoinEUI: types.EUI64{0xff, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			Response: &ttnpb.GetDefaultJoinEUIResponse{
+				JoinEui: types.EUI64{0xff, 0x42, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}.Bytes(),
+			},
+		},
+		{
+			Name:           "AnotherDefault",
+			DefaultJoinEUI: types.EUI64{0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			Response: &ttnpb.GetDefaultJoinEUIResponse{
+				JoinEui: types.EUI64{0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}.Bytes(),
+			},
+		},
+	} {
+		t.Run(tc.Name, func(t *testing.T) {
+			a := assertions.New(t)
+
+			js := test.Must(New(
+				componenttest.NewComponent(t, &component.Config{}),
+				&Config{
+					DefaultJoinEUI: tc.DefaultJoinEUI,
+					DevNonceLimit:  defaultDevNonceLimit,
+				}))
+			componenttest.StartComponent(t, js.Component)
+			defer js.Close()
+
+			resp, err := ttnpb.NewJsClient(js.LoopbackConn()).GetDefaultJoinEUI(test.Context(), ttnpb.Empty)
 			if a.So(err, should.BeNil) {
 				a.So(resp, should.Resemble, tc.Response)
 			}

@@ -17,25 +17,33 @@ package redis
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
+	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
-	"github.com/gogo/protobuf/proto"
+	"github.com/oklog/ulid/v2"
+	"github.com/redis/go-redis/v9"
 	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"google.golang.org/protobuf/proto"
 )
-
-//go:generate go run ./generate_scripts.go
 
 const (
 	// separator is character used to separate the keys.
 	separator = ':'
+
+	// DefaultStreamBlockLimit is the duration for which stream blocking operations
+	// such as XRead and XReadGroup should block. Note that Redis operations cannot be
+	// asynchronously cancelled using context.WithCancel, so long-polling is required.
+	DefaultStreamBlockLimit time.Duration = 0
 )
 
 var encoding = base64.RawStdEncoding
@@ -82,17 +90,45 @@ type Client struct {
 
 // Config represents Redis configuration.
 type Config struct {
-	Address       string         `name:"address" description:"Address of the Redis server"`
-	Password      string         `name:"password" description:"Password of the Redis server"`
-	Database      int            `name:"database" description:"Redis database to use"`
-	RootNamespace []string       `name:"namespace" description:"Namespace for Redis keys"`
-	PoolSize      int            `name:"pool-size" description:"The maximum number of database connections"`
-	Failover      FailoverConfig `name:"failover" description:"Redis failover configuration"`
-	TLS           struct {
+	Address         string         `name:"address" description:"Address of the Redis server"`
+	Password        string         `name:"password" description:"Password of the Redis server"`
+	Database        int            `name:"database" description:"Redis database to use"`
+	RootNamespace   []string       `name:"namespace" description:"Namespace for Redis keys"`
+	PoolSize        int            `name:"pool-size" description:"The maximum number of database connections"`
+	IdleTimeout     time.Duration  `name:"idle-timeout" description:"Idle connection timeout"`
+	ConnMaxLifetime time.Duration  `name:"conn-max-lifetime" description:"Maximum lifetime of a connection"`
+	Failover        FailoverConfig `name:"failover" description:"Redis failover configuration"`
+	TLS             struct {
 		Require          bool `name:"require" description:"Require TLS"`
 		tlsconfig.Client `name:",squash"`
 	} `name:"tls"`
 	namespace []string
+}
+
+func equalsStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Equals checks if the other configuration is equivalent to this.
+func (c Config) Equals(other Config) bool {
+	return c.Address == other.Address &&
+		c.Password == other.Password &&
+		c.Database == other.Database &&
+		equalsStringSlice(c.RootNamespace, other.RootNamespace) &&
+		c.PoolSize == other.PoolSize &&
+		c.IdleTimeout == other.IdleTimeout &&
+		c.ConnMaxLifetime == other.ConnMaxLifetime &&
+		c.Failover.Equals(other.Failover) &&
+		c.TLS.Require == other.TLS.Require &&
+		c.TLS.Client.Equals(other.TLS.Client)
 }
 
 func (c Config) WithNamespace(namespace ...string) *Config {
@@ -116,75 +152,72 @@ type FailoverConfig struct {
 	MasterName string   `name:"master-name" description:"Redis Sentinel master name"`
 }
 
+// Equals checks if the other configuration is equivalent to this.
+func (c FailoverConfig) Equals(other FailoverConfig) bool {
+	return c.Enable == other.Enable &&
+		equalsStringSlice(c.Addresses, other.Addresses) &&
+		c.MasterName == other.MasterName
+}
+
 func (c Config) makeDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
 	var (
-		tlsConfig    *tls.Config
+		dialer interface {
+			DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+		} = &net.Dialer{}
 		tlsConfigErr error
 	)
 	if c.TLS.Require {
-		tlsConfig = &tls.Config{
+		tlsConfig := &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		}
+		dialer = &tls.Dialer{NetDialer: dialer.(*net.Dialer), Config: tlsConfig}
 		tlsConfigErr = c.TLS.Client.ApplyTo(tlsConfig)
 	}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		var timeout time.Duration
-		deadline, ok := ctx.Deadline()
-		if ok {
-			timeout = time.Until(deadline)
+		defer trace.StartRegion(ctx, "dial redis").End()
+		if tlsConfigErr != nil {
+			return nil, tlsConfigErr
 		}
-		var (
-			conn net.Conn
-			err  error
-		)
-		dialer := &net.Dialer{Timeout: timeout}
-		if c.TLS.Require {
-			if tlsConfigErr != nil {
-				return nil, tlsConfigErr
-			}
-			conn, err = tls.DialWithDialer(dialer, network, addr, tlsConfig)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			conn, err = dialer.Dial(network, addr)
-			if err != nil {
-				return nil, err
-			}
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
 		}
 		return &observableConn{addr: addr, Conn: conn}, nil
 	}
 }
 
-type logFunc func(context.Context, string, ...interface{})
+type logFunc func(context.Context, string, ...any)
 
-func (f logFunc) Printf(ctx context.Context, format string, v ...interface{}) {
+func (f logFunc) Printf(ctx context.Context, format string, v ...any) {
 	f(ctx, format, v...)
 }
 
-func debugLogFunc(ctx context.Context, format string, v ...interface{}) {
-	log.FromContext(ctx).Debugf(format, v...)
+func debugLogFunc(ctx context.Context, format string, v ...any) {
+	log.FromContext(ctx).WithField("origin", "go-redis").Debugf(format, v...)
 }
 
 // newRedisClient returns a Redis client, which connects using correct client type.
 func newRedisClient(conf *Config) *redis.Client {
 	if conf.Failover.Enable {
-		redis.SetLogger(logFunc(debugLogFunc))
 		return redis.NewFailoverClient(&redis.FailoverOptions{
-			Dialer:        conf.makeDialer(),
-			MasterName:    conf.Failover.MasterName,
-			SentinelAddrs: conf.Failover.Addresses,
-			Password:      conf.Password,
-			DB:            conf.Database,
-			PoolSize:      conf.PoolSize,
+			Dialer:          conf.makeDialer(),
+			MasterName:      conf.Failover.MasterName,
+			SentinelAddrs:   conf.Failover.Addresses,
+			Password:        conf.Password,
+			DB:              conf.Database,
+			PoolSize:        conf.PoolSize,
+			ConnMaxIdleTime: conf.IdleTimeout,
+			ConnMaxLifetime: conf.ConnMaxLifetime,
 		})
 	}
 	return redis.NewClient(&redis.Options{
-		Dialer:   conf.makeDialer(),
-		Addr:     conf.Address,
-		Password: conf.Password,
-		DB:       conf.Database,
-		PoolSize: conf.PoolSize,
+		Dialer:          conf.makeDialer(),
+		Addr:            conf.Address,
+		Password:        conf.Password,
+		DB:              conf.Database,
+		PoolSize:        conf.PoolSize,
+		ConnMaxIdleTime: conf.IdleTimeout,
+		ConnMaxLifetime: conf.ConnMaxLifetime,
 	})
 }
 
@@ -218,6 +251,7 @@ func (cmd ProtoCmd) ScanProto(pb proto.Message) error {
 // GetProto unmarshals protocol buffer message stored under key k in r into pb.
 // Note, that GetProto passes k verbatim to the underlying store and hence, k must represent the full key(including namespace etc.).
 func GetProto(ctx context.Context, r redis.Cmdable, k string) *ProtoCmd {
+	trace.Logf(ctx, "redis", "get proto from %s", k)
 	return &ProtoCmd{r.Get(ctx, k).Result}
 }
 
@@ -228,14 +262,17 @@ func SetProto(ctx context.Context, r redis.Cmdable, k string, pb proto.Message, 
 	if err != nil {
 		return nil, err
 	}
+	trace.Logf(ctx, "redis", "set proto to %q", k)
 	return r.Set(ctx, k, s, expiration), nil
 }
 
 // FindProto finds the protocol buffer stored under the key stored under k.
 // The external key is constructed using keyCmd.
 func FindProto(ctx context.Context, r WatchCmdable, k string, keyCmd func(string) (string, error)) *ProtoCmd {
+	defer trace.StartRegion(ctx, "find proto").End()
 	var result func() (string, error)
 	if err := r.Watch(ctx, func(tx *redis.Tx) error {
+		trace.Logf(ctx, "redis", "get key reference from %q", k)
 		id, err := tx.Get(ctx, k).Result()
 		if err != nil {
 			return err
@@ -244,6 +281,7 @@ func FindProto(ctx context.Context, r WatchCmdable, k string, keyCmd func(string
 		if err != nil {
 			return err
 		}
+		trace.Logf(ctx, "redis", "get proto from %q", ik)
 		result = tx.Get(ctx, ik).Result
 		return nil
 	}, k); err != nil {
@@ -348,13 +386,15 @@ func FindProtosWithOffsetAndCount(offset, count int64) FindProtosOption {
 }
 
 func findProtos(ctx context.Context, r redis.Cmdable, k string, keyCmd func(string) string, opts ...FindProtosOption) stringSliceCmd {
+	getPattern := keyCmd("*")
 	s := &redis.Sort{
-		Get: []string{keyCmd("*")},
+		Get: []string{getPattern},
 		By:  "nosort", // see https://redis.io/commands/sort#skip-sorting-the-elements
 	}
 	for _, opt := range opts {
 		opt(redisSort{s})
 	}
+	trace.Logf(ctx, "redis", "find %q protos from %q", getPattern, k)
 	return stringSliceCmd{
 		result: r.Sort(ctx, k, s).Result,
 	}
@@ -372,29 +412,10 @@ func FindProtosWithKeys(ctx context.Context, r redis.Cmdable, k string, keyCmd f
 
 // ListProtos gets list of protos stored under key k.
 func ListProtos(ctx context.Context, r redis.Cmdable, k string) ProtosCmd {
+	trace.Logf(ctx, "redis", "list protos from %q", k)
 	return ProtosCmd{
 		result: r.LRange(ctx, k, 0, -1).Result,
 	}
-}
-
-type InterfaceSliceCmd struct {
-	*redis.Cmd
-}
-
-func (cmd InterfaceSliceCmd) Result() ([]interface{}, error) {
-	v, err := cmd.Cmd.Result()
-	if err != nil {
-		return nil, err
-	}
-	vs, ok := v.([]interface{})
-	if !ok {
-		return nil, errDecode.New()
-	}
-	return vs, nil
-}
-
-func RunInterfaceSliceScript(ctx context.Context, r Scripter, s *redis.Script, keys []string, args ...interface{}) *InterfaceSliceCmd {
-	return &InterfaceSliceCmd{s.Run(ctx, r, keys, args...)}
 }
 
 const (
@@ -402,7 +423,6 @@ const (
 	replaceKey = "replace"
 	startAtKey = "start_at"
 	nextAtKey  = "next_at"
-	lastIDKey  = "last_id"
 )
 
 // InputTaskKey returns the subkey of k, where input tasks are stored.
@@ -442,7 +462,7 @@ func initTaskGroup(ctx context.Context, r redis.Cmdable, group, k string) error 
 // addTask adds a task identified by payload with timestamp startAt to the stream at InputTaskKey(k).
 // maxLen is the approximate length of the stream, to which it may be trimmed.
 func addTask(ctx context.Context, r redis.Cmdable, k string, maxLen int64, payload string, startAt time.Time, replace bool) error {
-	m := make(map[string]interface{}, 2)
+	m := make(map[string]any, 2)
 	m[payloadKey] = payload
 	if replace {
 		m[replaceKey] = replace
@@ -451,9 +471,10 @@ func addTask(ctx context.Context, r redis.Cmdable, k string, maxLen int64, paylo
 		m[startAtKey] = startAt.UnixNano()
 	}
 	return ConvertError(r.XAdd(ctx, &redis.XAddArgs{
-		Stream:       InputTaskKey(k),
-		MaxLenApprox: maxLen,
-		Values:       m,
+		Stream: InputTaskKey(k),
+		MaxLen: maxLen,
+		Approx: true,
+		Values: m,
 	}).Err())
 }
 
@@ -465,96 +486,102 @@ func parseTime(s string) (time.Time, error) {
 	return time.Unix(0, int64(nsec)).UTC(), nil
 }
 
-// popTask calls f on the most recent task in the queue, for which timestamp is in range [0, time.Now()] or blocks until such is available or context is done.
-// If there are no tasks available for immediate processing, popTask lazily dispatches available tasks for itself and all other callers of popTask.
+// dispatchTask dispatches tasks for the callers of popTask. At least one dispatcher is required in order to use popTask.
+// The tasks are moved from InputTaskKey(k) to WaitingTaskKey(k). Once the task should be dispatched, it is moved form WaitingTaskKey(k) to ReadyTaskKey(k).
 // group is the consumer group name.
-// id is the consumer group ID.
-// k is the keys to pop from.
-// Pipeline is executed even if f returns an error.
-// Tasks are acked only if f returns without error.
-func popTask(ctx context.Context, r redis.Cmdable, group, id string, maxLen int64, f func(p redis.Pipeliner, payload string, startAt time.Time) error, k string) (err error) {
+// consumer is the consumer ID.
+// maxLen represents the maximum size of the streams used for dispatching.
+// minIdleTime is used for automatic task reclaiming. Only tasks older than minIdleTime will be redispatched from the input stream to the waiting stream.
+func dispatchTask(
+	ctx context.Context,
+	r redis.Cmdable,
+	group, consumer string,
+	maxLen int64,
+	k string,
+	blockLimit time.Duration,
+) error {
 	var (
 		readyStream   = ReadyTaskKey(k)
 		inputStream   = InputTaskKey(k)
 		waitingStream = WaitingTaskKey(k)
 	)
 	for {
-		vs, err := RunInterfaceSliceScript(ctx, r, popTaskScript, []string{readyStream, inputStream, waitingStream}, group, id, time.Now().UnixNano(), maxLen).Result()
-		if err != nil && err != redis.Nil {
+		ret, err := dispatchTaskScript.Run(
+			ctx,
+			r,
+			[]string{readyStream, inputStream, waitingStream},
+			group,
+			consumer,
+			time.Now().UnixNano(),
+			maxLen,
+		).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
 			return ConvertError(err)
 		}
-		typ, ok := vs[0].(string)
-		if !ok {
-			panic(fmt.Sprintf("invalid type of entry at index %d of result returned by Redis task pop script: %T", 0, vs[0]))
-		}
-		var fields map[string]string
-		if len(vs) > 1 {
-			fields = make(map[string]string, (len(vs)-1)/2)
-			for i := 1; i < len(vs); i += 2 {
-				k, ok := vs[i].(string)
-				if !ok {
-					panic(fmt.Sprintf("invalid type of entry at index %d of result returned by Redis task pop script: %T", i, vs[i]))
-				}
-				v, ok := vs[i+1].(string)
-				if !ok {
-					panic(fmt.Sprintf("invalid type of entry at index %d of result returned by Redis task pop script: %T", i+1, vs[i+1]))
-				}
-				fields[k] = v
-			}
-		}
 
-		switch typ {
-		case "ready":
-		case "waiting":
-			xs, err := r.XPendingExt(ctx, &redis.XPendingExtArgs{
-				Stream: readyStream,
-				Group:  group,
-				Start:  "-",
-				End:    "+",
-				Count:  1,
-			}).Result()
-			if err != nil && err != redis.Nil {
-				return ConvertError(err)
+		block := blockLimit
+		if ret != nil {
+			s, ok := ret.(string)
+			if !ok {
+				return errInvalidKeyValueType.WithAttributes("key", nextAtKey).WithCause(err)
 			}
-			if len(xs) > 0 {
-				// TODO: XCLAIM and handle (https://github.com/TheThingsNetwork/lorawan-stack/issues/44)
+			nextAt, err := parseTime(s)
+			if err != nil {
+				return errInvalidKeyValueType.WithAttributes("key", nextAtKey).WithCause(err)
 			}
-
-			var block time.Duration
-			if s, ok := fields[nextAtKey]; ok {
-				nextAt, err := parseTime(s)
-				if err != nil {
-					return errInvalidKeyValueType.WithAttributes("key", nextAtKey).WithCause(err)
-				}
-				if nextAt.IsZero() {
-					block = -1
-				} else {
-					now := time.Now()
-					if nextAt.Before(now) {
-						continue
-					} else {
-						block = nextAt.Sub(now)
-					}
-				}
-			}
-			var id string
-			if s, ok := fields[lastIDKey]; ok {
-				id = s
+			if nextAt.IsZero() {
+				block = -1
 			} else {
-				id = "0-0"
+				now := time.Now()
+				if nextAt.Before(now) {
+					continue
+				}
+				// If we have a task that we may dispatch into the future, we will block the
+				// input stream only for the duration between the current time and that future
+				// time.
+				if d := nextAt.Sub(now); block == 0 || d < block {
+					block = d
+				}
 			}
-			_, err = r.XRead(ctx, &redis.XReadArgs{
-				Streams: []string{inputStream, id},
-				Count:   1,
-				Block:   block,
-			}).Result()
-			if err != nil && err != redis.Nil {
-				return ConvertError(err)
-			}
-			continue
+		}
 
-		default:
-			panic(fmt.Sprintf("unknown result type received `%s`", typ))
+		_, err = r.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    group,
+			Consumer: consumer,
+			Streams:  []string{inputStream, ">"},
+			Count:    1,
+			Block:    block,
+		}).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return ConvertError(err)
+		}
+	}
+}
+
+// popTask calls f on the most recent task in the queue, for which timestamp is in range [0, time.Now()] or blocks until such is available or context is done.
+// group is the consumer group name.
+// consumer is the consumer group ID.
+// ReadyTaskKey(k) is the keys to pop from.
+// Pipeline is executed even if f returns an error.
+// Tasks are acked only if f returns without error.
+func popTask(
+	ctx context.Context,
+	r redis.Cmdable,
+	group, consumer string,
+	f func(p redis.Pipeliner, payload string, startAt time.Time) error,
+	k string,
+	blockLimit time.Duration,
+) (err error) {
+	readyStream := ReadyTaskKey(k)
+
+	processMessage := func(message redis.XMessage) error {
+		fields := make(map[string]string, len(message.Values))
+		for k, v := range message.Values {
+			val, ok := v.(string)
+			if !ok {
+				panic(fmt.Sprintf("invalid field type %T", v))
+			}
+			fields[k] = val
 		}
 
 		var startAt time.Time
@@ -573,21 +600,51 @@ func popTask(ctx context.Context, r redis.Cmdable, group, id string, maxLen int6
 				err = ConvertError(pErr)
 			}
 		}()
-		if err = f(p, fields["payload"], startAt); err != nil {
+
+		if err = f(p, fields[payloadKey], startAt); err != nil {
 			return err
 		}
-		p.XAck(ctx, readyStream, group, fields["id"])
-		p.XDel(ctx, readyStream, fields["id"])
+
+		p.XAck(ctx, readyStream, group, message.ID)
+		p.XDel(ctx, readyStream, message.ID)
+
 		return nil
 	}
+
+	var xs []redis.XStream
+	for len(xs) == 0 {
+		xs, err = r.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    group,
+			Consumer: consumer,
+			Streams:  []string{readyStream, ">"},
+			Count:    1,
+			Block:    blockLimit,
+		}).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			return ConvertError(err)
+		}
+	}
+
+	for _, x := range xs {
+		for _, message := range x.Messages {
+			if err := processMessage(message); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // TaskQueue is a task queue.
 type TaskQueue struct {
-	Redis     WatchCmdable
-	MaxLen    int64
-	Group, ID string
-	Key       string
+	Redis            WatchCmdable
+	MaxLen           int64
+	Group            string
+	Key              string
+	StreamBlockLimit time.Duration
+
+	consumerIDs sync.Map // map[string]struct{} of all used consumer ids
 }
 
 // Init initializes the task queue.
@@ -599,8 +656,11 @@ func (q *TaskQueue) Init(ctx context.Context) error {
 // Close closes the TaskQueue.
 func (q *TaskQueue) Close(ctx context.Context) error {
 	_, err := q.Redis.Pipelined(ctx, func(p redis.Pipeliner) error {
-		p.XGroupDelConsumer(ctx, InputTaskKey(q.Key), q.Group, q.ID)
-		p.XGroupDelConsumer(ctx, ReadyTaskKey(q.Key), q.Group, q.ID)
+		q.consumerIDs.Range(func(k, v any) bool {
+			p.XGroupDelConsumer(ctx, InputTaskKey(q.Key), q.Group, k.(string))
+			p.XGroupDelConsumer(ctx, ReadyTaskKey(q.Key), q.Group, k.(string))
+			return true
+		})
 		return nil
 	})
 	return ConvertError(err)
@@ -614,22 +674,26 @@ func (q *TaskQueue) Add(ctx context.Context, r redis.Cmdable, s string, startAt 
 	return addTask(ctx, r, q.Key, q.MaxLen, s, startAt, replace)
 }
 
-// Pop calls f on the most recent task in the queue, for which timestamp is in range [0, time.Now()],
-// if such is available, otherwise it blocks until it is or context is done.
-// Pipeline is executed even if f returns an error.
-func (q *TaskQueue) Pop(ctx context.Context, r redis.Cmdable, f func(redis.Pipeliner, string, time.Time) error) error {
+// Dispatch dispatches the tasks of the queue. It will continue to run until the context is done.
+// consumerID is used to identify the consumer and should be unique for all concurrent calls to Dispatch.
+func (q *TaskQueue) Dispatch(ctx context.Context, consumerID string, r redis.Cmdable) error {
+	q.consumerIDs.LoadOrStore(consumerID, struct{}{})
 	if r == nil {
 		r = q.Redis
 	}
-	return popTask(ctx, r, q.Group, q.ID, q.MaxLen, f, q.Key)
+	return dispatchTask(ctx, r, q.Group, consumerID, q.MaxLen, q.Key, q.StreamBlockLimit)
 }
 
-// Scripter is redis.scripter.
-type Scripter interface {
-	Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd
-	EvalSha(ctx context.Context, sha1 string, keys []string, args ...interface{}) *redis.Cmd
-	ScriptExists(ctx context.Context, hashes ...string) *redis.BoolSliceCmd
-	ScriptLoad(ctx context.Context, script string) *redis.StringCmd
+// Pop calls f on the most recent task in the queue, for which timestamp is in range [0, time.Now()],
+// if such is available, otherwise it blocks until it is or context is done.
+// Pipeline is executed even if f returns an error.
+// consumerID is used to identify the consumer and should be unique for all concurrent calls to Pop.
+func (q *TaskQueue) Pop(ctx context.Context, consumerID string, r redis.Cmdable, f func(redis.Pipeliner, string, time.Time) error) error {
+	q.consumerIDs.LoadOrStore(consumerID, struct{}{})
+	if r == nil {
+		r = q.Redis
+	}
+	return popTask(ctx, r, q.Group, consumerID, f, q.Key, q.StreamBlockLimit)
 }
 
 var deduplicateProtosScript = redis.NewScript(`local exp = ARGV[1]
@@ -637,7 +701,8 @@ local ok = redis.call('set', KEYS[1], '', 'px', exp, 'nx')
 if #ARGV > 1 then
 	table.remove(ARGV, 1)
 	redis.call('rpush', KEYS[2], unpack(ARGV))
-	redis.call('pexpire', KEYS[2], exp)
+	local ttl = redis.call('pttl', KEYS[1])
+	redis.call('pexpire', KEYS[2], ttl)
 end
 if ok then
 	return 1
@@ -664,8 +729,10 @@ func milliseconds(d time.Duration) int64 {
 }
 
 // DeduplicateProtos deduplicates protos using key k. It stores a lock at LockKey(k) and the list of collected protos at ListKey(k).
-func DeduplicateProtos(ctx context.Context, r Scripter, k string, window time.Duration, msgs ...proto.Message) (bool, error) {
-	args := make([]interface{}, 0, 1+len(msgs))
+func DeduplicateProtos(
+	ctx context.Context, r redis.Scripter, k string, window time.Duration, msgs ...proto.Message,
+) (bool, error) {
+	args := make([]any, 0, 1+len(msgs))
 	args = append(args, milliseconds(window))
 	for _, msg := range msgs {
 		s, err := MarshalProto(msg)
@@ -715,6 +782,8 @@ return redis.status_reply('OK')`)
 // LockMutex locks the value stored at k with a mutex with identifier id.
 // It stores the lock at LockKey(k) and list at ListKey(k).
 func LockMutex(ctx context.Context, r redis.Cmdable, k, id string, expiration time.Duration) error {
+	defer trace.StartRegion(ctx, "lock mutex").End()
+
 	var hasDeadline bool
 	dl, ok := ctx.Deadline()
 	if ok {
@@ -744,12 +813,12 @@ func LockMutex(ctx context.Context, r redis.Cmdable, k, id string, expiration ti
 			}
 		}
 		popRes, err := r.BLPop(ctx, timeout, listKey).Result()
-		if err != nil && err != redis.Nil {
+		if err != nil && !errors.Is(err, redis.Nil) {
 			return ConvertError(err)
 		}
 		select {
 		case <-ctx.Done():
-			if err == redis.Nil {
+			if errors.Is(err, redis.Nil) {
 				return ctx.Err()
 			}
 			// Pass the lock to next caller.
@@ -759,7 +828,7 @@ func LockMutex(ctx context.Context, r redis.Cmdable, k, id string, expiration ti
 			return ctx.Err()
 		default:
 		}
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			continue
 		}
 
@@ -775,7 +844,8 @@ func LockMutex(ctx context.Context, r redis.Cmdable, k, id string, expiration ti
 }
 
 // UnlockMutex unlocks the key k with identifier id.
-func UnlockMutex(ctx context.Context, r Scripter, k, id string, expiration time.Duration) error {
+func UnlockMutex(ctx context.Context, r redis.Scripter, k, id string, expiration time.Duration) error {
+	defer trace.StartRegion(ctx, "unlock mutex").End()
 	if err := unlockMutexScript.Run(ctx, r, []string{LockKey(k), ListKey(k)}, id, milliseconds(expiration)).Err(); err != nil {
 		return ConvertError(err)
 	}
@@ -784,7 +854,7 @@ func UnlockMutex(ctx context.Context, r Scripter, k, id string, expiration time.
 
 // InitMutex initializes the mutex scripts at r.
 // InitMutex must be called before mutex functionality is used in a transaction or pipeline.
-func InitMutex(ctx context.Context, r Scripter) error {
+func InitMutex(ctx context.Context, r redis.Scripter) error {
 	if err := lockMutexScript.Load(ctx, r).Err(); err != nil {
 		return ConvertError(err)
 	}
@@ -800,6 +870,7 @@ func InitMutex(ctx context.Context, r Scripter) error {
 // LockedWatch locks the key k with a mutex, watches key k and executes f in a transaction.
 // k is unlocked after f returns.
 func LockedWatch(ctx context.Context, r WatchCmdable, k, id string, expiration time.Duration, f func(*redis.Tx) error) error {
+	defer trace.StartRegion(ctx, "locked watch").End()
 	if err := LockMutex(ctx, r, k, id, expiration); err != nil {
 		return err
 	}
@@ -812,68 +883,6 @@ func LockedWatch(ctx context.Context, r WatchCmdable, k, id string, expiration t
 		return ConvertError(err)
 	}
 	return nil
-}
-
-// XAutoClaim provides a Lua implementation of `XAUTOCLAIM` command introduced in Redis 6.2.0.
-func XAutoClaim(ctx context.Context, r Scripter, stream, group, id string, minIdle time.Duration, start string, count int64) ([]redis.XMessage, string, error) {
-	var (
-		vs  []interface{}
-		err error
-	)
-	vs, err = RunInterfaceSliceScript(ctx, r, xAutoClaimScript, []string{stream}, group, id, minIdle.Milliseconds(), start, count).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, "", nil
-		}
-		return nil, "", ConvertError(err)
-	}
-
-	lastID, ok := vs[0].(string)
-	if !ok {
-		panic(fmt.Sprintf("invalid type of entry at index %d of result returned by Redis xautoclaim script: %T", 0, vs[0]))
-	}
-
-	xis, ok := vs[1].([]interface{})
-	if !ok {
-		panic(fmt.Sprintf("invalid type of entry at index %d of result returned by Redis xautoclaim script: %T", 1, vs[1]))
-	}
-	if len(xis) == 0 {
-		return nil, "", nil
-	}
-
-	xs := make([]redis.XMessage, 0, len(xis))
-	for i, xi := range xis {
-		xvs, ok := xi.([]interface{})
-		if !ok {
-			panic(fmt.Sprintf("invalid type of xmessage at index %d of result returned by Redis xautoclaim script: %T", i, xi))
-		}
-
-		id, ok := xvs[0].(string)
-		if !ok {
-			panic(fmt.Sprintf("invalid type of ID field of xmessage at index %d of result returned by Redis xautoclaim script: %T", i, xvs[0]))
-		}
-
-		ss, ok := xvs[1].([]interface{})
-		if !ok {
-			panic(fmt.Sprintf("invalid type of value field of xmessage at index %d of result returned by Redis xautoclaim script: %T", i, xvs[1]))
-		}
-		if n := len(ss); n%2 != 0 {
-			panic(fmt.Sprintf("invalid length of value field of xmessage at index %d of result returned by Redis xautoclaim script: %d", i, n))
-		}
-		values := make(map[string]interface{}, len(ss))
-		for j := 0; j < len(ss); j += 2 {
-			k, ok := ss[j].(string)
-			if !ok {
-				panic(fmt.Sprintf("invalid type of key field value field of xmessage at index %d of result returned by Redis xautoclaim script: %T", i, ss[0]))
-			}
-			values[k] = ss[j+1]
-		}
-		xs = append(xs, redis.XMessage{
-			ID:     id,
-			Values: values,
-		})
-	}
-	return xs, lastID, nil
 }
 
 // RangeStreams sequentially iterates over all non-acknowledged messages in streams calling f with at most count messages.
@@ -900,7 +909,14 @@ func RangeStreams(ctx context.Context, r redis.Cmdable, group, id string, count 
 
 	for _, stream := range streams {
 		for start := "-"; ; {
-			msgs, lastID, err := XAutoClaim(ctx, r, stream, group, id, minIdle, start, count)
+			msgs, lastID, err := r.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+				Stream:   stream,
+				Group:    group,
+				Consumer: id,
+				MinIdle:  minIdle,
+				Start:    start,
+				Count:    count,
+			}).Result()
 			if err != nil {
 				return err
 			}
@@ -936,7 +952,7 @@ outer:
 			Block:    -1, // do not block
 		}).Result()
 		if err != nil {
-			if err == redis.Nil {
+			if errors.Is(err, redis.Nil) {
 				return nil
 			}
 			return ConvertError(err)
@@ -976,4 +992,17 @@ outer:
 			idsArg = append(idsArg, ">")
 		}
 	}
+}
+
+// GenerateLockerID generates a unique locker ID to be used with a Redis mutex.
+func GenerateLockerID() (string, error) {
+	lockID, err := ulid.New(ulid.Now(), rand.Reader)
+	if err != nil {
+		return "", err
+	}
+	return lockID.String(), nil
+}
+
+func init() {
+	redis.SetLogger(logFunc(debugLogFunc))
 }

@@ -16,11 +16,10 @@ package session
 
 import (
 	"context"
+	"net/http"
 	"runtime/trace"
 	"time"
 
-	"github.com/gogo/protobuf/types"
-	echo "github.com/labstack/echo/v4"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
@@ -35,7 +34,7 @@ var errIncorrectPasswordOrUserID = errors.DefineInvalidArgument("no_user_id_pass
 
 // Session is the session helper.
 type Session struct {
-	Store Store
+	Store TransactionalStore
 }
 
 // Store used by the account app server.
@@ -43,6 +42,14 @@ type Store interface {
 	// UserStore and UserSessionStore are needed for user login/logout.
 	store.UserStore
 	store.UserSessionStore
+}
+
+// TransactionalStore is Store, but with a method that uses a transaction.
+type TransactionalStore interface {
+	Store
+
+	// Transact runs a transaction using the store.
+	Transact(context.Context, func(context.Context, Store) error) error
 }
 
 func (s *Session) authCookie() *cookie.Cookie {
@@ -53,10 +60,10 @@ func (s *Session) authCookie() *cookie.Cookie {
 	}
 }
 
-var errAuthCookie = errors.DefineUnauthenticated("auth_cookie", "could not get auth cookie")
+var errAuthCookie = errors.DefineUnauthenticated("auth_cookie", "get auth cookie")
 
-func (s *Session) getAuthCookie(c echo.Context) (cookie auth.CookieShape, err error) {
-	ok, err := s.authCookie().Get(c.Response(), c.Request(), &cookie)
+func (s *Session) getAuthCookie(w http.ResponseWriter, r *http.Request) (cookie auth.CookieShape, err error) {
+	ok, err := s.authCookie().Get(w, r, &cookie)
 	if err != nil {
 		return cookie, err
 	}
@@ -67,91 +74,105 @@ func (s *Session) getAuthCookie(c echo.Context) (cookie auth.CookieShape, err er
 }
 
 // UpdateAuthCookie updates the current authentication cookie.
-func (s *Session) UpdateAuthCookie(c echo.Context, update func(value *auth.CookieShape) error) error {
+func (s *Session) UpdateAuthCookie(w http.ResponseWriter, r *http.Request, update func(value *auth.CookieShape) error) error {
 	cookie := &auth.CookieShape{}
-	_, err := s.authCookie().Get(c.Response(), c.Request(), cookie)
+	_, err := s.authCookie().Get(w, r, cookie)
 	if err != nil {
 		return err
 	}
-	if err = update(cookie); err != nil {
+	if err := update(cookie); err != nil {
 		return err
 	}
-	return s.authCookie().Set(c.Response(), c.Request(), cookie)
+	return s.authCookie().Set(w, r, cookie)
 }
 
 // RemoveAuthCookie deletes the authentication cookie.
-func (s *Session) RemoveAuthCookie(c echo.Context) {
-	s.authCookie().Remove(c.Response(), c.Request())
+func (s *Session) RemoveAuthCookie(w http.ResponseWriter, r *http.Request) {
+	s.authCookie().Remove(w, r)
 }
 
-const userSessionKey = "user_session"
+type userSessionKeyType struct{}
+
+var userSessionKey userSessionKeyType
 
 var errSessionExpired = errors.DefineUnauthenticated("session_expired", "session expired")
 
 // Get retrieves the current session.
-func (s *Session) Get(c echo.Context) (*ttnpb.UserSession, error) {
-	existing := c.Get(userSessionKey)
-	if session, ok := existing.(*ttnpb.UserSession); ok {
-		return session, nil
+func (s *Session) Get(w http.ResponseWriter, r *http.Request) (*http.Request, *ttnpb.UserSession, error) {
+	ctx := r.Context()
+	if session, ok := ctx.Value(userSessionKey).(*ttnpb.UserSession); ok {
+		return r, session, nil
 	}
-	cookie, err := s.getAuthCookie(c)
+	cookie, err := s.getAuthCookie(w, r)
 	if err != nil {
-		return nil, err
+		return r, nil, err
 	}
-	session, err := s.Store.GetSession(
-		c.Request().Context(),
-		&ttnpb.UserIdentifiers{UserID: cookie.UserID},
-		cookie.SessionID,
-	)
+	var session *ttnpb.UserSession
+	err = s.Store.Transact(ctx, func(ctx context.Context, st Store) (err error) {
+		session, err = st.GetSession(
+			ctx,
+			&ttnpb.UserIdentifiers{UserId: cookie.UserID},
+			cookie.SessionID,
+		)
+		return err
+	})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			s.RemoveAuthCookie(c)
+			s.RemoveAuthCookie(w, r)
 		}
-		return nil, err
+		return r, nil, err
 	}
-	if session.ExpiresAt != nil && session.ExpiresAt.Before(time.Now()) {
-		s.RemoveAuthCookie(c)
-		return nil, errSessionExpired.New()
+	if expiresAt := ttnpb.StdTime(session.ExpiresAt); expiresAt != nil && expiresAt.Before(time.Now()) {
+		s.RemoveAuthCookie(w, r)
+		return r, nil, errSessionExpired.New()
 	}
-	c.Set(userSessionKey, session)
-	return session, nil
+	return r.WithContext(context.WithValue(ctx, userSessionKey, session)), session, nil
 }
 
-const userKey = "user"
+type userKeyType struct{}
+
+var userKey userKeyType
 
 // GetUser retrieves the user that is associated with the current session.
-func (s *Session) GetUser(c echo.Context) (*ttnpb.User, error) {
-	existing := c.Get(userKey)
-	if user, ok := existing.(*ttnpb.User); ok {
-		return user, nil
+func (s *Session) GetUser(w http.ResponseWriter, r *http.Request) (*http.Request, *ttnpb.User, error) {
+	if user, ok := r.Context().Value(userKey).(*ttnpb.User); ok {
+		return r, user, nil
 	}
-	session, err := s.Get(c)
+	r, session, err := s.Get(w, r)
 	if err != nil {
-		return nil, err
+		return r, nil, err
 	}
-	user, err := s.Store.GetUser(
-		c.Request().Context(),
-		&ttnpb.UserIdentifiers{UserID: session.UserIdentifiers.UserID},
-		nil,
-	)
+	ctx := r.Context()
+	var user *ttnpb.User
+	err = s.Store.Transact(ctx, func(ctx context.Context, st Store) (err error) {
+		user, err = st.GetUser(
+			ctx,
+			&ttnpb.UserIdentifiers{UserId: session.GetUserIds().GetUserId()},
+			nil,
+		)
+		return err
+	})
 	if err != nil {
-		return nil, err
+		return r, nil, err
 	}
-	c.Set(userKey, user)
-	return user, nil
+	return r.WithContext(context.WithValue(ctx, userKey, user)), user, nil
 }
 
 // DoLogin performs the authentication using user id and password.
 func (s *Session) DoLogin(ctx context.Context, userID, password string) error {
-	ids := &ttnpb.UserIdentifiers{UserID: userID}
+	ids := &ttnpb.UserIdentifiers{UserId: userID}
 	if err := ids.ValidateContext(ctx); err != nil {
 		return err
 	}
-	user, err := s.Store.GetUser(
-		ctx,
-		ids,
-		&types.FieldMask{Paths: []string{"password"}},
-	)
+	var user *ttnpb.User
+	err := s.Store.Transact(ctx, func(ctx context.Context, st Store) (err error) {
+		user, err = st.GetUser(
+			ctx,
+			ids,
+			[]string{"password"},
+		)
+		return err
+	})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return errIncorrectPasswordOrUserID.New()
@@ -162,7 +183,7 @@ func (s *Session) DoLogin(ctx context.Context, userID, password string) error {
 	ok, err := auth.Validate(user.Password, password)
 	region.End()
 	if err != nil || !ok {
-		events.Publish(evtUserLoginFailed.NewWithIdentifiersAndData(ctx, user.UserIdentifiers, nil))
+		events.Publish(evtUserLoginFailed.NewWithIdentifiersAndData(ctx, user.GetIds(), nil))
 		return errIncorrectPasswordOrUserID.New()
 	}
 	return nil

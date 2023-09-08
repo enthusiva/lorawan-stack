@@ -14,8 +14,7 @@ func (dst *ContactInfo) SetFields(src *ContactInfo, paths ...string) error {
 			if src != nil {
 				dst.ContactType = src.ContactType
 			} else {
-				var zero ContactType
-				dst.ContactType = zero
+				dst.ContactType = 0
 			}
 		case "contact_method":
 			if len(subs) > 0 {
@@ -24,8 +23,7 @@ func (dst *ContactInfo) SetFields(src *ContactInfo, paths ...string) error {
 			if src != nil {
 				dst.ContactMethod = src.ContactMethod
 			} else {
-				var zero ContactMethod
-				dst.ContactMethod = zero
+				dst.ContactMethod = 0
 			}
 		case "value":
 			if len(subs) > 0 {
@@ -72,10 +70,10 @@ func (dst *ContactInfoValidation) SetFields(src *ContactInfoValidation, paths ..
 				return fmt.Errorf("'id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ID = src.ID
+				dst.Id = src.Id
 			} else {
 				var zero string
-				dst.ID = zero
+				dst.Id = zero
 			}
 		case "token":
 			if len(subs) > 0 {

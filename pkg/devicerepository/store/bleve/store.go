@@ -15,6 +15,8 @@
 package bleve
 
 import (
+	"strconv"
+
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/query"
@@ -26,13 +28,16 @@ import (
 )
 
 var (
-	errCorruptedIndex = errors.DefineCorruption("corrupted_index", "corrupted index file")
+	errCorruptedIndex           = errors.DefineCorruption("corrupted_index", "corrupted index file")
+	errInvalidNumberOfProfiles  = errors.DefineCorruption("invalid_number_of_profiles", "invalid number of profiles returned")
+	errMultipleIdentifiers      = errors.DefineCorruption("multiple_identifiers", "multiple identifiers found in the request. Use either EndDeviceVersionIdentifiers or EndDeviceProfileIdentifiers")
+	errEndDeviceProfileNotFound = errors.DefineNotFound("end_device_profile_not_found", "end device profile not found for vendor ID `{vendor_id}` and vendor profile ID `{vendor_profile_id}`")
 )
 
 // retrieve returns the resulting document from the cache, if available. Otherwise,
 // it extracts it from the appropriate field of the document match result and stores
 // in the cache for future use.
-func (s *bleveStore) retrieve(hit *search.DocumentMatch, fieldName string, newValue func() interface{}) (interface{}, error) {
+func (s *bleveStore) retrieve(hit *search.DocumentMatch, fieldName string, newValue func() any) (any, error) {
 	cached, err := s.cache.Get(hit.ID)
 	if err != nil {
 		jsonString, ok := hit.Fields[fieldName].(string)
@@ -94,7 +99,7 @@ func (s *bleveStore) GetBrands(req store.GetBrandsRequest) (*store.GetBrandsResp
 
 	brands := make([]*ttnpb.EndDeviceBrand, 0, len(result.Hits))
 	for _, hit := range result.Hits {
-		brand, err := s.retrieve(hit, "BrandJSON", func() interface{} { return &ttnpb.EndDeviceBrand{} })
+		brand, err := s.retrieve(hit, "BrandJSON", func() any { return &ttnpb.EndDeviceBrand{} })
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +165,7 @@ func (s *bleveStore) GetModels(req store.GetModelsRequest) (*store.GetModelsResp
 
 	models := make([]*ttnpb.EndDeviceModel, 0, len(result.Hits))
 	for _, hit := range result.Hits {
-		model, err := s.retrieve(hit, "ModelJSON", func() interface{} { return &ttnpb.EndDeviceModel{} })
+		model, err := s.retrieve(hit, "ModelJSON", func() any { return &ttnpb.EndDeviceModel{} })
 		if err != nil {
 			return nil, err
 		}
@@ -179,23 +184,83 @@ func (s *bleveStore) GetModels(req store.GetModelsRequest) (*store.GetModelsResp
 }
 
 // GetTemplate retrieves an end device template for an end device definition.
-func (s *bleveStore) GetTemplate(ids *ttnpb.EndDeviceVersionIdentifiers) (*ttnpb.EndDeviceTemplate, error) {
-	return s.store.GetTemplate(ids)
+func (s *bleveStore) GetTemplate(req *ttnpb.GetTemplateRequest, _ *store.EndDeviceProfile) (*ttnpb.EndDeviceTemplate, error) {
+	var (
+		profile             *store.EndDeviceProfile
+		endDeviceProfileIds = req.GetEndDeviceProfileIds()
+	)
+	if endDeviceProfileIds != nil && req.VersionIds != nil {
+		return nil, errMultipleIdentifiers.New()
+	}
+	// Attempt to fetch the end device profile that matches the identifiers.
+	if endDeviceProfileIds != nil {
+		documentTypeQuery := bleve.NewTermQuery(profileDocumentType)
+		documentTypeQuery.SetField("Type")
+		queries := []query.Query{documentTypeQuery}
+		if q := endDeviceProfileIds.VendorId; q != 0 {
+			query := bleve.NewTermQuery(strconv.Itoa(int(q)))
+			query.SetField("VendorID")
+			queries = append(queries, query)
+		}
+		query := bleve.NewTermQuery(strconv.Itoa(int(endDeviceProfileIds.VendorProfileId)))
+		query.SetField("VendorProfileID")
+		queries = append(queries, query)
+
+		searchRequest := bleve.NewSearchRequest(bleve.NewConjunctionQuery(queries...))
+		searchRequest.Fields = []string{"ProfileJSON", "BrandID"}
+		result, err := s.index.Search(searchRequest)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(result.Hits) == 0 {
+			return nil, errEndDeviceProfileNotFound.WithAttributes(
+				"vendor_id", endDeviceProfileIds.VendorId,
+				"vendor_profile_id", endDeviceProfileIds.VendorProfileId)
+		}
+
+		if len(result.Hits) != 1 {
+			// There can only be one profile for a given tuple.
+			return nil, errInvalidNumberOfProfiles.New()
+		}
+
+		brandID, ok := result.Hits[0].Fields["BrandID"].(string)
+		if !ok {
+			return nil, errCorruptedIndex.New()
+		}
+		// Set the Brand ID.
+		req.VersionIds = &ttnpb.EndDeviceVersionIdentifiers{
+			BrandId: brandID,
+		}
+
+		model, err := s.retrieve(result.Hits[0], "ProfileJSON", func() any { return &store.EndDeviceProfile{} })
+		if err != nil {
+			return nil, err
+		}
+		profile = model.(*store.EndDeviceProfile)
+	}
+
+	return s.store.GetTemplate(req, profile)
 }
 
 // GetUplinkDecoder retrieves the codec for decoding uplink messages.
-func (s *bleveStore) GetUplinkDecoder(ids *ttnpb.EndDeviceVersionIdentifiers) (*ttnpb.MessagePayloadFormatter, error) {
-	return s.store.GetUplinkDecoder(ids)
+func (s *bleveStore) GetUplinkDecoder(req store.GetCodecRequest) (*ttnpb.MessagePayloadDecoder, error) {
+	return s.store.GetUplinkDecoder(req)
 }
 
 // GetDownlinkDecoder retrieves the codec for decoding downlink messages.
-func (s *bleveStore) GetDownlinkDecoder(ids *ttnpb.EndDeviceVersionIdentifiers) (*ttnpb.MessagePayloadFormatter, error) {
-	return s.store.GetDownlinkDecoder(ids)
+func (s *bleveStore) GetDownlinkDecoder(req store.GetCodecRequest) (*ttnpb.MessagePayloadDecoder, error) {
+	return s.store.GetDownlinkDecoder(req)
 }
 
 // GetDownlinkEncoder retrieves the codec for encoding downlink messages.
-func (s *bleveStore) GetDownlinkEncoder(ids *ttnpb.EndDeviceVersionIdentifiers) (*ttnpb.MessagePayloadFormatter, error) {
-	return s.store.GetDownlinkEncoder(ids)
+func (s *bleveStore) GetDownlinkEncoder(req store.GetCodecRequest) (*ttnpb.MessagePayloadEncoder, error) {
+	return s.store.GetDownlinkEncoder(req)
+}
+
+// GetEndDeviceProfiles implements store.
+func (s *bleveStore) GetEndDeviceProfiles(req store.GetEndDeviceProfilesRequest) (*store.GetEndDeviceProfilesResponse, error) {
+	return s.store.GetEndDeviceProfiles(req)
 }
 
 // Close closes the store.

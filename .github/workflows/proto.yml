@@ -1,39 +1,27 @@
 name: API
 
-on: pull_request
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/proto.yml"
+      - "**.proto"
+      - "tools/**"
 
 jobs:
   protos:
     name: Generate protos
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
     steps:
-    - name: Check out code
-      uses: actions/checkout@v2
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: '~1.16'
-    - name: Initialize Go module cache
-      uses: actions/cache@v2
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    - name: Download Go tool dependencies
-      run: |
-        cd tools
-        go mod download
-    - name: Initialize tool binary cache
-      uses: actions/cache@v2
-      with:
-        path: tools/bin
-        key: ${{ runner.os }}-tools-${{ hashFiles('tools/**') }}
-    - name: Make Mage
-      run: make tools/bin/mage
-    - name: Download protoc image
-      run: tools/bin/mage proto:image
-    - name: Generate protos
-      run: tools/bin/mage proto:clean proto:all
-    - name: Check for diff
-      run: tools/bin/mage git:diff
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Generate protos
+        run: tools/bin/mage proto:clean proto:all
+      - name: Lint protos
+        run: tools/bin/mage proto:lint
+      - name: Check for diff
+        run: tools/bin/mage git:diff

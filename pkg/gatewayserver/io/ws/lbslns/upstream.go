@@ -15,29 +15,31 @@
 package lbslns
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"math"
 	"time"
 
-	"go.thethings.network/lorawan-stack/v3/pkg/basicstation"
+	"go.thethings.network/lorawan-stack/v3/pkg/band"
 	"go.thethings.network/lorawan-stack/v3/pkg/encoding/lorawan"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws"
-	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws/util"
-	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/scheduling"
+	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws/id6"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
 	errJoinRequestMessage = errors.Define("join_request_message", "invalid join-request message received")
-	errUplinkDataFrame    = errors.Define("uplink_data_Frame", "invalid uplink data frame received")
+	errUplinkDataFrame    = errors.Define("uplink_data_frame", "invalid uplink data frame received")
 	errUplinkMessage      = errors.Define("uplink_message", "invalid uplink message received")
+	errMDHR               = errors.Define("mhdr", "invalid MHDR `{mhdr}` received")
+	errDataRate           = errors.Define("data_rate", "invalid data rate")
 )
 
 // UpInfo provides additional metadata on each upstream message.
@@ -59,12 +61,12 @@ type RadioMetaData struct {
 
 // JoinRequest is the LoRaWAN Join Request message from LoRa Basics Station protocol.
 type JoinRequest struct {
-	MHdr     uint             `json:"MHdr"`
-	JoinEUI  basicstation.EUI `json:"JoinEui"`
-	DevEUI   basicstation.EUI `json:"DevEui"`
-	DevNonce uint             `json:"DevNonce"`
-	MIC      int32            `json:"MIC"`
-	RefTime  float64          `json:"RefTime"`
+	MHdr     uint    `json:"MHdr"`
+	JoinEUI  id6.EUI `json:"JoinEui"`
+	DevEUI   id6.EUI `json:"DevEui"`
+	DevNonce uint    `json:"DevNonce"`
+	MIC      int32   `json:"MIC"`
+	RefTime  float64 `json:"RefTime"`
 	RadioMetaData
 }
 
@@ -108,13 +110,12 @@ func (updf UplinkDataFrame) MarshalJSON() ([]byte, error) {
 
 // TxConfirmation is the LoRaWAN Join Request message from the BasicStation.
 type TxConfirmation struct {
-	Diid    int64            `json:"diid"`
-	DevEUI  basicstation.EUI `json:"DevEui"`
-	RCtx    int64            `json:"rctx"`
-	XTime   int64            `json:"xtime"`
-	TxTime  float64          `json:"txtime"`
-	GpsTime int64            `json:"gpstime"`
-	RefTime float64          `json:"RefTime,omitempty"`
+	Diid    int64   `json:"diid"`
+	DevEUI  id6.EUI `json:"DevEui"`
+	RCtx    int64   `json:"rctx"`
+	XTime   int64   `json:"xtime"`
+	TxTime  float64 `json:"txtime"`
+	GPSTime int64   `json:"gpstime"`
 }
 
 // MarshalJSON implements json.Marshaler.
@@ -129,71 +130,120 @@ func (conf TxConfirmation) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// toUplinkMessage extracts fields from the Basics Station Join Request "jreq" message and converts them into an UplinkMessage for the network server.
-func (req *JoinRequest) toUplinkMessage(ids ttnpb.GatewayIdentifiers, bandID string, receivedAt time.Time) (*ttnpb.UplinkMessage, error) {
-	var up ttnpb.UplinkMessage
-	up.ReceivedAt = receivedAt
+func getInt32AsByteSlice(value int32) ([]byte, error) {
+	b := &bytes.Buffer{}
+	err := binary.Write(b, binary.LittleEndian, value)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
 
-	var parsedMHDR ttnpb.MHDR
-	if err := lorawan.UnmarshalMHDR([]byte{byte(req.MHdr)}, &parsedMHDR); err != nil {
-		return nil, errJoinRequestMessage.WithCause(err)
+// TimeSyncRequest is the time synchronization request from the BasicStation.
+type TimeSyncRequest struct {
+	TxTime float64 `json:"txtime"`
+}
+
+// MarshalJSON implements json.Marshaler.
+func (tsr TimeSyncRequest) MarshalJSON() ([]byte, error) {
+	type Alias TimeSyncRequest
+	return json.Marshal(struct {
+		Type string `json:"msgtype"`
+		Alias
+	}{
+		Type:  TypeUpstreamTimeSync,
+		Alias: Alias(tsr),
+	})
+}
+
+// Response generates a TimeSyncResponse for this request.
+func (tsr TimeSyncRequest) Response(t time.Time) TimeSyncResponse {
+	return TimeSyncResponse{
+		TxTime:  tsr.TxTime,
+		GPSTime: ws.TimeToGPSTime(t),
+		MuxTime: ws.TimeToUnixSeconds(t),
+	}
+}
+
+// TimeSyncResponse is the time synchronization response to the BasicStation.
+type TimeSyncResponse struct {
+	TxTime  float64 `json:"txtime,omitempty"`
+	XTime   int64   `json:"xtime,omitempty"`
+	GPSTime int64   `json:"gpstime"`
+	MuxTime float64 `json:"MuxTime,omitempty"`
+}
+
+// MarshalJSON implements json.Marshaler.
+func (tsr TimeSyncResponse) MarshalJSON() ([]byte, error) {
+	type Alias TimeSyncResponse
+	return json.Marshal(struct {
+		Type string `json:"msgtype"`
+		Alias
+	}{
+		Type:  TypeUpstreamTimeSync,
+		Alias: Alias(tsr),
+	})
+}
+
+// toUplinkMessage extracts fields from the Basics Station Join Request "jreq" message and converts them into an UplinkMessage for the network server.
+func (req *JoinRequest) toUplinkMessage(ids *ttnpb.GatewayIdentifiers, bandID string, receivedAt time.Time) (*ttnpb.UplinkMessage, error) {
+	var up ttnpb.UplinkMessage
+	up.ReceivedAt = timestamppb.New(receivedAt)
+
+	parsedMHDR := &ttnpb.MHDR{}
+	if err := lorawan.UnmarshalMHDR([]byte{byte(req.MHdr)}, parsedMHDR); err != nil {
+		return nil, errMDHR.WithAttributes(`mhdr`, parsedMHDR)
 	}
 
-	micBytes, err := util.GetInt32AsByteSlice(req.MIC)
+	micBytes, err := getInt32AsByteSlice(req.MIC)
 	if err != nil {
 		return nil, errJoinRequestMessage.WithCause(err)
 	}
 	up.Payload = &ttnpb.Message{
-		MHDR: parsedMHDR,
-		MIC:  micBytes,
+		MHdr: parsedMHDR,
+		Mic:  micBytes,
 		Payload: &ttnpb.Message_JoinRequestPayload{JoinRequestPayload: &ttnpb.JoinRequestPayload{
-			JoinEUI:  req.JoinEUI.EUI64,
-			DevEUI:   req.DevEUI.EUI64,
-			DevNonce: [2]byte{byte(req.DevNonce >> 8), byte(req.DevNonce)},
+			JoinEui:  req.JoinEUI.EUI64.Bytes(),
+			DevEui:   req.DevEUI.EUI64.Bytes(),
+			DevNonce: []byte{byte(req.DevNonce >> 8), byte(req.DevNonce)},
 		}},
 	}
 
-	up.RawPayload, err = lorawan.MarshalMessage(*up.Payload)
+	up.RawPayload, err = lorawan.MarshalMessage(up.Payload)
 	if err != nil {
 		return nil, errJoinRequestMessage.WithCause(err)
 	}
 
-	timestamp := uint32(req.RadioMetaData.UpInfo.XTime & 0xFFFFFFFF)
-
-	var rxTime *time.Time
-	sec, nsec := math.Modf(req.RadioMetaData.UpInfo.RxTime)
-	if sec != 0 {
-		val := time.Unix(int64(sec), int64(nsec*(1e9)))
-		rxTime = &val
+	timestamp := ws.TimestampFromXTime(req.RadioMetaData.UpInfo.XTime)
+	tm := ws.TimePtrFromUpInfo(req.UpInfo.GPSTime, req.UpInfo.RxTime)
+	gpsTime := ws.TimePtrFromGPSTime(req.UpInfo.GPSTime)
+	up.RxMetadata = []*ttnpb.RxMetadata{
+		{
+			GatewayIds:   ids,
+			Time:         ttnpb.ProtoTime(tm),
+			GpsTime:      ttnpb.ProtoTime(gpsTime),
+			Timestamp:    timestamp,
+			Rssi:         req.RadioMetaData.UpInfo.RSSI,
+			ChannelRssi:  req.RadioMetaData.UpInfo.RSSI,
+			Snr:          req.RadioMetaData.UpInfo.SNR,
+			AntennaIndex: uint32(req.RadioMetaData.UpInfo.RCtx),
+		},
 	}
 
-	rxMetadata := &ttnpb.RxMetadata{
-		GatewayIdentifiers: ids,
-		Time:               rxTime,
-		Timestamp:          timestamp,
-		RSSI:               req.RadioMetaData.UpInfo.RSSI,
-		ChannelRSSI:        req.RadioMetaData.UpInfo.RSSI,
-		SNR:                req.RadioMetaData.UpInfo.SNR,
-		AntennaIndex:       uint32(req.RadioMetaData.UpInfo.RCtx),
-	}
-	up.RxMetadata = append(up.RxMetadata, rxMetadata)
-
-	dataRate, isLora, err := util.GetDataRateFromIndex(bandID, req.RadioMetaData.DataRate)
+	phy, err := band.GetLatest(bandID)
 	if err != nil {
-		return nil, errJoinRequestMessage.WithCause(err)
+		return nil, err
+	}
+	bandDR, ok := phy.DataRates[ttnpb.DataRateIndex(req.RadioMetaData.DataRate)]
+	if !ok {
+		return nil, errDataRate.New()
 	}
 
-	var codingRate string
-	if isLora {
-		codingRate = "4/5"
-	}
-
-	up.Settings = ttnpb.TxSettings{
-		Frequency:  req.RadioMetaData.Frequency,
-		DataRate:   dataRate,
-		CodingRate: codingRate,
-		Timestamp:  timestamp,
-		Time:       rxTime,
+	up.Settings = &ttnpb.TxSettings{
+		Frequency: req.RadioMetaData.Frequency,
+		DataRate:  bandDR.Rate,
+		Timestamp: timestamp,
+		Time:      ttnpb.ProtoTime(tm),
 	}
 
 	return &up, nil
@@ -206,67 +256,67 @@ func (req *JoinRequest) FromUplinkMessage(up *ttnpb.UplinkMessage, bandID string
 	if err != nil {
 		return errUplinkMessage.New()
 	}
-	req.MHdr = (uint(payload.MHDR.GetMType()) << 5) | uint(payload.MHDR.GetMajor())
-	req.MIC = int32(binary.LittleEndian.Uint32(payload.MIC[:]))
+	req.MHdr = (uint(payload.MHdr.MType) << 5) | uint(payload.MHdr.Major)
+	req.MIC = int32(binary.LittleEndian.Uint32(payload.Mic[:]))
 	jreqPayload := payload.GetJoinRequestPayload()
 	if jreqPayload == nil {
 		return errUplinkMessage.New()
 	}
 
-	req.DevEUI = basicstation.EUI{
-		EUI64: jreqPayload.DevEUI,
+	req.DevEUI = id6.EUI{
+		EUI64: types.MustEUI64(jreqPayload.DevEui).OrZero(),
 	}
 
-	req.JoinEUI = basicstation.EUI{
-		EUI64: jreqPayload.JoinEUI,
+	req.JoinEUI = id6.EUI{
+		EUI64: types.MustEUI64(jreqPayload.JoinEui).OrZero(),
 	}
 
-	devNonce, err := jreqPayload.DevNonce.Marshal()
+	devNonce, err := types.MustDevNonce(jreqPayload.DevNonce).OrZero().Marshal()
 	if err != nil {
 		return err
 	}
 	req.DevNonce = uint(binary.BigEndian.Uint16(devNonce[:]))
 
-	dr, err := util.GetDataRateIndexFromDataRate(bandID, up.Settings.GetDataRate())
+	phy, err := band.GetLatest(bandID)
 	if err != nil {
 		return err
 	}
-
-	rxMetadata := up.RxMetadata[0]
-
-	var rxTime float64
-	if rxMetadata.Time != nil {
-		rxTime = float64(rxMetadata.Time.Unix()) + float64(rxMetadata.Time.Nanosecond())/(1e9)
+	drIdx, _, ok := phy.FindUplinkDataRate(up.Settings.GetDataRate())
+	if !ok {
+		return errDataRate.New()
 	}
 
+	rxMetadata := up.RxMetadata[0]
+	rxTime, gpsTime := ws.TimePtrToUpInfoTime(ttnpb.StdTime(rxMetadata.Time))
 	req.RadioMetaData = RadioMetaData{
-		DataRate:  dr,
+		DataRate:  int(drIdx),
 		Frequency: up.Settings.GetFrequency(),
 		UpInfo: UpInfo{
-			RCtx:   int64(rxMetadata.AntennaIndex),
-			XTime:  int64(rxMetadata.Timestamp),
-			RSSI:   rxMetadata.RSSI,
-			SNR:    rxMetadata.SNR,
-			RxTime: rxTime,
+			RCtx:    int64(rxMetadata.AntennaIndex),
+			XTime:   int64(rxMetadata.Timestamp),
+			RSSI:    rxMetadata.Rssi,
+			SNR:     rxMetadata.Snr,
+			RxTime:  rxTime,
+			GPSTime: gpsTime,
 		},
 	}
 	return nil
 }
 
 // toUplinkMessage extracts fields from the LoRa Basics Station Uplink Data Frame "updf" message and converts them into an UplinkMessage for the network server.
-func (updf *UplinkDataFrame) toUplinkMessage(ids ttnpb.GatewayIdentifiers, bandID string, receivedAt time.Time) (*ttnpb.UplinkMessage, error) {
+func (updf *UplinkDataFrame) toUplinkMessage(ids *ttnpb.GatewayIdentifiers, bandID string, receivedAt time.Time) (*ttnpb.UplinkMessage, error) {
 	var up ttnpb.UplinkMessage
-	up.ReceivedAt = receivedAt
+	up.ReceivedAt = timestamppb.New(receivedAt)
 
-	var parsedMHDR ttnpb.MHDR
-	if err := lorawan.UnmarshalMHDR([]byte{byte(updf.MHdr)}, &parsedMHDR); err != nil {
+	parsedMHDR := &ttnpb.MHDR{}
+	if err := lorawan.UnmarshalMHDR([]byte{byte(updf.MHdr)}, parsedMHDR); err != nil {
 		return nil, errUplinkDataFrame.WithCause(err)
 	}
 	if parsedMHDR.MType != ttnpb.MType_UNCONFIRMED_UP && parsedMHDR.MType != ttnpb.MType_CONFIRMED_UP {
-		return nil, errUplinkDataFrame.New()
+		return nil, errMDHR.WithAttributes(`mhdr`, parsedMHDR)
 	}
 
-	micBytes, err := util.GetInt32AsByteSlice(updf.MIC)
+	micBytes, err := getInt32AsByteSlice(updf.MIC)
 	if err != nil {
 		return nil, errUplinkDataFrame.WithCause(err)
 	}
@@ -281,8 +331,8 @@ func (updf *UplinkDataFrame) toUplinkMessage(ids ttnpb.GatewayIdentifiers, bandI
 	var devAddr types.DevAddr
 	devAddr.UnmarshalNumber(uint32(updf.DevAddr))
 
-	var fctrl ttnpb.FCtrl
-	if err := lorawan.UnmarshalFCtrl([]byte{byte(updf.FCtrl)}, &fctrl, true); err != nil {
+	fctrl := &ttnpb.FCtrl{}
+	if err := lorawan.UnmarshalFCtrl([]byte{byte(updf.FCtrl)}, fctrl, true); err != nil {
 		return nil, errUplinkDataFrame.WithCause(err)
 	}
 
@@ -297,13 +347,13 @@ func (updf *UplinkDataFrame) toUplinkMessage(ids ttnpb.GatewayIdentifiers, bandI
 	}
 
 	up.Payload = &ttnpb.Message{
-		MHDR: parsedMHDR,
-		MIC:  micBytes,
-		Payload: &ttnpb.Message_MACPayload{MACPayload: &ttnpb.MACPayload{
+		MHdr: parsedMHDR,
+		Mic:  micBytes,
+		Payload: &ttnpb.Message_MacPayload{MacPayload: &ttnpb.MACPayload{
 			FPort:      fPort,
-			FRMPayload: decFRMPayload,
-			FHDR: ttnpb.FHDR{
-				DevAddr: devAddr,
+			FrmPayload: decFRMPayload,
+			FHdr: &ttnpb.FHDR{
+				DevAddr: devAddr.Bytes(),
 				FCtrl:   fctrl,
 				FCnt:    uint32(updf.FCnt),
 				FOpts:   decFOpts,
@@ -311,49 +361,60 @@ func (updf *UplinkDataFrame) toUplinkMessage(ids ttnpb.GatewayIdentifiers, bandI
 		}},
 	}
 
-	up.RawPayload, err = lorawan.MarshalMessage(*up.Payload)
+	up.RawPayload, err = lorawan.MarshalMessage(up.Payload)
 	if err != nil {
 		return nil, errUplinkDataFrame.WithCause(err)
 	}
 
-	timestamp := uint32(updf.RadioMetaData.UpInfo.XTime & 0xFFFFFFFF)
-
-	var rxTime *time.Time
-	sec, nsec := math.Modf(updf.RadioMetaData.UpInfo.RxTime)
-	if sec != 0 {
-		val := time.Unix(int64(sec), int64(nsec*(1e9)))
-		rxTime = &val
+	timestamp := ws.TimestampFromXTime(updf.RadioMetaData.UpInfo.XTime)
+	gpsTime := ws.TimePtrFromGPSTime(updf.UpInfo.GPSTime)
+	tm := ws.TimePtrFromUpInfo(updf.UpInfo.GPSTime, updf.UpInfo.RxTime)
+	up.RxMetadata = []*ttnpb.RxMetadata{
+		{
+			GatewayIds:   ids,
+			Time:         ttnpb.ProtoTime(tm),
+			GpsTime:      ttnpb.ProtoTime(gpsTime),
+			Timestamp:    timestamp,
+			Rssi:         updf.RadioMetaData.UpInfo.RSSI,
+			ChannelRssi:  updf.RadioMetaData.UpInfo.RSSI,
+			Snr:          updf.RadioMetaData.UpInfo.SNR,
+			AntennaIndex: uint32(updf.RadioMetaData.UpInfo.RCtx),
+		},
 	}
 
-	rxMetadata := &ttnpb.RxMetadata{
-		GatewayIdentifiers: ids,
-		Time:               rxTime,
-		Timestamp:          timestamp,
-		RSSI:               updf.RadioMetaData.UpInfo.RSSI,
-		ChannelRSSI:        updf.RadioMetaData.UpInfo.RSSI,
-		SNR:                updf.RadioMetaData.UpInfo.SNR,
-		AntennaIndex:       uint32(updf.RadioMetaData.UpInfo.RCtx),
-	}
-	up.RxMetadata = append(up.RxMetadata, rxMetadata)
-
-	dataRate, isLora, err := util.GetDataRateFromIndex(bandID, updf.RadioMetaData.DataRate)
+	phy, err := band.GetLatest(bandID)
 	if err != nil {
-		return nil, errUplinkDataFrame.WithCause(err)
+		return nil, err
+	}
+	bandDR, ok := phy.DataRates[ttnpb.DataRateIndex(updf.RadioMetaData.DataRate)]
+	if !ok {
+		return nil, errDataRate.New()
 	}
 
-	var codingRate string
-	if isLora {
-		codingRate = "4/5"
-	}
-
-	up.Settings = ttnpb.TxSettings{
-		Frequency:  updf.RadioMetaData.Frequency,
-		DataRate:   dataRate,
-		CodingRate: codingRate,
-		Timestamp:  timestamp,
-		Time:       rxTime,
+	up.Settings = &ttnpb.TxSettings{
+		Frequency: updf.RadioMetaData.Frequency,
+		DataRate:  bandDR.Rate,
+		Timestamp: timestamp,
+		Time:      ttnpb.ProtoTime(tm),
 	}
 	return &up, nil
+}
+
+func getFCtrlAsUint(fCtrl *ttnpb.FCtrl) uint {
+	var ret uint
+	if fCtrl.GetAdr() {
+		ret = ret | 0x80
+	}
+	if fCtrl.GetAdrAckReq() {
+		ret = ret | 0x40
+	}
+	if fCtrl.GetAck() {
+		ret = ret | 0x20
+	}
+	if fCtrl.GetFPending() || fCtrl.GetClassB() {
+		ret = ret | 0x10
+	}
+	return ret
 }
 
 // FromUplinkMessage extracts fields from ttnpb.UplinkMessage and creates the LoRa Basics Station UplinkDataFrame.
@@ -363,44 +424,45 @@ func (updf *UplinkDataFrame) FromUplinkMessage(up *ttnpb.UplinkMessage, bandID s
 	if err != nil {
 		return errUplinkMessage.New()
 	}
-	updf.MHdr = (uint(payload.MHDR.GetMType()) << 5) | uint(payload.MHDR.GetMajor())
+	updf.MHdr = (uint(payload.MHdr.MType) << 5) | uint(payload.MHdr.Major)
 
-	macPayload := payload.GetMACPayload()
+	macPayload := payload.GetMacPayload()
 	if macPayload == nil {
 		return errUplinkMessage.New()
 	}
 
 	updf.FPort = int(macPayload.GetFPort())
 
-	updf.DevAddr = int32(macPayload.DevAddr.MarshalNumber())
-	updf.FOpts = hex.EncodeToString(macPayload.GetFOpts())
+	updf.DevAddr = int32(types.MustDevAddr(macPayload.FHdr.DevAddr).OrZero().MarshalNumber())
+	updf.FOpts = hex.EncodeToString(macPayload.FHdr.FOpts)
 
-	updf.FCtrl = util.GetFCtrlAsUint(macPayload.FCtrl)
-	updf.FCnt = uint(macPayload.GetFCnt())
-	updf.FRMPayload = hex.EncodeToString(macPayload.GetFRMPayload())
-	updf.MIC = int32(binary.LittleEndian.Uint32(payload.MIC[:]))
+	updf.FCtrl = getFCtrlAsUint(macPayload.FHdr.FCtrl)
+	updf.FCnt = uint(macPayload.FHdr.FCnt)
+	updf.FRMPayload = hex.EncodeToString(macPayload.GetFrmPayload())
+	updf.MIC = int32(binary.LittleEndian.Uint32(payload.Mic[:]))
 
-	dr, err := util.GetDataRateIndexFromDataRate(bandID, up.Settings.GetDataRate())
+	phy, err := band.GetLatest(bandID)
 	if err != nil {
 		return err
 	}
-
-	rxMetadata := up.RxMetadata[0]
-
-	var rxTime float64
-	if rxMetadata.Time != nil {
-		rxTime = float64(rxMetadata.Time.Unix()) + float64(rxMetadata.Time.Nanosecond())/(1e9)
+	drIdx, _, ok := phy.FindUplinkDataRate(up.Settings.GetDataRate())
+	if !ok {
+		return errDataRate.New()
 	}
 
+	rxMetadata := up.RxMetadata[0]
+	rxTime, gpsTime := ws.TimePtrToUpInfoTime(ttnpb.StdTime(rxMetadata.Time))
+
 	updf.RadioMetaData = RadioMetaData{
-		DataRate:  dr,
+		DataRate:  int(drIdx),
 		Frequency: up.Settings.GetFrequency(),
 		UpInfo: UpInfo{
-			RCtx:   int64(rxMetadata.AntennaIndex),
-			XTime:  int64(rxMetadata.Timestamp),
-			RSSI:   rxMetadata.RSSI,
-			SNR:    rxMetadata.SNR,
-			RxTime: rxTime,
+			RCtx:    int64(rxMetadata.AntennaIndex),
+			XTime:   int64(rxMetadata.Timestamp),
+			RSSI:    rxMetadata.Rssi,
+			SNR:     rxMetadata.Snr,
+			RxTime:  rxTime,
+			GPSTime: gpsTime,
 		},
 	}
 	return nil
@@ -411,7 +473,7 @@ func (conf TxConfirmation) ToTxAck(ctx context.Context, tokens io.DownlinkTokens
 	var txAck ttnpb.TxAcknowledgment
 	if msg, _, ok := tokens.Get(uint16(conf.Diid), receivedAt); ok && msg != nil {
 		txAck.DownlinkMessage = msg
-		txAck.CorrelationIDs = msg.CorrelationIDs
+		txAck.CorrelationIds = msg.CorrelationIds
 		txAck.Result = ttnpb.TxAcknowledgment_SUCCESS
 	} else {
 		logger := log.FromContext(ctx)
@@ -421,7 +483,7 @@ func (conf TxConfirmation) ToTxAck(ctx context.Context, tokens io.DownlinkTokens
 }
 
 // HandleUp implements Formatter.
-func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids ttnpb.GatewayIdentifiers, conn *io.Connection, receivedAt time.Time) ([]byte, error) {
+func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids *ttnpb.GatewayIdentifiers, conn *io.Connection, receivedAt time.Time) ([]byte, error) {
 	logger := log.FromContext(ctx)
 	typ, err := Type(raw)
 	if err != nil {
@@ -432,27 +494,62 @@ func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids ttnpb.GatewayIden
 		"upstream_type", typ,
 	))
 
-	recordTime := func(recordRTT bool, refTime float64, xTime int64, server time.Time) {
-		if recordRTT {
-			conn.RecordRTT(server.Sub(getTimeFromFloat64(refTime)), server)
+	recordRTT := func(refTimeUnix float64) {
+		if refTimeUnix == 0.0 {
+			return
 		}
-		conn.SyncWithGatewayConcentrator(
-			// The concentrator timestamp is the 32 LSB.
-			uint32(xTime&0xFFFFFFFF),
-			server,
-			// The Basic Station epoch is the 48 LSB.
-			scheduling.ConcentratorTime(time.Duration(xTime&0xFFFFFFFFFF)*time.Microsecond),
-		)
+		refTime := ws.TimeFromUnixSeconds(refTimeUnix)
+		delta := receivedAt.Sub(refTime)
+		logger := logger.WithFields(log.Fields(
+			"delta", delta,
+			"ref_time_unix", refTimeUnix,
+			"ref_time", refTime,
+			"received_at", receivedAt,
+		))
+		switch {
+		case delta <= 0:
+			logger.Warn("Gateway reported RefTime in the past. Skip RTT measurement")
+		case delta > f.maxRoundTripDelay:
+			logger.Warn("Gateway reported RefTime too far into the future. Skip RTT measurement")
+		default:
+			conn.RecordRTT(delta, receivedAt)
+		}
+	}
+	syncClock := func(xTime int64, gpsTime int64, onlyWithGPS bool) *io.FrontendClockSynchronization {
+		if onlyWithGPS && gpsTime == 0 {
+			return nil
+		}
+		return &io.FrontendClockSynchronization{
+			Timestamp:  ws.TimestampFromXTime(xTime),
+			ServerTime: receivedAt,
+			// RxTime is an undocumented field with unspecified precision.
+			// Using 0.0 for RxTime here means that the GatewayTime is nil and is not used for syncing the gateway clock.
+			GatewayTime:      ws.TimePtrFromUpInfo(gpsTime, 0.0),
+			ConcentratorTime: ws.ConcentratorTimeFromXTime(xTime),
+		}
+	}
+	recordTime := func(refTimeUnix float64, xTime int64, gpsTime int64) *io.FrontendClockSynchronization {
+		recordRTT(refTimeUnix)
+		return syncClock(xTime, gpsTime, false)
 	}
 
 	switch typ {
 	case TypeUpstreamVersion:
-		ctx, msg, stat, err := f.GetRouterConfig(ctx, raw, conn.BandID(), conn.FrequencyPlans(), receivedAt)
-		logger = log.FromContext(ctx)
+		var antennaGain int
+		antennas := conn.Gateway().Antennas
+		if len(antennas) != 0 && antennas[0] != nil {
+			// TODO: Support downlink path to multiple antennas (https://github.com/TheThingsNetwork/lorawan-stack/issues/48).
+			// Need to set different gain value to each `SX1301_conf` object as per https://doc.sm.tc/station/gw_v1.5.html#multi-board-sample-configuration.
+			// Currently we support downlink to only one antenna so the gain of the first antenna is applied to all (though the latter ones are not used).
+			// FPs and Antennas need to be synchronized. See https://github.com/TheThingsNetwork/lorawan-stack/issues/48#issuecomment-983412639.
+			antennaGain = int(antennas[0].Gain)
+		}
+		ctx, msg, stat, err := f.GetRouterConfig(ctx, raw, conn.BandID(), conn.FrequencyPlans(), antennaGain, receivedAt)
 		if err != nil {
 			logger.WithError(err).Warn("Failed to generate router configuration")
 			return nil, err
 		}
+		logger = log.FromContext(ctx)
 		if err := conn.HandleStatus(stat); err != nil {
 			logger.WithError(err).Warn("Failed to handle status message")
 			return nil, err
@@ -474,17 +571,11 @@ func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids ttnpb.GatewayIden
 			logger.WithError(err).Warn("Failed to parse join request")
 			return nil, err
 		}
-		if err := conn.HandleUp(up); err != nil {
+		ws.UpdateSessionID(ctx, ws.SessionIDFromXTime(jreq.UpInfo.XTime))
+		ct := recordTime(jreq.RefTime, jreq.UpInfo.XTime, jreq.UpInfo.GPSTime)
+		if err := conn.HandleUp(up, ct); err != nil {
 			logger.WithError(err).Warn("Failed to handle upstream message")
-			return nil, err
 		}
-		session := ws.SessionFromContext(ctx)
-		session.DataMu.Lock()
-		session.Data = State{
-			ID: int32(jreq.UpInfo.XTime >> 48),
-		}
-		session.DataMu.Unlock()
-		recordTime(false, jreq.RefTime, jreq.UpInfo.XTime, receivedAt)
 
 	case TypeUpstreamUplinkDataFrame:
 		var updf UplinkDataFrame
@@ -501,17 +592,11 @@ func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids ttnpb.GatewayIden
 			logger.WithError(err).Warn("Failed to parse uplink message")
 			return nil, err
 		}
-		if err := conn.HandleUp(up); err != nil {
+		ws.UpdateSessionID(ctx, ws.SessionIDFromXTime(updf.UpInfo.XTime))
+		ct := recordTime(updf.RefTime, updf.UpInfo.XTime, updf.UpInfo.GPSTime)
+		if err := conn.HandleUp(up, ct); err != nil {
 			logger.WithError(err).Warn("Failed to handle upstream message")
-			return nil, err
 		}
-		session := ws.SessionFromContext(ctx)
-		session.DataMu.Lock()
-		session.Data = State{
-			ID: int32(updf.UpInfo.XTime >> 48),
-		}
-		session.DataMu.Unlock()
-		recordTime(false, updf.RefTime, updf.UpInfo.XTime, receivedAt)
 
 	case TypeUpstreamTxConfirmation:
 		var txConf TxConfirmation
@@ -526,22 +611,25 @@ func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids ttnpb.GatewayIden
 			logger.WithError(err).Warn("Failed to handle tx ack message")
 			return nil, err
 		}
-		session := ws.SessionFromContext(ctx)
-		session.DataMu.Lock()
-		session.Data = State{
-			ID: int32(txConf.XTime >> 48),
-		}
-		session.DataMu.Unlock()
-		recordRTT := true
-		refTime := getTimeFromFloat64(txConf.RefTime)
-		delta := receivedAt.Sub(refTime)
-		if delta > f.maxRoundTripDelay {
-			logger.WithField("delta", delta).Warn("Gateway reported reftime greater than the valid maximum. Skip RTT measurement")
-			recordRTT = false
-		}
-		recordTime(recordRTT, txConf.RefTime, txConf.XTime, receivedAt)
+		ws.UpdateSessionID(ctx, ws.SessionIDFromXTime(txConf.XTime))
+		// Transmission confirmation messages do not contain a RefTime, and cannot be used for
+		// RTT computations. The GPS timestamp is present only if the downlink is a class
+		// B downlink. We allow clock synchronization to occur only if GPSTime is present.
+		// References https://github.com/lorabasics/basicstation/issues/134.
+		syncClock(txConf.XTime, txConf.GPSTime, true)
 
-	case TypeUpstreamProprietaryDataFrame, TypeUpstreamRemoteShell, TypeUpstreamTimeSync:
+	case TypeUpstreamTimeSync:
+		// If the gateway sends a `timesync` request, it means that it has access to a PPS
+		// source. As such, there is no point in doing time transfers with this particular
+		// gateway.
+		ws.UpdateSessionTimeSync(ctx, false)
+		var req TimeSyncRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return nil, err
+		}
+		return req.Response(receivedAt).MarshalJSON()
+
+	case TypeUpstreamProprietaryDataFrame, TypeUpstreamRemoteShell:
 		logger.WithField("message_type", typ).Debug("Message type not implemented")
 
 	default:
@@ -549,9 +637,4 @@ func (f *lbsLNS) HandleUp(ctx context.Context, raw []byte, ids ttnpb.GatewayIden
 
 	}
 	return nil, nil
-}
-
-func getTimeFromFloat64(timeInFloat float64) time.Time {
-	sec, nsec := math.Modf(timeInFloat)
-	return time.Unix(int64(sec), int64(nsec*1e9))
 }

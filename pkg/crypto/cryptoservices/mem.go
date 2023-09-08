@@ -19,49 +19,72 @@ import (
 
 	"go.thethings.network/lorawan-stack/v3/pkg/crypto"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/specification/macspec"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 )
 
+// GetKeysFunc returns the root keys for the given end device.
+type GetKeysFunc func(ctx context.Context, dev *ttnpb.EndDevice) (nwkKey, appKey *types.AES128Key, err error)
+
 type mem struct {
-	nwkKey,
-	appKey *types.AES128Key
+	getKeys GetKeysFunc
 }
 
-// NewMemory returns a network and application service using the given root keys and key vault.
+// NewMemory returns a network and application service using the given fixed root keys,
+// performing cryptograhpic operations in memory.
 func NewMemory(nwkKey, appKey *types.AES128Key) NetworkApplication {
 	return &mem{
-		nwkKey: nwkKey,
-		appKey: appKey,
+		getKeys: func(ctx context.Context, dev *ttnpb.EndDevice) (*types.AES128Key, *types.AES128Key, error) {
+			return nwkKey, appKey, nil
+		},
 	}
 }
 
-var errNoNwkKey = errors.DefineCorruption("no_nwk_key", "no NwkKey specified")
-
-func (d *mem) getNwkKey(version ttnpb.MACVersion) (*types.AES128Key, error) {
-	switch {
-	case version.Compare(ttnpb.MAC_V1_1) >= 0:
-		if d.nwkKey == nil {
-			return nil, errNoNwkKey.New()
-		}
-		return d.nwkKey, nil
-	default:
-		if d.appKey == nil {
-			return nil, errNoAppKey.New()
-		}
-		return d.appKey, nil
-	}
+// NewPerDevice returns a network and application service using per-device root keys,
+// performing cryptograhpic operations in memory.
+func NewPerDevice(getKeys GetKeysFunc) NetworkApplication {
+	return &mem{getKeys: getKeys}
 }
 
-func (d *mem) JoinRequestMIC(ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, payload []byte) (res [4]byte, err error) {
-	key, err := d.getNwkKey(version)
+var (
+	errNoNwkKey = errors.DefineCorruption("no_nwk_key", "no NwkKey specified")
+	errNoAppKey = errors.DefineCorruption("no_app_key", "no AppKey specified")
+)
+
+func (d *mem) nwkKey(ctx context.Context, dev *ttnpb.EndDevice) (types.AES128Key, error) {
+	// It is assumed that the underlying key getter provides the fallback to AppKey if applicable
+	// (e.g. for 1.0.x devices). If the key getter returns no NwkKey, an error is returned here.
+	nwkKey, _, err := d.getKeys(ctx, dev)
 	if err != nil {
-		return
+		return types.AES128Key{}, err
 	}
-	if key == nil {
-		return [4]byte{}, errNoNwkKey.New()
+	if nwkKey == nil {
+		return types.AES128Key{}, errNoNwkKey.New()
 	}
-	return crypto.ComputeJoinRequestMIC(*key, payload)
+	return *nwkKey, nil
+}
+
+func (d *mem) appKey(ctx context.Context, dev *ttnpb.EndDevice) (types.AES128Key, error) {
+	_, appKey, err := d.getKeys(ctx, dev)
+	if err != nil {
+		return types.AES128Key{}, err
+	}
+	if appKey == nil {
+		return types.AES128Key{}, errNoAppKey.New()
+	}
+	return *appKey, nil
+}
+
+// JoinRequestMIC implements NetworkApplication.
+func (d *mem) JoinRequestMIC(
+	ctx context.Context, dev *ttnpb.EndDevice, _ ttnpb.MACVersion, payload []byte,
+) (res [4]byte, err error) {
+	nwkKey, err := d.nwkKey(ctx, dev)
+	if err != nil {
+		return [4]byte{}, err
+	}
+	return crypto.ComputeJoinRequestMIC(nwkKey, payload)
 }
 
 var (
@@ -69,116 +92,141 @@ var (
 	errNoJoinEUI = errors.DefineCorruption("no_join_eui", "no JoinEUI specified")
 )
 
-func (d *mem) JoinAcceptMIC(ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, joinReqType byte, dn types.DevNonce, payload []byte) ([4]byte, error) {
-	if dev.JoinEUI == nil {
+// JoinAcceptMIC implements NetworkApplication.
+func (d *mem) JoinAcceptMIC(
+	ctx context.Context,
+	dev *ttnpb.EndDevice,
+	version ttnpb.MACVersion,
+	joinReqType byte,
+	dn types.DevNonce,
+	payload []byte,
+) ([4]byte, error) {
+	if dev.Ids == nil || len(dev.Ids.JoinEui) == 0 {
 		return [4]byte{}, errNoJoinEUI.New()
 	}
-	if dev.DevEUI == nil || dev.DevEUI.IsZero() {
+	if types.MustEUI64(dev.Ids.DevEui).OrZero().IsZero() {
 		return [4]byte{}, errNoDevEUI.New()
 	}
-	key, err := d.getNwkKey(version)
+	nwkKey, err := d.nwkKey(ctx, dev)
 	if err != nil {
 		return [4]byte{}, err
 	}
-	if key == nil {
-		return [4]byte{}, errNoNwkKey.New()
-	}
 	switch {
-	case version.Compare(ttnpb.MAC_V1_1) >= 0:
-		jsIntKey := crypto.DeriveJSIntKey(*key, *dev.DevEUI)
-		return crypto.ComputeJoinAcceptMIC(jsIntKey, joinReqType, *dev.JoinEUI, dn, payload)
+	case macspec.UseNwkKey(version):
+		jsIntKey := crypto.DeriveJSIntKey(nwkKey, types.MustEUI64(dev.Ids.DevEui).OrZero())
+		return crypto.ComputeJoinAcceptMIC(jsIntKey, joinReqType, types.MustEUI64(dev.Ids.JoinEui).OrZero(), dn, payload)
 	default:
-		return crypto.ComputeLegacyJoinAcceptMIC(*key, payload)
+		return crypto.ComputeLegacyJoinAcceptMIC(nwkKey, payload)
 	}
 }
 
-func (d *mem) EncryptJoinAccept(ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, payload []byte) ([]byte, error) {
-	key, err := d.getNwkKey(version)
+// EncryptJoinAccept implements NetworkApplication.
+func (d *mem) EncryptJoinAccept(
+	ctx context.Context, dev *ttnpb.EndDevice, _ ttnpb.MACVersion, payload []byte,
+) ([]byte, error) {
+	nwkKey, err := d.nwkKey(ctx, dev)
 	if err != nil {
 		return nil, err
 	}
-	if key == nil {
-		return nil, errNoNwkKey.New()
-	}
-	return crypto.EncryptJoinAccept(*key, payload)
+	return crypto.EncryptJoinAccept(nwkKey, payload)
 }
 
-func (d *mem) EncryptRejoinAccept(ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, payload []byte) ([]byte, error) {
-	if version.Compare(ttnpb.MAC_V1_1) < 0 {
+// EncryptRejoinAccept implements NetworkApplication.
+func (d *mem) EncryptRejoinAccept(
+	ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, payload []byte,
+) ([]byte, error) {
+	if !macspec.UseNwkKey(version) {
 		panic("This statement is unreachable. Please version check.")
 	}
-	if dev.JoinEUI == nil {
+	if dev.Ids == nil || len(dev.Ids.JoinEui) == 0 {
 		return nil, errNoJoinEUI.New()
 	}
-	if dev.DevEUI == nil || dev.DevEUI.IsZero() {
+	if types.MustEUI64(dev.Ids.DevEui).OrZero().IsZero() {
 		return nil, errNoDevEUI.New()
 	}
-	if d.nwkKey == nil {
-		return nil, errNoNwkKey.New()
+	nwkKey, err := d.nwkKey(ctx, dev)
+	if err != nil {
+		return nil, err
 	}
-	jsEncKey := crypto.DeriveJSEncKey(*d.nwkKey, *dev.DevEUI)
+	jsEncKey := crypto.DeriveJSEncKey(nwkKey, types.MustEUI64(dev.Ids.DevEui).OrZero())
 	return crypto.EncryptJoinAccept(jsEncKey, payload)
 }
 
-func (d *mem) DeriveNwkSKeys(ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, jn types.JoinNonce, dn types.DevNonce, nid types.NetID) (NwkSKeys, error) {
-	if dev.JoinEUI == nil {
+// DeriveNwkSKeys implements NetworkApplication.
+func (d *mem) DeriveNwkSKeys(
+	ctx context.Context,
+	dev *ttnpb.EndDevice,
+	version ttnpb.MACVersion,
+	jn types.JoinNonce,
+	dn types.DevNonce,
+	nid types.NetID,
+) (NwkSKeys, error) {
+	if dev.Ids == nil || len(dev.Ids.JoinEui) == 0 {
 		return NwkSKeys{}, errNoJoinEUI.New()
 	}
-	if dev.DevEUI == nil || dev.DevEUI.IsZero() {
+	if types.MustEUI64(dev.Ids.DevEui).OrZero().IsZero() {
 		return NwkSKeys{}, errNoDevEUI.New()
 	}
+	nwkKey, err := d.nwkKey(ctx, dev)
+	if err != nil {
+		return NwkSKeys{}, err
+	}
 	switch {
-	case version.Compare(ttnpb.MAC_V1_1) >= 0:
-		if d.nwkKey == nil {
-			return NwkSKeys{}, errNoNwkKey.New()
-		}
+	case macspec.UseNwkKey(version):
 		return NwkSKeys{
-			FNwkSIntKey: crypto.DeriveFNwkSIntKey(*d.nwkKey, jn, *dev.JoinEUI, dn),
-			SNwkSIntKey: crypto.DeriveSNwkSIntKey(*d.nwkKey, jn, *dev.JoinEUI, dn),
-			NwkSEncKey:  crypto.DeriveNwkSEncKey(*d.nwkKey, jn, *dev.JoinEUI, dn),
+			FNwkSIntKey: crypto.DeriveFNwkSIntKey(nwkKey, jn, types.MustEUI64(dev.Ids.JoinEui).OrZero(), dn),
+			SNwkSIntKey: crypto.DeriveSNwkSIntKey(nwkKey, jn, types.MustEUI64(dev.Ids.JoinEui).OrZero(), dn),
+			NwkSEncKey:  crypto.DeriveNwkSEncKey(nwkKey, jn, types.MustEUI64(dev.Ids.JoinEui).OrZero(), dn),
 		}, nil
-
 	default:
-		if d.appKey == nil {
-			return NwkSKeys{}, errNoAppKey.New()
-		}
 		return NwkSKeys{
-			FNwkSIntKey: crypto.DeriveLegacyNwkSKey(*d.appKey, jn, nid, dn),
+			FNwkSIntKey: crypto.DeriveLegacyNwkSKey(nwkKey, jn, nid, dn),
 		}, nil
 	}
 }
 
+// GetNwkKey implements NetworkApplication.
 func (d *mem) GetNwkKey(ctx context.Context, dev *ttnpb.EndDevice) (*types.AES128Key, error) {
-	if d.nwkKey == nil {
-		return nil, errNoNwkKey.New()
+	nwkKey, err := d.nwkKey(ctx, dev)
+	if err != nil {
+		return nil, err
 	}
-	return d.nwkKey, nil
+	return &nwkKey, nil
 }
 
-var errNoAppKey = errors.DefineCorruption("no_app_key", "no AppKey specified")
-
-func (d *mem) DeriveAppSKey(ctx context.Context, dev *ttnpb.EndDevice, version ttnpb.MACVersion, jn types.JoinNonce, dn types.DevNonce, nid types.NetID) (types.AES128Key, error) {
-	if dev.JoinEUI == nil {
+// DeriveAppSKey implements NetworkApplication.
+func (d *mem) DeriveAppSKey(
+	ctx context.Context,
+	dev *ttnpb.EndDevice,
+	version ttnpb.MACVersion,
+	jn types.JoinNonce,
+	dn types.DevNonce,
+	nid types.NetID,
+) (types.AES128Key, error) {
+	if dev.Ids == nil || len(dev.Ids.JoinEui) == 0 {
 		return types.AES128Key{}, errNoJoinEUI.New()
 	}
-	if dev.DevEUI == nil || dev.DevEUI.IsZero() {
+	if types.MustEUI64(dev.Ids.DevEui).OrZero().IsZero() {
 		return types.AES128Key{}, errNoDevEUI.New()
 	}
-	if d.appKey == nil {
-		return types.AES128Key{}, errNoAppKey.New()
+	appKey, err := d.appKey(ctx, dev)
+	if err != nil {
+		return types.AES128Key{}, err
 	}
 
 	switch {
-	case version.Compare(ttnpb.MAC_V1_1) >= 0:
-		return crypto.DeriveAppSKey(*d.appKey, jn, *dev.JoinEUI, dn), nil
+	case macspec.UseNwkKey(version):
+		return crypto.DeriveAppSKey(appKey, jn, types.MustEUI64(dev.Ids.JoinEui).OrZero(), dn), nil
 	default:
-		return crypto.DeriveLegacyAppSKey(*d.appKey, jn, nid, dn), nil
+		return crypto.DeriveLegacyAppSKey(appKey, jn, nid, dn), nil
 	}
 }
 
+// GetAppKey implements NetworkApplication.
 func (d *mem) GetAppKey(ctx context.Context, dev *ttnpb.EndDevice) (*types.AES128Key, error) {
-	if d.appKey == nil {
-		return nil, errNoAppKey.New()
+	appKey, err := d.appKey(ctx, dev)
+	if err != nil {
+		return nil, err
 	}
-	return d.appKey, nil
+	return &appKey, nil
 }

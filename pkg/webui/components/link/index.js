@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import classnames from 'classnames'
 import { defineMessages, useIntl } from 'react-intl'
@@ -24,11 +24,13 @@ import Message from '@ttn-lw/lib/components/message'
 import PropTypes from '@ttn-lw/lib/prop-types'
 import { url as urlPattern } from '@ttn-lw/lib/regexp'
 import { selectDocumentationUrlConfig, selectApplicationRootPath } from '@ttn-lw/lib/selectors/env'
+import filterDataProps from '@ttn-lw/lib/filter-data-props'
 
 import style from './link.styl'
 
 const m = defineMessages({
   glossaryTitle: 'See "{term}" in the glossary',
+  defaultGlossaryTitle: 'See in the glossary',
 })
 
 const appRoot = selectApplicationRootPath()
@@ -58,6 +60,7 @@ const Link = props => {
     secondary,
     primary,
     tabIndex,
+    role,
   } = props
 
   const { formatMessage } = useIntl()
@@ -69,7 +72,11 @@ const Link = props => {
   })
 
   if (disabled) {
-    return <span className={classnames(classNames, style.disabled)}>{children}</span>
+    return (
+      <span className={classnames(classNames, style.disabled)} role={role}>
+        {children}
+      </span>
+    )
   }
 
   return (
@@ -82,6 +89,7 @@ const Link = props => {
       target={target}
       onClick={onClick}
       tabIndex={tabIndex}
+      role={role}
     >
       {children}
     </RouterLink>
@@ -96,6 +104,7 @@ Link.propTypes = {
   onClick: PropTypes.func,
   primary: PropTypes.bool,
   replace: PropTypes.bool,
+  role: PropTypes.string,
   secondary: PropTypes.bool,
   showVisited: PropTypes.bool,
   tabIndex: PropTypes.string,
@@ -108,7 +117,7 @@ Link.propTypes = {
       pathname: PropTypes.string,
       search: PropTypes.string,
       hash: PropTypes.string,
-      state: PropTypes.object,
+      state: PropTypes.shape({}),
     }),
   ]).isRequired,
 }
@@ -122,6 +131,7 @@ Link.defaultProps = {
   primary: false,
   showVisited: false,
   replace: false,
+  role: undefined,
   secondary: false,
   tabIndex: undefined,
   target: undefined,
@@ -143,13 +153,12 @@ const DocLink = props => {
     primary,
     disabled,
     tabIndex,
-    to,
     raw,
     onClick,
   } = props
 
   const { formatMessage } = useIntl()
-  const classNames = classnames(style.link, className, {
+  const classNames = classnames(style.link, style.docLink, className, {
     [style.linkVisited]: showVisited,
     [style.primary]: primary,
     [style.secondary]: secondary,
@@ -163,11 +172,10 @@ const DocLink = props => {
   return (
     <a
       className={classNames}
-      to={to}
       title={formattedTitle}
       id={id}
       href={link}
-      target="blank"
+      target="_blank"
       name={name}
       onClick={onClick}
       tabIndex={tabIndex}
@@ -180,48 +188,56 @@ const DocLink = props => {
 }
 
 DocLink.propTypes = {
-  ...Link.propTypes,
+  children: PropTypes.node,
+  className: PropTypes.string,
+  disabled: PropTypes.bool,
+  id: PropTypes.string,
   name: PropTypes.string,
+  onClick: PropTypes.func,
   path: PropTypes.string.isRequired,
+  primary: PropTypes.bool,
   raw: PropTypes.bool,
+  secondary: PropTypes.bool,
   showVisited: PropTypes.bool,
-  to: PropTypes.oneOfType([
-    PropTypes.string,
-    PropTypes.shape({
-      pathname: PropTypes.string,
-      search: PropTypes.string,
-      hash: PropTypes.string,
-      state: PropTypes.object,
-    }),
-  ]),
+  tabIndex: PropTypes.number,
+  title: PropTypes.message,
+  titleValues: PropTypes.shape({}),
 }
 
 DocLink.defaultProps = {
-  ...Link.defaultProps,
+  children: undefined,
+  className: undefined,
   disabled: false,
-  name: undefined,
+  id: undefined,
+  primary: false,
   showVisited: false,
-  to: undefined,
+  secondary: false,
+  tabIndex: undefined,
+  title: undefined,
+  titleValues: undefined,
+  name: undefined,
   raw: false,
+  onClick: () => null,
 }
 
 Link.DocLink = DocLink
 
-const GlossaryLink = ({ glossaryId, term, hideTerm, primary, secondary, className }) => {
+const GlossaryLink = ({ title, glossaryId, term, primary, secondary, className }) => {
   const { formatMessage } = useIntl()
+  const hasTerm = Boolean(term)
+
   return (
     <Link.DocLink
       primary={primary}
       secondary={secondary}
       className={className}
       path={`/reference/glossary#${glossaryId}`}
-      title={m.glossaryTitle}
-      titleValues={{ term: formatTitle(term, undefined, formatMessage) }}
-      tabIndex="-1"
-      raw
+      title={hasTerm ? m.glossaryTitle : m.defaultGlossaryTitle}
+      titleValues={hasTerm ? { term: formatTitle(term, undefined, formatMessage) } : undefined}
+      tabIndex={-1}
+      external
     >
-      {!hideTerm && <Message content={term} />}{' '}
-      <Icon className={style.glossaryIcon} icon="help_outline" />
+      <Message content={title} />
     </Link.DocLink>
   )
 }
@@ -229,17 +245,17 @@ const GlossaryLink = ({ glossaryId, term, hideTerm, primary, secondary, classNam
 GlossaryLink.propTypes = {
   className: PropTypes.string,
   glossaryId: PropTypes.string.isRequired,
-  hideTerm: PropTypes.bool,
   primary: PropTypes.bool,
   secondary: PropTypes.bool,
-  term: PropTypes.message.isRequired,
+  term: PropTypes.message,
+  title: PropTypes.message.isRequired,
 }
 
 GlossaryLink.defaultProps = {
   className: '',
-  hideTerm: false,
   primary: false,
   secondary: false,
+  term: undefined,
 }
 
 Link.GlossaryLink = GlossaryLink
@@ -259,6 +275,8 @@ const AnchorLink = props => {
     primary,
     disabled,
     external,
+    tabIndex,
+    ...rest
   } = props
 
   const { formatMessage } = useIntl()
@@ -268,6 +286,7 @@ const AnchorLink = props => {
     [style.primary]: primary,
     [style.secondary]: secondary,
   })
+  const dataProps = useMemo(() => filterDataProps(rest), [rest])
 
   if (disabled) {
     return <span className={classnames(classNames, style.disabled)}>{children}</span>
@@ -279,8 +298,10 @@ const AnchorLink = props => {
       title={formattedTitle}
       id={id}
       href={href}
-      target={external ? 'blank' : target}
+      target={external ? '_blank' : target}
       name={name}
+      tabIndex={tabIndex}
+      {...dataProps}
     >
       {children}
       {external ? <Icon className={style.icon} icon="launch" /> : null}
@@ -293,6 +314,7 @@ AnchorLink.propTypes = {
   id: PropTypes.string,
   name: PropTypes.string,
   showVisited: PropTypes.bool,
+  tabIndex: PropTypes.string,
   target: PropTypes.string,
   title: PropTypes.string,
 }

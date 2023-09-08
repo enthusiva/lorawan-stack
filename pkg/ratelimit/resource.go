@@ -20,7 +20,6 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
@@ -53,16 +52,8 @@ func httpRequestResource(r *http.Request, class string) Resource {
 	}
 }
 
-// echoRequestResource represents an HTTP request. Avoid using directly, use EchoMiddleware instead.
-func echoRequestResource(c echo.Context, class string) Resource {
-	return &resource{
-		key:     fmt.Sprintf("%s:ip:%s:url:%s", class, c.RealIP(), c.Request().URL.Path),
-		classes: []string{class, "http"},
-	}
-}
-
 // grpcMethodResource represents a gRPC request.
-func grpcMethodResource(ctx context.Context, fullMethod string, req interface{}) Resource {
+func grpcMethodResource(ctx context.Context, fullMethod string, req any) Resource {
 	key := fmt.Sprintf("grpc:method:%s:%s", fullMethod, grpcEntityFromRequest(ctx, req))
 	if authTokenID := grpcAuthTokenID(ctx); authTokenID != "" {
 		key = fmt.Sprintf("%s:token:%s", key, authTokenID)
@@ -94,7 +85,7 @@ func grpcStreamUpResource(ctx context.Context, fullMethod string) Resource {
 }
 
 // GatewayUpResource represents uplink traffic from a gateway.
-func GatewayUpResource(ctx context.Context, ids ttnpb.GatewayIdentifiers) Resource {
+func GatewayUpResource(ctx context.Context, ids *ttnpb.GatewayIdentifiers) Resource {
 	return &resource{
 		key:     fmt.Sprintf("gs:up:gtw:%s", unique.ID(ctx, ids)),
 		classes: []string{"gs:up"},
@@ -134,7 +125,7 @@ func ApplicationAcceptMQTTConnectionResource(remoteAddr string) Resource {
 }
 
 // ApplicationMQTTDownResource represents downlink traffic for an application from an MQTT client.
-func ApplicationMQTTDownResource(ctx context.Context, ids ttnpb.ApplicationIdentifiers, authTokenID string) Resource {
+func ApplicationMQTTDownResource(ctx context.Context, ids *ttnpb.ApplicationIdentifiers, authTokenID string) Resource {
 	key := fmt.Sprintf("as:down:mqtt:app:%s", unique.ID(ctx, ids))
 	if authTokenID != "" {
 		key = fmt.Sprintf("%s:token:%s", key, authTokenID)
@@ -146,7 +137,7 @@ func ApplicationMQTTDownResource(ctx context.Context, ids ttnpb.ApplicationIdent
 }
 
 // ApplicationWebhooksDownResource represents downlink traffic for an application from a webhook.
-func ApplicationWebhooksDownResource(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, authTokenID string) Resource {
+func ApplicationWebhooksDownResource(ctx context.Context, ids *ttnpb.EndDeviceIdentifiers, authTokenID string) Resource {
 	key := fmt.Sprintf("as:down:web:dev:%s", unique.ID(ctx, ids))
 	if authTokenID != "" {
 		key = fmt.Sprintf("%s:token:%s", key, authTokenID)

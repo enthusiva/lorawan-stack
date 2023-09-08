@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -26,19 +26,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/account"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/pbkdf2"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	"go.thethings.network/lorawan-stack/v3/pkg/identityserver"
 	"go.thethings.network/lorawan-stack/v3/pkg/oauth"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	"go.thethings.network/lorawan-stack/v3/pkg/webui"
 	"golang.org/x/net/publicsuffix"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type loginFormData struct {
@@ -58,13 +60,14 @@ type authorizeFormData struct {
 }
 
 var (
+	now         = time.Now().Truncate(time.Second)
 	mockSession = &ttnpb.UserSession{
-		UserIdentifiers: ttnpb.UserIdentifiers{UserID: "user"},
-		SessionID:       "session_id",
-		CreatedAt:       time.Now().Truncate(time.Second),
+		UserIds:   &ttnpb.UserIdentifiers{UserId: "user"},
+		SessionId: "session_id",
+		CreatedAt: timestamppb.New(now),
 	}
 	mockUser = &ttnpb.User{
-		UserIdentifiers: ttnpb.UserIdentifiers{UserID: "user"},
+		Ids: &ttnpb.UserIdentifiers{UserId: "user"},
 	}
 )
 
@@ -98,7 +101,7 @@ func TestAuthentication(t *testing.T) {
 			},
 		},
 	})
-	s := account.NewServer(c, store, oauth.Config{
+	s, err := account.NewServer(c, store, oauth.Config{
 		Mount:       "/oauth",
 		CSRFAuthKey: []byte("12345678123456781234567812345678"),
 		UI: oauth.UIConfig{
@@ -108,7 +111,10 @@ func TestAuthentication(t *testing.T) {
 				CanonicalURL: "https://example.com/oauth",
 			},
 		},
-	})
+	}, identityserver.GenerateCSPString)
+	if err != nil {
+		panic(err)
+	}
 	c.RegisterWeb(s)
 	componenttest.StartComponent(t, c)
 
@@ -136,7 +142,7 @@ func TestAuthentication(t *testing.T) {
 		StoreCheck       func(*testing.T, *mockStore)
 		Method           string
 		Path             string
-		Body             interface{}
+		Body             any
 		ExpectedCode     int
 		ExpectedRedirect string
 		ExpectedBody     string
@@ -177,7 +183,7 @@ func TestAuthentication(t *testing.T) {
 				a := assertions.New(t)
 				a.So(s.calls, should.Contain, "GetUser")
 				if a.So(s.req.userIDs, should.NotBeNil) {
-					a.So(s.req.userIDs.UserID, should.Equal, "user")
+					a.So(s.req.userIDs.UserId, should.Equal, "user")
 				}
 			},
 		},
@@ -194,9 +200,23 @@ func TestAuthentication(t *testing.T) {
 				a := assertions.New(t)
 				a.So(s.calls, should.Contain, "GetUser")
 				if a.So(s.req.userIDs, should.NotBeNil) {
-					a.So(s.req.userIDs.UserID, should.Equal, "user")
+					a.So(s.req.userIDs.UserId, should.Equal, "user")
 				}
 			},
+		},
+		{
+			Name:         "login no user_id",
+			Method:       "POST",
+			Path:         "/oauth/api/auth/login",
+			Body:         loginFormData{"json", "", "pass"},
+			ExpectedCode: http.StatusBadRequest,
+		},
+		{
+			Name:         "login no password",
+			Method:       "POST",
+			Path:         "/oauth/api/auth/login",
+			Body:         loginFormData{"json", "user", ""},
+			ExpectedCode: http.StatusBadRequest,
 		},
 		{
 			Name: "login wrong password",
@@ -232,7 +252,7 @@ func TestAuthentication(t *testing.T) {
 			StoreCheck: func(t *testing.T, s *mockStore) {
 				a := assertions.New(t)
 				a.So(s.calls, should.Contain, "GetUser")
-				a.So(s.req.userIDs.GetUserID(), should.Equal, "user")
+				a.So(s.req.userIDs.GetUserId(), should.Equal, "user")
 				a.So(s.req.sessionID, should.Equal, "session_id") // actually the before-last call.
 			},
 		},
@@ -259,15 +279,27 @@ func TestAuthentication(t *testing.T) {
 			StoreCheck: func(t *testing.T, s *mockStore) {
 				a := assertions.New(t)
 				a.So(s.calls, should.Contain, "DeleteSession")
-				a.So(s.req.userIDs.GetUserID(), should.Equal, "user")
+				a.So(s.req.userIDs.GetUserId(), should.Equal, "user")
 				a.So(s.req.sessionID, should.Equal, "session_id")
+			},
+		},
+		{
+			Name:         "invalid token login",
+			Method:       "POST",
+			Path:         "/oauth/api/auth/token-login",
+			Body:         tokenFormData{"form", ""},
+			ExpectedCode: http.StatusBadRequest,
+			StoreCheck: func(t *testing.T, s *mockStore) {
+				a := assertions.New(t)
+				a.So(s.calls, should.NotContain, "ConsumeLoginToken")
+				a.So(s.calls, should.NotContain, "CreateSession")
 			},
 		},
 		{
 			Name: "token login",
 			StoreSetup: func(s *mockStore) {
 				s.res.loginToken = &ttnpb.LoginToken{
-					UserIdentifiers: mockUser.UserIdentifiers,
+					UserIds: mockUser.GetIds(),
 				}
 				s.res.session = mockSession
 			},
@@ -281,7 +313,7 @@ func TestAuthentication(t *testing.T) {
 				a.So(s.req.token, should.Equal, "this-is-the-token")
 
 				a.So(s.calls, should.Contain, "CreateSession")
-				a.So(s.req.session.UserIdentifiers, should.Resemble, mockUser.UserIdentifiers)
+				a.So(s.req.session.GetUserIds(), should.Resemble, mockUser.GetIds())
 			},
 		},
 	} {
@@ -339,7 +371,7 @@ func TestAuthentication(t *testing.T) {
 				req.Header.Set("Content-Type", contentType)
 			}
 			if body != nil {
-				req.Body = ioutil.NopCloser(body)
+				req.Body = io.NopCloser(body)
 				req.ContentLength = int64(body.Len())
 			}
 

@@ -12,143 +12,175 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package ws provides common interface for Web Socket front end.
 package ws
 
 import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	echo "github.com/labstack/echo/v4"
-	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
+	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/scheduling"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/random"
 	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/web"
-	"go.thethings.network/lorawan-stack/v3/pkg/web/middleware"
+	"go.thethings.network/lorawan-stack/v3/pkg/webhandlers"
 	"google.golang.org/grpc/metadata"
 )
 
+const pingIntervalJitter = 0.1
+
 var (
-	errGatewayID      = errors.DefineInvalidArgument("invalid_gateway_id", "invalid gateway ID `{id}`")
-	errNoAuthProvided = errors.DefineUnauthenticated("no_auth_provided", "no auth provided `{uid}`")
+	errGatewayID          = errors.DefineInvalidArgument("invalid_gateway_id", "invalid gateway ID `{id}`")
+	errNoAuthProvided     = errors.DefineUnauthenticated("no_auth_provided", "no auth provided `{uid}`")
+	errMissedTooManyPongs = errors.Define("missed_too_many_pongs", "gateway missed too many pongs")
 )
 
 type srv struct {
-	ctx                  context.Context
-	server               io.Server
-	webServer            *echo.Echo
-	upgrader             *websocket.Upgrader
-	useTrafficTLSAddress bool
-	wsPingInterval       time.Duration
-	cfg                  Config
-	formatter            Formatter
+	ctx       context.Context
+	server    io.Server
+	upgrader  *websocket.Upgrader
+	cfg       Config
+	formatter Formatter
 }
 
-func (s *srv) Protocol() string            { return "ws" }
-func (s *srv) SupportsDownlinkClaim() bool { return false }
+func (*srv) Protocol() string            { return "ws" }
+func (*srv) SupportsDownlinkClaim() bool { return false }
+func (*srv) DutyCycleStyle() scheduling.DutyCycleStyle {
+	return scheduling.DutyCycleStyleBlockingWindow
+}
 
 // New creates a new WebSocket frontend.
-func New(ctx context.Context, server io.Server, formatter Formatter, cfg Config) *echo.Echo {
+func New(ctx context.Context, server io.Server, formatter Formatter, cfg Config) (*web.Server, error) {
 	ctx = log.NewContextWithField(ctx, "namespace", "gatewayserver/io/ws")
 
-	webServer := echo.New()
-	webServer.Logger = web.NewNoopLogger()
-	webServer.HTTPErrorHandler = errorHandler
-	webServer.Use(
-		middleware.ID(""),
-		echomiddleware.BodyLimit("16M"),
-		middleware.Log(log.FromContext(ctx)),
-		ratelimit.EchoMiddleware(server.RateLimiter(), "gs:accept:ws"),
-		middleware.Recover(),
-	)
-
 	s := &srv{
-		ctx:       ctx,
-		server:    server,
-		upgrader:  &websocket.Upgrader{},
-		webServer: webServer,
+		ctx:    ctx,
+		server: server,
+		upgrader: &websocket.Upgrader{
+			HandshakeTimeout: 120 * time.Second,
+			WriteBufferPool:  &sync.Pool{},
+			Error: func(w http.ResponseWriter, r *http.Request, _ int, err error) {
+				webhandlers.Error(w, r, err)
+			},
+		},
 		formatter: formatter,
 		cfg:       cfg,
 	}
 
+	w, err := web.New(
+		ctx,
+		web.WithDisableWarnings(true),
+		web.WithTrustedProxies(server.GetBaseConfig(ctx).HTTP.TrustedProxies...),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	router := w.RootRouter()
+	router.Use(
+		ratelimit.HTTPMiddleware(server.RateLimiter(), "gs:accept:ws"),
+	)
+
 	eps := s.formatter.Endpoints()
-	webServer.GET(eps.ConnectionInfo, s.handleConnectionInfo)
-	webServer.GET(eps.Traffic, s.handleTraffic)
+	router.HandleFunc(eps.ConnectionInfo, s.handleConnectionInfo).Methods(http.MethodGet)
+	router.HandleFunc(eps.Traffic, func(w http.ResponseWriter, r *http.Request) {
+		if err := s.handleTraffic(w, r); err != nil {
+			webhandlers.Error(w, r, err)
+		}
+	}).Methods(http.MethodGet)
 
-	go func() {
-		<-ctx.Done()
-		webServer.Close()
-	}()
-
-	return webServer
+	return w, nil
 }
 
-func (s *srv) handleConnectionInfo(c echo.Context) error {
-	ctx := c.Request().Context()
+func (s *srv) handleConnectionInfo(w http.ResponseWriter, r *http.Request) {
 	eps := s.formatter.Endpoints()
-	logger := log.FromContext(ctx).WithFields(log.Fields(
+	ctx := log.NewContextWithFields(r.Context(), log.Fields(
 		"endpoint", eps.ConnectionInfo,
-		"remote_addr", c.Request().RemoteAddr,
+		"remote_addr", r.RemoteAddr,
 	))
-	ws, err := s.upgrader.Upgrade(c.Response(), c.Request(), nil)
+	logger := log.FromContext(ctx)
+	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.WithError(err).Debug("Failed to upgrade request to websocket connection")
-		return err
+		return
 	}
 	defer ws.Close()
 
 	_, data, err := ws.ReadMessage()
 	if err != nil {
 		logger.WithError(err).Debug("Failed to read message")
-		return err
+		return
 	}
 
-	scheme := "ws"
-	if c.IsTLS() || s.cfg.UseTrafficTLSAddress {
+	var (
+		scheme = "ws"
+		port   = "80"
+	)
+	if r.TLS != nil || s.cfg.UseTrafficTLSAddress {
 		scheme = "wss"
+		port = "443"
+	}
+
+	// If port is retrievable from the host, use it.
+	host, p, err := net.SplitHostPort(r.Host)
+	if err == nil {
+		// Both `host` and `p` are valid, since we have no error.
+		port = p
+	} else {
+		// `host` and `p` are unknown/empty. Reset `host` to `r.Host` since it does not contain the port.
+		host = r.Host
 	}
 
 	info := ServerInfo{
 		Scheme:  scheme,
-		Address: c.Request().Host,
+		Address: net.JoinHostPort(host, port),
 	}
 
 	resp := s.formatter.HandleConnectionInfo(ctx, data, s.server, info, time.Now())
 	if err := ws.WriteMessage(websocket.TextMessage, resp); err != nil {
 		logger.WithError(err).Warn("Failed to write connection info response message")
-		return err
+		return
 	}
 	logger.Debug("Sent connection info response message")
-	return nil
 }
 
 var euiHexPattern = regexp.MustCompile("^eui-([a-f0-9A-F]{16})$")
 
-func (s *srv) handleTraffic(c echo.Context) (err error) {
-	var session Session
-	id := c.Param("id")
-	auth := c.Request().Header.Get(echo.HeaderAuthorization)
-	ctx := c.Request().Context()
-	eps := s.formatter.Endpoints()
+func (s *srv) handleTraffic(w http.ResponseWriter, r *http.Request) (err error) {
+	var (
+		id           = mux.Vars(r)["id"]
+		auth         = r.Header.Get("Authorization")
+		ctx          = r.Context()
+		eps          = s.formatter.Endpoints()
+		missingPongs = int64(0)
+		pongCount    = int64(0)
+		pongCh       = make(chan []byte, 1)
+		downstreamCh = make(chan []byte, 1)
+	)
 
 	ctx = log.NewContextWithFields(ctx, log.Fields(
 		"endpoint", eps.Traffic,
-		"remote_addr", c.Request().RemoteAddr,
+		"remote_addr", r.RemoteAddr,
 	))
-	logger := log.FromContext(ctx)
+	ctx = NewContextWithSession(ctx, &Session{})
 
 	// Convert the ID to EUI.
 	str := euiHexPattern.FindStringSubmatch(id)
@@ -162,7 +194,7 @@ func (s *srv) handleTraffic(c echo.Context) (err error) {
 	var eui types.EUI64
 	eui.UnmarshalBinary(hexValue)
 
-	ctx, ids, err := s.server.FillGatewayContext(ctx, ttnpb.GatewayIdentifiers{EUI: &eui})
+	ctx, ids, err := s.server.FillGatewayContext(ctx, &ttnpb.GatewayIdentifiers{Eui: eui.Bytes()})
 	if err != nil {
 		return err
 	}
@@ -177,7 +209,7 @@ func (s *srv) handleTraffic(c echo.Context) (err error) {
 			auth = fmt.Sprintf("Bearer %s", auth)
 		}
 		md = metadata.New(map[string]string{
-			"id":            ids.GatewayID,
+			"id":            ids.GatewayId,
 			"authorization": auth,
 		})
 	}
@@ -191,101 +223,168 @@ func (s *srv) handleTraffic(c echo.Context) (err error) {
 		ctx = frequencyplans.WithFallbackID(ctx, fallback)
 	}
 
-	if auth == "" {
-		// If the server allows unauthenticated connections (for local testing), we provide the link rights ourselves.
-		if s.cfg.AllowUnauthenticated {
-			ctx = rights.NewContext(ctx, rights.Rights{
-				GatewayRights: map[string]*ttnpb.Rights{
-					uid: {
-						Rights: []ttnpb.Right{ttnpb.RIGHT_GATEWAY_LINK},
-					},
-				},
-			})
-		} else {
-			// We error here directly as there is no need make an RPC call to the IS to get a failed rights check due to no Auth.
-			return errNoAuthProvided.WithAttributes("uid", uid)
+	var hasAuth bool
+	if auth != "" {
+		if !strings.HasPrefix(auth, "Bearer ") {
+			auth = fmt.Sprintf("Bearer %s", auth)
 		}
+		md = metadata.New(map[string]string{
+			"authorization": auth,
+		})
+		hasAuth = true
 	}
 
-	conn, err := s.server.Connect(ctx, s, ids)
+	if ctxMd, ok := metadata.FromIncomingContext(ctx); ok {
+		md = metadata.Join(ctxMd, md)
+	}
+	ctx = metadata.NewIncomingContext(ctx, md)
+	// If a fallback frequency is defined in the server context, inject it into local the context.
+	if fallback, ok := frequencyplans.FallbackIDFromContext(s.ctx); ok {
+		ctx = frequencyplans.WithFallbackID(ctx, fallback)
+	}
+
+	if !hasAuth {
+		if !s.cfg.AllowUnauthenticated {
+			// We error here directly as there is no auth.
+			return errNoAuthProvided.WithAttributes("uid", uid)
+		}
+		// If the server allows unauthenticated connections (for local testing), we provide the link rights ourselves.
+		ctx = rights.NewContext(ctx, &rights.Rights{
+			GatewayRights: *rights.NewMap(map[string]*ttnpb.Rights{
+				uid: {
+					Rights: []ttnpb.Right{ttnpb.Right_RIGHT_GATEWAY_LINK},
+				},
+			}),
+		})
+	}
+
+	logger := log.FromContext(ctx)
+	addr, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return err
+	}
+	if xRealIP := r.Header[http.CanonicalHeaderKey("X-Real-IP")]; len(xRealIP) == 1 {
+		addr = xRealIP[0]
+	}
+
+	conn, err := s.server.Connect(ctx, s, ids, &ttnpb.GatewayRemoteAddress{
+		Ip: addr,
+	})
 	if err != nil {
 		logger.WithError(err).Warn("Failed to connect")
 		return err
 	}
-
-	ws, err := s.upgrader.Upgrade(c.Response(), c.Request(), nil)
-	if err != nil {
-		logger.WithError(err).Debug("Failed to upgrade request to websocket connection")
-		conn.Disconnect(err)
-		return err
-	}
-	defer ws.Close()
-	wsWriteMu := &sync.Mutex{}
 
 	defer func() {
 		conn.Disconnect(err)
 		err = nil // Errors are sent over the websocket connection that is established by this point.
 	}()
 
-	pingTicker := time.NewTicker(s.cfg.WSPingInterval)
-	defer pingTicker.Stop()
+	ws, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.WithError(err).Debug("Failed to upgrade request to websocket connection")
+		return err
+	}
+	defer ws.Close()
+
+	var pingTickerC <-chan time.Time
+	if s.cfg.MissedPongThreshold > 0 && random.CanJitter(s.cfg.WSPingInterval, pingIntervalJitter) {
+		pingTicker := time.NewTicker(random.Jitter(s.cfg.WSPingInterval, pingIntervalJitter))
+		pingTickerC = pingTicker.C
+		defer pingTicker.Stop()
+	}
 
 	ws.SetPingHandler(func(data string) error {
-		logger.Debug("Received ping from gateway, send pong")
-		wsWriteMu.Lock()
-		defer wsWriteMu.Unlock()
-		if err := ws.WriteMessage(websocket.PongMessage, nil); err != nil {
-			logger.WithError(err).Warn("Failed to send pong")
-			return err
+		logger.Debug("Received client ping")
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case pongCh <- []byte(data):
 		}
 		return nil
 	})
 
 	// Not all gateways support pongs to the server's pings.
 	ws.SetPongHandler(func(data string) error {
-		logger.Debug("Received pong from gateway")
+		logger.Debug("Received client pong")
+		for n := atomic.LoadInt64(&missingPongs); ; n = atomic.LoadInt64(&missingPongs) {
+			if n == 0 {
+				logger.Warn("Unsolicited client pong")
+				return nil
+			}
+			if atomic.CompareAndSwapInt64(&missingPongs, n, n-1) {
+				break
+			}
+		}
+		atomic.AddInt64(&pongCount, 1)
 		return nil
 	})
 
-	go func() {
+	var timeSyncTickerC <-chan time.Time
+	if s.cfg.TimeSyncInterval > 0 {
+		ticker := time.NewTicker(random.Jitter(s.cfg.TimeSyncInterval, 0.1))
+		timeSyncTickerC = ticker.C
+		defer ticker.Stop()
+	}
+
+	go func() (err error) {
+		defer ws.Close()
+		defer func() {
+			if err != nil {
+				conn.Disconnect(err)
+			}
+		}()
 		for {
 			select {
 			case <-conn.Context().Done():
-				ws.Close()
 				return
-			case <-pingTicker.C:
-				wsWriteMu.Lock()
-				err := ws.WriteMessage(websocket.PingMessage, nil)
-				wsWriteMu.Unlock()
-				if err != nil {
-					logger.WithError(err).Warn("Failed to send ping message")
-					conn.Disconnect(err)
-					ws.Close()
-					return
+			case <-pingTickerC:
+				if atomic.AddInt64(&missingPongs, 1) > int64(s.cfg.MissedPongThreshold) &&
+					atomic.LoadInt64(&pongCount) > 0 {
+					err := errMissedTooManyPongs.New()
+					logger.WithError(err).Warn("Gateway missed too many pings")
+					return err
 				}
-			case down := <-conn.Down():
-				dlTime := time.Now()
-
-				concentratorTime, ok := conn.TimeFromTimestampTime(down.GetScheduled().Timestamp)
-				if !ok {
-					logger.Warn("No clock synchronization")
+				if err := ws.WriteControl(websocket.PingMessage, nil, time.Time{}); err != nil {
+					logger.WithError(err).Warn("Failed to send ping message")
+					return err
+				}
+				logger.Debug("Server ping sent")
+			case data := <-pongCh:
+				if err := ws.WriteControl(websocket.PongMessage, data, time.Time{}); err != nil {
+					logger.WithError(err).Warn("Failed to send pong")
+					return err
+				}
+				logger.Debug("Server pong sent")
+			case <-timeSyncTickerC:
+				// TODO: Use GPS timestamp from a overlapping frames.
+				// https://github.com/TheThingsNetwork/lorawan-stack/issues/4852
+				b, err := s.formatter.TransferTime(ctx, time.Now(), nil, nil)
+				if err != nil {
+					logger.WithError(err).Warn("Failed to generate time transfer")
+					return err
+				}
+				if b == nil {
 					continue
 				}
-				sessionCtx := NewContextWithSession(ctx, &session)
-				dnmsg, err := s.formatter.FromDownlink(sessionCtx, uid, *down, concentratorTime, dlTime)
+				if err := ws.WriteMessage(websocket.TextMessage, b); err != nil {
+					logger.WithError(err).Warn("Failed to transfer time")
+					return err
+				}
+			case down := <-conn.Down():
+				dnmsg, err := s.formatter.FromDownlink(ctx, down, conn.BandID(), time.Now())
 				if err != nil {
 					logger.WithError(err).Warn("Failed to marshal downlink message")
 					continue
 				}
-
-				logger.Info("Send downlink message")
-				wsWriteMu.Lock()
-				err = ws.WriteMessage(websocket.TextMessage, dnmsg)
-				wsWriteMu.Unlock()
-				if err != nil {
+				if err = ws.WriteMessage(websocket.TextMessage, dnmsg); err != nil {
 					logger.WithError(err).Warn("Failed to send downlink message")
-					conn.Disconnect(err)
-					return
+					return err
+				}
+			case downstream := <-downstreamCh:
+				if err := ws.WriteMessage(websocket.TextMessage, downstream); err != nil {
+					logger.WithError(err).Warn("Failed to send message downstream")
+					return err
 				}
 			}
 		}
@@ -295,7 +394,6 @@ func (s *srv) handleTraffic(c echo.Context) (err error) {
 	for {
 		if err := ratelimit.Require(s.server.RateLimiter(), resource); err != nil {
 			logger.WithError(err).Warn("Terminate connection")
-			conn.Disconnect(err)
 			return err
 		}
 		_, data, err := ws.ReadMessage()
@@ -303,46 +401,18 @@ func (s *srv) handleTraffic(c echo.Context) (err error) {
 			logger.WithError(err).Debug("Failed to read message")
 			return err
 		}
-		sessionCtx := NewContextWithSession(ctx, &session)
-		downstream, err := s.formatter.HandleUp(sessionCtx, data, ids, conn, time.Now())
+		downstream, err := s.formatter.HandleUp(ctx, data, ids, conn, time.Now())
 		if err != nil {
 			return err
 		}
-		if downstream != nil {
-			logger.Info("Send downstream message")
-			wsWriteMu.Lock()
-			err = ws.WriteMessage(websocket.TextMessage, downstream)
-			wsWriteMu.Unlock()
-			if err != nil {
-				logger.WithError(err).Warn("Failed to send message downstream")
-				conn.Disconnect(err)
-				return err
-			}
+		if downstream == nil {
+			continue
 		}
-	}
-}
-
-type errorMessage struct {
-	Message string `json:"message"`
-}
-
-// errorHandler is an echo.HTTPErrorHandler.
-func errorHandler(err error, c echo.Context) {
-	if httpErr, ok := err.(*echo.HTTPError); ok {
-		c.JSON(httpErr.Code, httpErr.Message)
-		return
-	}
-
-	statusCode, description := http.StatusInternalServerError, ""
-	if ttnErr, ok := errors.From(err); ok {
-		if !errors.IsInternal(ttnErr) {
-			description = ttnErr.Error()
+		logger.Info("Send downstream message")
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case downstreamCh <- downstream:
 		}
-		statusCode = errors.ToHTTPStatusCode(ttnErr)
-	}
-	if description != "" {
-		c.JSON(statusCode, errorMessage{description})
-	} else {
-		c.NoContent(statusCode)
 	}
 }

@@ -21,7 +21,10 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/packetbroker"
 	"go.thethings.network/lorawan-stack/v3/pkg/redis"
+	telemetry "go.thethings.network/lorawan-stack/v3/pkg/telemetry/exporter"
+	"go.thethings.network/lorawan-stack/v3/pkg/telemetry/tracing"
 	"golang.org/x/crypto/acme"
 )
 
@@ -32,7 +35,8 @@ var DefaultBaseConfig = config.Base{
 
 // DefaultLogConfig is the default log configuration.
 var DefaultLogConfig = config.Log{
-	Level: log.InfoLevel,
+	Format: "console",
+	Level:  log.InfoLevel,
 }
 
 // DefaultTLSConfig is the default TLS config.
@@ -71,7 +75,12 @@ var DefaultHTTPConfig = config.HTTP{
 
 // DefaultInteropServerConfig is the default interop server config.
 var DefaultInteropServerConfig = config.InteropServer{
+	Listen:    ":1886",
 	ListenTLS: ":8886",
+	PacketBroker: config.PacketBrokerInteropAuth{
+		Enabled:     false,
+		TokenIssuer: packetbroker.DefaultTokenIssuer,
+	},
 }
 
 // DefaultGRPCConfig is the default config for GRPC.
@@ -88,10 +97,27 @@ var DefaultRedisConfig = redis.Config{
 	RootNamespace: []string{"ttn", "v3"},
 }
 
-// DefaultEventsConfig is the default config for Events.
-var DefaultEventsConfig = config.Events{
-	Backend: "internal",
+// DefaultCacheConfig is the default cache configuration.
+var DefaultCacheConfig = config.Cache{
+	Redis: DefaultRedisConfig,
 }
+
+// DefaultEventsConfig is the default config for Events.
+var DefaultEventsConfig = func() config.Events {
+	c := config.Events{
+		Backend: "internal",
+	}
+	c.Redis.Config = DefaultRedisConfig
+	c.Redis.Store.TTL = 10 * time.Minute
+	c.Redis.Store.EntityTTL = 24 * time.Hour
+	c.Redis.Store.EntityCount = 100
+	c.Redis.Store.CorrelationIDCount = 100
+	c.Redis.Store.StreamPartitionSize = 64
+	c.Redis.Workers = 16
+	c.Redis.Publish.QueueSize = 8192
+	c.Redis.Publish.MaxWorkers = 1024
+	return c
+}()
 
 // DefaultBlobConfig is the default config for the blob store.
 var DefaultBlobConfig = config.BlobConfig{
@@ -117,10 +143,35 @@ var DefaultKeyVaultConfig = config.KeyVault{
 	Provider: "static",
 }
 
+// DefaultTracingConfig is the default config for telemetry tracing.
+var DefaultTracingConfig = tracing.Config{
+	Enable:   false,
+	Exporter: "otlp",
+	WriterConfig: tracing.WriterConfig{
+		Destination: "stderr",
+	},
+	CollectorConfig: tracing.CollectorConfig{
+		EndpointURL: "localhost:4317",
+	},
+	SampleProbability: 1.,
+}
+
+// DefaultTelemetryConfig  is the default config for telemetry.
+var DefaultTelemetryConfig = telemetry.Config{
+	Enable:       true,
+	Target:       "https://telemetry.thethingsstack.io/collect",
+	NumConsumers: 1,
+	EntityCountTelemetry: telemetry.EntityCountTelemetry{
+		Enable:   true,
+		Interval: 24 * time.Hour,
+	},
+}
+
 // DefaultServiceBase is the default base config for a service.
 var DefaultServiceBase = config.ServiceBase{
 	Base:           DefaultBaseConfig,
 	Cluster:        DefaultClusterConfig,
+	Cache:          DefaultCacheConfig,
 	Redis:          DefaultRedisConfig,
 	Events:         DefaultEventsConfig,
 	GRPC:           DefaultGRPCConfig,
@@ -131,6 +182,8 @@ var DefaultServiceBase = config.ServiceBase{
 	FrequencyPlans: DefaultFrequencyPlansConfig,
 	Rights:         DefaultRightsConfig,
 	KeyVault:       DefaultKeyVaultConfig,
+	Tracing:        DefaultTracingConfig,
+	Telemetry:      DefaultTelemetryConfig,
 }
 
 // DefaultPublicHost is the default public host where The Things Stack is served.

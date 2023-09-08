@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,545 +17,514 @@ package identityserver
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/storetest"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	"google.golang.org/grpc"
 )
 
-func init() {
-	organizationAccessUser.Admin = false
-	organizationAccessUser.State = ttnpb.STATE_APPROVED
-	for _, apiKey := range userAPIKeys(&organizationAccessUser.UserIdentifiers).APIKeys {
-		apiKey.Rights = []ttnpb.Right{
-			ttnpb.RIGHT_APPLICATION_LINK,
-			ttnpb.RIGHT_ORGANIZATION_SETTINGS_API_KEYS,
-			ttnpb.RIGHT_ORGANIZATION_SETTINGS_MEMBERS,
-		}
-	}
+func TestOrganizationAPIKeys(t *testing.T) { // nolint:gocyclo
+	p := &storetest.Population{}
 
-	orgAccessCollaboratorUser.Admin = false
-	orgAccessCollaboratorUser.State = ttnpb.STATE_APPROVED
-	for _, apiKey := range userAPIKeys(&orgAccessCollaboratorUser.UserIdentifiers).APIKeys {
-		apiKey.Rights = []ttnpb.Right{
-			ttnpb.RIGHT_ORGANIZATION_ALL,
-		}
-	}
-}
+	admin := p.NewUser()
+	admin.Admin = true
+	adminKey, _ := p.NewAPIKey(admin.GetEntityIdentifiers(), ttnpb.Right_RIGHT_ALL)
+	adminCreds := rpcCreds(adminKey)
 
-func TestOrganizationAccessNotFound(t *testing.T) {
-	a := assertions.New(t)
-	ctx := test.Context()
+	usr1 := p.NewUser()
+	usr1Key, _ := p.NewAPIKey(usr1.GetEntityIdentifiers(), ttnpb.Right_RIGHT_ALL)
+	usr1Creds := rpcCreds(usr1Key)
+
+	org1 := p.NewOrganization(usr1.GetOrganizationOrUserIdentifiers())
+	limitedKey, _ := p.NewAPIKey(usr1.GetEntityIdentifiers(),
+		ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+		ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_API_KEYS,
+	)
+	limitedCreds := rpcCreds(limitedKey)
+
+	orgKey, _ := p.NewAPIKey(org1.GetEntityIdentifiers(),
+		ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+		ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+	)
+	orgCreds := rpcCreds(orgKey)
+
+	t.Parallel()
+	a, ctx := test.New(t)
 
 	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		userID, creds := defaultUser.UserIdentifiers, userCreds(defaultUserIdx)
-		organizationID := userOrganizations(&userID).Organizations[0].OrganizationIdentifiers
+		is.config.AdminRights.All = true
 
 		reg := ttnpb.NewOrganizationAccessClient(cc)
 
-		apiKey := ttnpb.APIKey{
-			ID:   "does-not-exist-id",
-			Name: "test-application-api-key-name",
-		}
-
+		// GetAPIKey that doesn't exist.
 		got, err := reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			KeyID:                   apiKey.ID,
-		}, creds)
-
+			OrganizationIds: org1.GetIds(),
+			KeyId:           "does-not-exist",
+		}, limitedCreds)
 		if a.So(err, should.NotBeNil) {
 			a.So(errors.IsNotFound(err), should.BeTrue)
 		}
 		a.So(got, should.BeNil)
 
+		// UpdateAPIKey that doesn't exist.
 		updated, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey:                  apiKey,
-		}, creds)
-
+			OrganizationIds: org1.GetIds(),
+			ApiKey: &ttnpb.APIKey{
+				Id: "does-not-exist",
+			},
+			FieldMask: ttnpb.FieldMask("name"),
+		}, limitedCreds)
 		if a.So(err, should.NotBeNil) {
 			a.So(errors.IsNotFound(err), should.BeTrue)
 		}
 		a.So(updated, should.BeNil)
-	})
-}
 
-func TestOrganizationAccessRightsPermissionDenied(t *testing.T) {
-	a := assertions.New(t)
-	ctx := test.Context()
-
-	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		userID, creds := organizationAccessUser.UserIdentifiers, userCreds(organizationAccessUserIdx)
-		organizationID := userOrganizations(&userID).Organizations[0].OrganizationIdentifiers
-		collaboratorID := collaboratorUser.UserIdentifiers.OrganizationOrUserIdentifiers()
-
-		reg := ttnpb.NewOrganizationAccessClient(cc)
-
-		APIKeyName := "test-organization-api-key-name"
-		APIKey, err := reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			Name:                    APIKeyName,
-			Rights:                  []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
-		}, creds)
-
+		// CreateAPIKey with rights that caller doesn't have.
+		apiKey, err := reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
+			OrganizationIds: org1.GetIds(),
+			Name:            "api-key-name",
+			Rights:          []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_ALL},
+		}, limitedCreds)
 		if a.So(err, should.NotBeNil) {
 			a.So(errors.IsPermissionDenied(err), should.BeTrue)
 		}
-		a.So(APIKey, should.BeNil)
+		a.So(apiKey, should.BeNil)
 
-		// Choose right that the user does not have and hence cannot add
-		right := ttnpb.RIGHT_ORGANIZATION_SETTINGS_BASIC
-		APIKey = organizationAPIKeys(&organizationID).APIKeys[0]
-
-		updated, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey: ttnpb.APIKey{
-				ID:     APIKey.ID,
-				Name:   APIKey.Name,
-				Rights: []ttnpb.Right{right},
+		// UpdateAPIKey adding rights that caller doesn't have.
+		updated, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
+			OrganizationIds: org1.GetIds(),
+			ApiKey: &ttnpb.APIKey{
+				Id: orgKey.GetId(),
+				Rights: []ttnpb.Right{
+					ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+					ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+					ttnpb.Right_RIGHT_ORGANIZATION_DELETE,
+				},
 			},
-		}, creds)
-
+			FieldMask: ttnpb.FieldMask("rights"),
+		}, limitedCreds)
 		if a.So(err, should.NotBeNil) {
 			a.So(errors.IsPermissionDenied(err), should.BeTrue)
 		}
 		a.So(updated, should.BeNil)
 
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *collaboratorID,
-				Rights:                        []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
+		// UpdateAPIKey removing rights that caller doesn't have.
+		updated, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
+			OrganizationIds: org1.GetIds(),
+			ApiKey: &ttnpb.APIKey{
+				Id: orgKey.GetId(),
+				Rights: []ttnpb.Right{
+					ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+				},
 			},
-		}, creds)
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-	})
-}
-
-func TestOrganizationAccessPermissionDenied(t *testing.T) {
-	a := assertions.New(t)
-	ctx := test.Context()
-
-	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		userID := defaultUser.UserIdentifiers
-		organizationID := userOrganizations(&userID).Organizations[0].OrganizationIdentifiers
-		collaboratorID := collaboratorUser.UserIdentifiers.OrganizationOrUserIdentifiers()
-		APIKeyID := organizationAPIKeys(&organizationID).APIKeys[0].ID
-
-		reg := ttnpb.NewOrganizationAccessClient(cc)
-
-		rights, err := reg.ListRights(ctx, &organizationID)
-
-		a.So(err, should.BeNil)
-		if a.So(rights, should.NotBeNil) {
-			a.So(rights.Rights, should.BeEmpty)
-		}
-
-		APIKey, err := reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			KeyID:                   APIKeyID,
-		})
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-		a.So(APIKey, should.BeNil)
-
-		APIKeys, err := reg.ListAPIKeys(ctx, &ttnpb.ListOrganizationAPIKeysRequest{
-			OrganizationIdentifiers: organizationID,
-		})
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-		a.So(APIKeys, should.BeNil)
-
-		collaborators, err := reg.ListCollaborators(ctx, &ttnpb.ListOrganizationCollaboratorsRequest{
-			OrganizationIdentifiers: organizationID,
-		})
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-		a.So(collaborators, should.BeNil)
-
-		APIKeyName := "test-organization-api-key-name"
-		APIKey, err = reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			Name:                    APIKeyName,
-			Rights:                  []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
-		})
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-		a.So(APIKey, should.BeNil)
-
-		APIKey = organizationAPIKeys(&organizationID).APIKeys[0]
-
-		updated, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey:                  *APIKey,
-		})
-
+			FieldMask: ttnpb.FieldMask("rights"),
+		}, limitedCreds)
 		if a.So(err, should.NotBeNil) {
 			a.So(errors.IsPermissionDenied(err), should.BeTrue)
 		}
 		a.So(updated, should.BeNil)
 
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *collaboratorID,
-				Rights:                        []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
+		// UpdateAPIKey removing rights that caller has and adding rights that caller has.
+		updated, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
+			OrganizationIds: org1.GetIds(),
+			ApiKey: &ttnpb.APIKey{
+				Id: orgKey.GetId(),
+				Rights: []ttnpb.Right{
+					ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_BASIC,
+					ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+				},
 			},
-		})
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-	})
-}
-
-func TestOrganizationAccessClusterAuth(t *testing.T) {
-	a := assertions.New(t)
-	ctx := test.Context()
-
-	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		userID := defaultUser.UserIdentifiers
-		organizationID := userOrganizations(&userID).Organizations[0].OrganizationIdentifiers
-
-		reg := ttnpb.NewOrganizationAccessClient(cc)
-
-		rights, err := reg.ListRights(ctx, &organizationID, is.WithClusterAuth())
-
-		a.So(err, should.BeNil)
-		if a.So(rights, should.NotBeNil) {
-			a.So(ttnpb.AllClusterRights.Intersect(ttnpb.AllOrganizationRights).Sub(rights).Rights, should.BeEmpty)
-		}
-	})
-}
-
-func TestOrganizationAccessCRUD(t *testing.T) {
-	a := assertions.New(t)
-	ctx := test.Context()
-
-	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		userID, creds := defaultUser.UserIdentifiers, userCreds(defaultUserIdx)
-		organizationID := userOrganizations(&userID).Organizations[0].OrganizationIdentifiers
-		collaboratorID := collaboratorUser.UserIdentifiers.OrganizationOrUserIdentifiers()
-
-		reg := ttnpb.NewOrganizationAccessClient(cc)
-
-		rights, err := reg.ListRights(ctx, &organizationID, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(rights, should.NotBeNil) {
-			a.So(rights.Rights, should.Contain, ttnpb.RIGHT_ORGANIZATION_ALL)
+			FieldMask: ttnpb.FieldMask("rights"),
+		}, limitedCreds)
+		if a.So(err, should.BeNil) && a.So(updated, should.NotBeNil) {
+			a.So(updated.Rights, should.Resemble, []ttnpb.Right{
+				ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_BASIC,
+				ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+			})
 		}
 
-		modifiedOrganizationID := organizationID
-		modifiedOrganizationID.OrganizationID = reverse(modifiedOrganizationID.OrganizationID)
+		// API Key CRUD with different invalid credentials.
+		for _, opts := range [][]grpc.CallOption{nil, {orgCreds}} {
+			created, err := reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				Name:            "api-key-name",
+				Rights:          []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO},
+			}, opts...)
+			if a.So(err, should.NotBeNil) && a.So(errors.IsPermissionDenied(err), should.BeTrue) {
+				a.So(created, should.BeNil)
+			}
 
-		rights, err = reg.ListRights(ctx, &modifiedOrganizationID, creds)
+			list, err := reg.ListAPIKeys(ctx, &ttnpb.ListOrganizationAPIKeysRequest{
+				OrganizationIds: org1.GetIds(),
+			}, opts...)
+			if a.So(err, should.NotBeNil) && a.So(errors.IsPermissionDenied(err), should.BeTrue) {
+				a.So(list, should.BeNil)
+			}
 
-		a.So(err, should.BeNil)
-		if a.So(rights, should.NotBeNil) {
-			a.So(rights.Rights, should.BeEmpty)
-		}
+			got, err := reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				KeyId:           orgKey.GetId(),
+			}, opts...)
+			if a.So(err, should.NotBeNil) && a.So(errors.IsPermissionDenied(err), should.BeTrue) {
+				a.So(got, should.BeNil)
+			}
 
-		organizationAPIKeys := organizationAPIKeys(&organizationID)
-		organizationKey := organizationAPIKeys.APIKeys[0]
+			updated, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				ApiKey: &ttnpb.APIKey{
+					Id:   orgKey.GetId(),
+					Name: "api-key-name-updated",
+				},
+				FieldMask: ttnpb.FieldMask("name"),
+			}, opts...)
+			if a.So(err, should.NotBeNil) && a.So(errors.IsPermissionDenied(err), should.BeTrue) {
+				a.So(updated, should.BeNil)
+			}
 
-		APIKey, err := reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			KeyID:                   organizationKey.ID,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(APIKey, should.NotBeNil) {
-			a.So(APIKey.ID, should.Equal, organizationKey.ID)
-			a.So(APIKey.Key, should.BeEmpty)
-		}
-
-		APIKeys, err := reg.ListAPIKeys(ctx, &ttnpb.ListOrganizationAPIKeysRequest{
-			OrganizationIdentifiers: organizationID,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(APIKeys, should.NotBeNil) {
-			a.So(len(APIKeys.APIKeys), should.Equal, len(organizationAPIKeys.APIKeys))
-			for i, APIkey := range APIKeys.APIKeys {
-				a.So(APIkey.Name, should.Equal, organizationAPIKeys.APIKeys[i].Name)
-				a.So(APIkey.ID, should.Equal, organizationAPIKeys.APIKeys[i].ID)
+			_, err = reg.DeleteAPIKey(ctx, &ttnpb.DeleteOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				KeyId:           created.GetId(),
+			}, opts...)
+			if !a.So(errors.IsPermissionDenied(err), should.BeTrue) {
+				t.FailNow()
 			}
 		}
 
-		collaborators, err := reg.ListCollaborators(ctx, &ttnpb.ListOrganizationCollaboratorsRequest{
-			OrganizationIdentifiers: organizationID,
-		}, creds)
+		// API Key CRUD with different valid credentials.
+		for _, opts := range [][]grpc.CallOption{{adminCreds}, {usr1Creds}, {limitedCreds}} {
+			created, err := reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				Name:            "api-key-name",
+				Rights:          []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO},
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(created, should.NotBeNil) {
+				a.So(created.Name, should.Equal, "api-key-name")
+				a.So(created.Rights, should.Resemble, []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO})
+			}
 
-		a.So(err, should.BeNil)
-		if a.So(collaborators, should.NotBeNil) {
-			a.So(collaborators.Collaborators, should.NotBeEmpty)
+			list, err := reg.ListAPIKeys(ctx, &ttnpb.ListOrganizationAPIKeysRequest{
+				OrganizationIds: org1.GetIds(),
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(list, should.NotBeNil) && a.So(list.ApiKeys, should.HaveLength, 2) {
+				for _, k := range list.ApiKeys {
+					if k.Id == created.Id {
+						a.So(k.Name, should.Resemble, created.Name)
+					}
+				}
+			}
+
+			got, err := reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				KeyId:           created.GetId(),
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(got, should.NotBeNil) {
+				a.So(got.Name, should.Equal, created.Name)
+			}
+
+			updated, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				ApiKey: &ttnpb.APIKey{
+					Id:   created.GetId(),
+					Name: "api-key-name-updated",
+				},
+				FieldMask: ttnpb.FieldMask("name"),
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(updated, should.NotBeNil) {
+				a.So(updated.Name, should.Equal, "api-key-name-updated")
+			}
+
+			// TODO: Remove UpdateAPIKey test case (https://github.com/TheThingsNetwork/lorawan-stack/issues/6488).
+			t.Run("Delete via update method", func(*testing.T) { // nolint:paralleltest
+				_, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
+					OrganizationIds: org1.GetIds(),
+					ApiKey:          &ttnpb.APIKey{Id: created.GetId()},
+				}, opts...)
+				a.So(err, should.BeNil)
+
+				got, err = reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
+					OrganizationIds: org1.GetIds(),
+					KeyId:           created.GetId(),
+				}, opts...)
+				if a.So(err, should.NotBeNil) {
+					a.So(errors.IsNotFound(err), should.BeTrue)
+				}
+				a.So(got, should.BeNil)
+			})
+
+			// Recreates api-key of the `org1` Organization.
+			created, err = reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
+				OrganizationIds: org1.GetIds(),
+				Name:            "api-key-name",
+				Rights:          []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO},
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(created, should.NotBeNil) {
+				a.So(created.Name, should.Equal, "api-key-name")
+				a.So(created.Rights, should.Resemble, []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO})
+			}
+
+			t.Run("Delete via delete method", func(*testing.T) { // nolint:paralleltest
+				empty, err := reg.DeleteAPIKey(ctx, &ttnpb.DeleteOrganizationAPIKeyRequest{
+					OrganizationIds: org1.GetIds(),
+					KeyId:           created.GetId(),
+				}, opts...)
+				a.So(err, should.BeNil)
+				a.So(empty, should.Resemble, ttnpb.Empty)
+
+				got, err = reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
+					OrganizationIds: org1.GetIds(),
+					KeyId:           created.GetId(),
+				}, opts...)
+				if a.So(err, should.NotBeNil) {
+					a.So(errors.IsNotFound(err), should.BeTrue)
+				}
+				a.So(got, should.BeNil)
+			})
 		}
-
-		APIKeyName := "test-organization-api-key-name"
-		APIKey, err = reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			Name:                    APIKeyName,
-			Rights:                  []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(APIKey, should.NotBeNil) {
-			a.So(APIKey.Name, should.Equal, APIKeyName)
-		}
-
-		newAPIKeyName := "test-new-organization-api-key"
-		APIKey.Name = newAPIKeyName
-		updated, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey:                  *APIKey,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(updated, should.NotBeNil) {
-			a.So(updated.Name, should.Equal, newAPIKeyName)
-		}
-
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *collaboratorID,
-				Rights:                        []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
-			},
-		}, creds)
-
-		a.So(err, should.BeNil)
-
-		res, err := reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers:       organizationID,
-			OrganizationOrUserIdentifiers: *collaboratorID,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(res, should.NotBeNil) {
-			a.So(res.Rights, should.Resemble, []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL})
-		}
-	})
+	}, withPrivateTestDatabase(p))
 }
-func TestOrganizationAccessRights(t *testing.T) {
-	a := assertions.New(t)
-	ctx := test.Context()
+
+func TestOrganizationCollaborators(t *testing.T) { // nolint:gocyclo
+	p := &storetest.Population{}
+
+	admin := p.NewUser()
+	admin.Admin = true
+	adminKey, _ := p.NewAPIKey(admin.GetEntityIdentifiers(), ttnpb.Right_RIGHT_ALL)
+	adminCreds := rpcCreds(adminKey)
+
+	usr1 := p.NewUser()
+	usr1Key, _ := p.NewAPIKey(usr1.GetEntityIdentifiers(), ttnpb.Right_RIGHT_ALL)
+	usr1Creds := rpcCreds(usr1Key)
+
+	org1 := p.NewOrganization(usr1.GetOrganizationOrUserIdentifiers())
+
+	limitedKey, _ := p.NewAPIKey(usr1.GetEntityIdentifiers(),
+		ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+		ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_MEMBERS,
+	)
+	limitedCreds := rpcCreds(limitedKey)
+
+	orgKey, _ := p.NewAPIKey(org1.GetEntityIdentifiers(),
+		ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+		ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+	)
+	orgCreds := rpcCreds(orgKey)
+
+	usr2 := p.NewUser()
+	p.NewMembership(
+		usr2.GetOrganizationOrUserIdentifiers(),
+		org1.GetEntityIdentifiers(),
+		ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+		ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+	)
+
+	usr3 := p.NewUser()
+
+	t.Parallel()
+	a, ctx := test.New(t)
 
 	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		userID, usrCreds := defaultUser.UserIdentifiers, userCreds(defaultUserIdx)
-		organizationID := userOrganizations(&userID).Organizations[0].OrganizationIdentifiers
-		collaboratorID := organizationAccessUser.UserIdentifiers.OrganizationOrUserIdentifiers()
-		collaboratorCreds := userCreds(organizationAccessUserIdx)
-		removedCollaboratorID := orgAccessCollaboratorUser.UserIdentifiers.OrganizationOrUserIdentifiers()
+		is.config.AdminRights.All = true
 
 		reg := ttnpb.NewOrganizationAccessClient(cc)
 
-		_, err := reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *collaboratorID,
-				Rights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_LINK,
-					ttnpb.RIGHT_ORGANIZATION_SETTINGS_API_KEYS,
-					ttnpb.RIGHT_ORGANIZATION_SETTINGS_MEMBERS,
-				},
-			},
-		}, usrCreds)
-
-		a.So(err, should.BeNil)
-
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *removedCollaboratorID,
-				Rights: []ttnpb.Right{
-					ttnpb.RIGHT_ORGANIZATION_ALL,
-				},
-			},
-		}, usrCreds)
-
-		a.So(err, should.BeNil)
-
-		APIKey, err := reg.CreateAPIKey(ctx, &ttnpb.CreateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			Rights:                  []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL},
-		}, usrCreds)
-
-		a.So(err, should.BeNil)
-		if a.So(APIKey, should.NotBeNil) && a.So(APIKey.Rights, should.NotBeNil) {
-			a.So(APIKey.Rights, should.Resemble, []ttnpb.Right{ttnpb.RIGHT_ORGANIZATION_ALL})
-		}
-
-		// Try revoking rights for the collaborator with RIGHT_ORGANIZATION_ALL without having it
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *removedCollaboratorID,
-				Rights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_LINK,
-					ttnpb.RIGHT_ORGANIZATION_SETTINGS_API_KEYS,
-					ttnpb.RIGHT_ORGANIZATION_SETTINGS_MEMBERS,
-				},
-			},
-		}, collaboratorCreds)
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-
-		// Try revoking rights for the api key with RIGHT_ORGANIZATION_ALL without having it
-		_, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey: ttnpb.APIKey{
-				ID: APIKey.ID,
-				Rights: []ttnpb.Right{
-					ttnpb.RIGHT_APPLICATION_LINK,
-					ttnpb.RIGHT_ORGANIZATION_SETTINGS_API_KEYS,
-					ttnpb.RIGHT_ORGANIZATION_SETTINGS_MEMBERS,
-				},
-			},
-		}, collaboratorCreds)
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-
-		// Remove RIGHT_ORGANIZATION_ALL from collaborator to be removed
-		newRights := ttnpb.AllOrganizationRights.Sub(ttnpb.RightsFrom(ttnpb.RIGHT_ORGANIZATION_ALL))
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *removedCollaboratorID,
-				Rights:                        newRights.Rights,
-			},
-		}, usrCreds)
-
-		a.So(err, should.BeNil)
-
-		// Remove RIGHT_ORGANIZATION_ALL from api key to be removed
-		key, err := reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey: ttnpb.APIKey{
-				ID:     APIKey.ID,
-				Rights: newRights.Rights,
-			},
-		}, usrCreds)
-
-		a.So(err, should.BeNil)
-		if a.So(key, should.NotBeNil) && a.So(key.Rights, should.NotBeNil) {
-			a.So(key.Rights, should.Resemble, newRights.Rights)
-		}
-
-		newRights = newRights.Sub(ttnpb.RightsFrom(ttnpb.RIGHT_APPLICATION_LINK))
-		key, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey: ttnpb.APIKey{
-				ID:     APIKey.ID,
-				Rights: newRights.Rights,
-			},
-		}, collaboratorCreds)
-
-		a.So(err, should.BeNil)
-		if a.So(key, should.NotBeNil) && a.So(key.Rights, should.NotBeNil) {
-			a.So(key.Rights, should.Resemble, newRights.Rights)
-		}
-
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *removedCollaboratorID,
-				Rights:                        newRights.Rights,
-			},
-		}, collaboratorCreds)
-
-		a.So(err, should.BeNil)
-
-		// Try revoking RIGHT_ORGANIZATION_DELETE without having it
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *removedCollaboratorID,
-				Rights:                        newRights.Sub(ttnpb.RightsFrom(ttnpb.RIGHT_ORGANIZATION_DELETE)).Rights,
-			},
-		}, collaboratorCreds)
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-
-		// Try revoking RIGHT_ORGANIZATION_DELETE from api key without having it
-		_, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey: ttnpb.APIKey{
-				ID:     APIKey.ID,
-				Rights: newRights.Sub(ttnpb.RightsFrom(ttnpb.RIGHT_ORGANIZATION_DELETE)).Rights,
-			},
-		}, collaboratorCreds)
-
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsPermissionDenied(err), should.BeTrue)
-		}
-
-		res, err := reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers:       organizationID,
-			OrganizationOrUserIdentifiers: *removedCollaboratorID,
-		}, collaboratorCreds)
-
-		if a.So(err, should.BeNil) {
-			a.So(res.Rights, should.Resemble, newRights.Rights)
-		}
-
-		// Delete collaborator with more rights
-		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers: organizationID,
-			Collaborator: ttnpb.Collaborator{
-				OrganizationOrUserIdentifiers: *removedCollaboratorID,
-				Rights:                        []ttnpb.Right{},
-			},
-		}, collaboratorCreds)
-
-		a.So(err, should.BeNil)
-
-		_, err = reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
-			OrganizationIdentifiers:       organizationID,
-			OrganizationOrUserIdentifiers: *removedCollaboratorID,
-		}, collaboratorCreds)
-
+		// GetCollaborator that doesn't exist.
+		got, err := reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
+			OrganizationIds: org1.GetIds(),
+			Collaborator:    usr3.GetOrganizationOrUserIdentifiers(),
+		}, adminCreds)
 		if a.So(err, should.NotBeNil) {
 			a.So(errors.IsNotFound(err), should.BeTrue)
 		}
+		a.So(got, should.BeNil)
 
-		// Delete api key with more rights
-		_, err = reg.UpdateAPIKey(ctx, &ttnpb.UpdateOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			APIKey: ttnpb.APIKey{
-				ID:     APIKey.ID,
-				Rights: []ttnpb.Right{},
+		// SetCollaborator adding rights that caller doesn't have.
+		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+			OrganizationIds: org1.GetIds(),
+			Collaborator: &ttnpb.Collaborator{
+				Ids: usr2.GetOrganizationOrUserIdentifiers(),
+				Rights: []ttnpb.Right{
+					ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+					ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+					ttnpb.Right_RIGHT_ORGANIZATION_DELETE,
+				},
 			},
-		}, collaboratorCreds)
+		}, limitedCreds)
+		if a.So(err, should.NotBeNil) {
+			a.So(errors.IsPermissionDenied(err), should.BeTrue)
+		}
 
+		// SetCollaborator removing rights that caller doesn't have.
+		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+			OrganizationIds: org1.GetIds(),
+			Collaborator: &ttnpb.Collaborator{
+				Ids:    usr2.GetOrganizationOrUserIdentifiers(),
+				Rights: []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO},
+			},
+		}, limitedCreds)
+		if a.So(err, should.NotBeNil) {
+			a.So(errors.IsPermissionDenied(err), should.BeTrue)
+		}
+
+		// SetCollaborator removing rights that caller has and adding rights that caller has.
+		_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+			OrganizationIds: org1.GetIds(),
+			Collaborator: &ttnpb.Collaborator{
+				Ids: usr2.GetOrganizationOrUserIdentifiers(),
+				Rights: []ttnpb.Right{
+					ttnpb.Right_RIGHT_ORGANIZATION_SETTINGS_BASIC,
+					ttnpb.Right_RIGHT_ORGANIZATION_APPLICATIONS_LIST,
+				},
+			},
+		}, limitedCreds)
 		a.So(err, should.BeNil)
 
-		_, err = reg.GetAPIKey(ctx, &ttnpb.GetOrganizationAPIKeyRequest{
-			OrganizationIdentifiers: organizationID,
-			KeyID:                   APIKey.ID,
-		}, collaboratorCreds)
+		// Collaborator CRUD with different invalid credentials.
+		for _, opts := range [][]grpc.CallOption{nil, {orgCreds}} {
+			_, err := reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+				OrganizationIds: org1.GetIds(),
+				Collaborator: &ttnpb.Collaborator{
+					Ids: usr2.GetOrganizationOrUserIdentifiers(),
+					Rights: []ttnpb.Right{
+						ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+					},
+				},
+			}, opts...)
+			if a.So(err, should.NotBeNil) {
+				a.So(errors.IsPermissionDenied(err), should.BeTrue)
+			}
 
-		if a.So(err, should.NotBeNil) {
-			a.So(errors.IsNotFound(err), should.BeTrue)
+			got, err := reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
+				OrganizationIds: org1.GetIds(),
+				Collaborator:    usr2.GetOrganizationOrUserIdentifiers(),
+			}, opts...)
+			if a.So(err, should.NotBeNil) && a.So(errors.IsPermissionDenied(err), should.BeTrue) {
+				a.So(got, should.BeNil)
+			}
 		}
-	})
+
+		// ListCollaborators without credentials.
+		list, err := reg.ListCollaborators(ctx, &ttnpb.ListOrganizationCollaboratorsRequest{
+			OrganizationIds: org1.GetIds(),
+		})
+		if a.So(err, should.NotBeNil) && a.So(errors.IsUnauthenticated(err), should.BeTrue) {
+			a.So(list, should.BeNil)
+		}
+
+		// Collaborator CRUD with different valid credentials.
+		for _, opts := range [][]grpc.CallOption{{adminCreds}, {usr1Creds}, {limitedCreds}} {
+			_, err := reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+				OrganizationIds: org1.GetIds(),
+				Collaborator: &ttnpb.Collaborator{
+					Ids:    usr3.GetOrganizationOrUserIdentifiers(),
+					Rights: []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO},
+				},
+			}, opts...)
+			a.So(err, should.BeNil)
+
+			list, err := reg.ListCollaborators(ctx, &ttnpb.ListOrganizationCollaboratorsRequest{
+				OrganizationIds: org1.GetIds(),
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(list, should.NotBeNil) && a.So(list.Collaborators, should.HaveLength, 3) {
+				for _, k := range list.Collaborators {
+					if unique.ID(ctx, k.GetIds()) == unique.ID(ctx, usr3.GetIds()) {
+						a.So(k.Rights, should.Resemble, []ttnpb.Right{
+							ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+						})
+					}
+				}
+			}
+
+			got, err := reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
+				OrganizationIds: org1.GetIds(),
+				Collaborator:    usr3.GetOrganizationOrUserIdentifiers(),
+			}, opts...)
+			if a.So(err, should.BeNil) && a.So(got, should.NotBeNil) {
+				a.So(got.Rights, should.Resemble, []ttnpb.Right{
+					ttnpb.Right_RIGHT_ORGANIZATION_INFO,
+				})
+			}
+
+			// TODO: Remove SetCollaborator test case (https://github.com/TheThingsNetwork/lorawan-stack/issues/6488).
+			t.Run("Delete via set method", func(*testing.T) { // nolint:paralleltest
+				_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+					OrganizationIds: org1.GetIds(),
+					Collaborator: &ttnpb.Collaborator{
+						Ids:    usr3.GetOrganizationOrUserIdentifiers(),
+						Rights: []ttnpb.Right{},
+					},
+				}, opts...)
+				a.So(err, should.BeNil)
+
+				// Verifies that it has been deleted.
+				got, err = reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
+					OrganizationIds: org1.GetIds(),
+					Collaborator:    usr3.GetOrganizationOrUserIdentifiers(),
+				}, opts...)
+				if a.So(err, should.NotBeNil) {
+					a.So(errors.IsNotFound(err), should.BeTrue)
+				}
+				a.So(got, should.BeNil)
+			})
+
+			// Recreates `usr3` collaborator of the `org1` Organization.
+			_, err = reg.SetCollaborator(ctx, &ttnpb.SetOrganizationCollaboratorRequest{
+				OrganizationIds: org1.GetIds(),
+				Collaborator: &ttnpb.Collaborator{
+					Ids:    usr3.GetOrganizationOrUserIdentifiers(),
+					Rights: []ttnpb.Right{ttnpb.Right_RIGHT_ORGANIZATION_INFO},
+				},
+			}, opts...)
+			a.So(err, should.BeNil)
+
+			t.Run("Delete via delete method", func(*testing.T) { // nolint:paralleltest
+				empty, err := reg.DeleteCollaborator(ctx, &ttnpb.DeleteOrganizationCollaboratorRequest{
+					OrganizationIds: org1.GetIds(),
+					CollaboratorIds: usr3.GetOrganizationOrUserIdentifiers(),
+				}, opts...)
+				a.So(err, should.BeNil)
+				a.So(empty, should.Resemble, ttnpb.Empty)
+
+				// Verifies that it has been deleted.
+				got, err = reg.GetCollaborator(ctx, &ttnpb.GetOrganizationCollaboratorRequest{
+					OrganizationIds: org1.GetIds(),
+					Collaborator:    usr3.GetOrganizationOrUserIdentifiers(),
+				}, opts...)
+				if a.So(err, should.NotBeNil) {
+					a.So(errors.IsNotFound(err), should.BeTrue)
+				}
+				a.So(got, should.BeNil)
+			})
+		}
+
+		// Try removing the only collaborator with _ALL rights.
+		_, err = reg.DeleteCollaborator(ctx, &ttnpb.DeleteOrganizationCollaboratorRequest{
+			OrganizationIds: org1.GetIds(),
+			CollaboratorIds: usr1.GetOrganizationOrUserIdentifiers(),
+		}, usr1Creds)
+		if a.So(err, should.NotBeNil) {
+			a.So(errors.IsFailedPrecondition(err), should.BeTrue)
+		}
+	}, withPrivateTestDatabase(p))
+}
+
+func TestOrganizationAccessClusterAuth(t *testing.T) {
+	p := &storetest.Population{}
+	org1 := p.NewOrganization(nil)
+
+	t.Parallel()
+	a, ctx := test.New(t)
+
+	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
+		reg := ttnpb.NewOrganizationAccessClient(cc)
+
+		rights, err := reg.ListRights(ctx, org1.GetIds(), is.WithClusterAuth())
+		if a.So(err, should.BeNil) && a.So(rights, should.NotBeNil) {
+			a.So(ttnpb.AllClusterRights.Intersect(ttnpb.AllOrganizationRights).Sub(rights).Rights, should.BeEmpty)
+		}
+	}, withPrivateTestDatabase(p))
 }

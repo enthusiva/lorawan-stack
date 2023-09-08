@@ -19,12 +19,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -32,11 +31,12 @@ import (
 func requireAuthInfo(ctx context.Context) (res struct {
 	UniversalErr error
 	IsAdminErr   error
-}) {
+},
+) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		res.UniversalErr = RequireUniversal(ctx, ttnpb.RIGHT_SEND_INVITES)
+		res.UniversalErr = RequireUniversal(ctx, ttnpb.Right_RIGHT_SEND_INVITES)
 		wg.Done()
 	}()
 	go func() {
@@ -44,7 +44,7 @@ func requireAuthInfo(ctx context.Context) (res struct {
 		wg.Done()
 	}()
 	wg.Wait()
-	return
+	return res
 }
 
 func requireRights(ctx context.Context, id string) (res struct {
@@ -53,78 +53,103 @@ func requireRights(ctx context.Context, id string) (res struct {
 	GtwErr error
 	OrgErr error
 	UsrErr error
-}) {
+},
+) {
 	var wg sync.WaitGroup
 	wg.Add(5)
 	go func() {
-		res.AppErr = RequireApplication(ctx, ttnpb.ApplicationIdentifiers{ApplicationID: id}, ttnpb.RIGHT_APPLICATION_INFO)
+		res.AppErr = RequireApplication(ctx, &ttnpb.ApplicationIdentifiers{
+			ApplicationId: id,
+		}, ttnpb.Right_RIGHT_APPLICATION_INFO)
 		wg.Done()
 	}()
 	go func() {
-		res.CliErr = RequireClient(ctx, ttnpb.ClientIdentifiers{ClientID: id}, ttnpb.RIGHT_CLIENT_ALL)
+		res.CliErr = RequireClient(ctx, &ttnpb.ClientIdentifiers{
+			ClientId: id,
+		}, ttnpb.Right_RIGHT_CLIENT_INFO)
 		wg.Done()
 	}()
 	go func() {
-		res.GtwErr = RequireGateway(ctx, ttnpb.GatewayIdentifiers{GatewayID: id}, ttnpb.RIGHT_GATEWAY_INFO)
+		res.GtwErr = RequireGateway(ctx, &ttnpb.GatewayIdentifiers{
+			GatewayId: id,
+		}, ttnpb.Right_RIGHT_GATEWAY_INFO)
 		wg.Done()
 	}()
 	go func() {
-		res.OrgErr = RequireOrganization(ctx, ttnpb.OrganizationIdentifiers{OrganizationID: id}, ttnpb.RIGHT_ORGANIZATION_INFO)
+		res.OrgErr = RequireOrganization(ctx, &ttnpb.OrganizationIdentifiers{
+			OrganizationId: id,
+		}, ttnpb.Right_RIGHT_ORGANIZATION_INFO)
 		wg.Done()
 	}()
 	go func() {
-		res.UsrErr = RequireUser(ctx, ttnpb.UserIdentifiers{UserID: id}, ttnpb.RIGHT_USER_INFO)
+		res.UsrErr = RequireUser(ctx, &ttnpb.UserIdentifiers{
+			UserId: id,
+		}, ttnpb.Right_RIGHT_USER_INFO)
 		wg.Done()
 	}()
 	wg.Wait()
-	return
+	return res
 }
 
 func TestRequire(t *testing.T) {
-	a := assertions.New(t)
+	t.Parallel()
+	a, ctx := test.New(t)
 
 	a.So(func() {
-		RequireUniversal(test.Context(), ttnpb.RIGHT_SEND_INVITES)
+		_ = RequireUniversal(ctx, ttnpb.Right_RIGHT_SEND_INVITES)
 	}, should.Panic)
 	a.So(func() {
-		RequireIsAdmin(test.Context())
+		_ = RequireIsAdmin(ctx)
 	}, should.Panic)
 	a.So(func() {
-		RequireApplication(test.Context(), ttnpb.ApplicationIdentifiers{}, ttnpb.RIGHT_APPLICATION_INFO)
+		_ = RequireApplication(ctx, &ttnpb.ApplicationIdentifiers{}, ttnpb.Right_RIGHT_APPLICATION_INFO)
 	}, should.Panic)
 	a.So(func() {
-		RequireClient(test.Context(), ttnpb.ClientIdentifiers{}, ttnpb.RIGHT_CLIENT_ALL)
+		_ = RequireClient(ctx, &ttnpb.ClientIdentifiers{}, ttnpb.Right_RIGHT_CLIENT_INFO)
 	}, should.Panic)
 	a.So(func() {
-		RequireGateway(test.Context(), ttnpb.GatewayIdentifiers{}, ttnpb.RIGHT_GATEWAY_INFO)
+		_ = RequireGateway(ctx, &ttnpb.GatewayIdentifiers{}, ttnpb.Right_RIGHT_GATEWAY_INFO)
 	}, should.Panic)
 	a.So(func() {
-		RequireOrganization(test.Context(), ttnpb.OrganizationIdentifiers{}, ttnpb.RIGHT_ORGANIZATION_INFO)
+		_ = RequireOrganization(ctx, &ttnpb.OrganizationIdentifiers{}, ttnpb.Right_RIGHT_ORGANIZATION_INFO)
 	}, should.Panic)
 	a.So(func() {
-		RequireUser(test.Context(), ttnpb.UserIdentifiers{}, ttnpb.RIGHT_USER_INFO)
+		_ = RequireUser(ctx, &ttnpb.UserIdentifiers{}, ttnpb.Right_RIGHT_USER_INFO)
 	}, should.Panic)
 
-	fooCtx := test.Context()
-	fooCtx = NewContext(fooCtx, Rights{
-		ApplicationRights: map[string]*ttnpb.Rights{
-			unique.ID(fooCtx, ttnpb.ApplicationIdentifiers{ApplicationID: "foo"}): ttnpb.RightsFrom(ttnpb.RIGHT_APPLICATION_INFO),
-		},
-		ClientRights: map[string]*ttnpb.Rights{
-			unique.ID(fooCtx, ttnpb.ClientIdentifiers{ClientID: "foo"}): ttnpb.RightsFrom(ttnpb.RIGHT_CLIENT_ALL),
-		},
-		GatewayRights: map[string]*ttnpb.Rights{
-			unique.ID(fooCtx, ttnpb.GatewayIdentifiers{GatewayID: "foo"}): ttnpb.RightsFrom(ttnpb.RIGHT_GATEWAY_INFO),
-		},
-		OrganizationRights: map[string]*ttnpb.Rights{
-			unique.ID(fooCtx, ttnpb.OrganizationIdentifiers{OrganizationID: "foo"}): ttnpb.RightsFrom(ttnpb.RIGHT_ORGANIZATION_INFO),
-		},
-		UserRights: map[string]*ttnpb.Rights{
-			unique.ID(fooCtx, ttnpb.UserIdentifiers{UserID: "foo"}): ttnpb.RightsFrom(ttnpb.RIGHT_USER_INFO),
-		},
+	var (
+		fooCtx = ctx
+		fooID  = "foo"
+	)
+	fooCtx = NewContext(fooCtx, &Rights{
+		ApplicationRights: *NewMap(map[string]*ttnpb.Rights{
+			unique.ID(fooCtx, &ttnpb.ApplicationIdentifiers{
+				ApplicationId: fooID,
+			}): ttnpb.RightsFrom(ttnpb.Right_RIGHT_APPLICATION_INFO),
+		}),
+		ClientRights: *NewMap(map[string]*ttnpb.Rights{
+			unique.ID(fooCtx, &ttnpb.ClientIdentifiers{
+				ClientId: fooID,
+			}): ttnpb.RightsFrom(ttnpb.Right_RIGHT_CLIENT_INFO),
+		}),
+		GatewayRights: *NewMap(map[string]*ttnpb.Rights{
+			unique.ID(fooCtx, &ttnpb.GatewayIdentifiers{
+				GatewayId: fooID,
+			}): ttnpb.RightsFrom(ttnpb.Right_RIGHT_GATEWAY_INFO),
+		}),
+		OrganizationRights: *NewMap(map[string]*ttnpb.Rights{
+			unique.ID(fooCtx, &ttnpb.OrganizationIdentifiers{
+				OrganizationId: fooID,
+			}): ttnpb.RightsFrom(ttnpb.Right_RIGHT_ORGANIZATION_INFO),
+		}),
+		UserRights: *NewMap(map[string]*ttnpb.Rights{
+			unique.ID(fooCtx, &ttnpb.UserIdentifiers{
+				UserId: fooID,
+			}): ttnpb.RightsFrom(ttnpb.Right_RIGHT_USER_INFO),
+		}),
 	})
 	fooCtx = NewContextWithAuthInfo(fooCtx, &ttnpb.AuthInfoResponse{
-		UniversalRights: ttnpb.RightsFrom(ttnpb.RIGHT_SEND_INVITES),
+		UniversalRights: ttnpb.RightsFrom(ttnpb.Right_RIGHT_SEND_INVITES),
 		IsAdmin:         true,
 	})
 

@@ -17,10 +17,10 @@ package ttnpb
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
-	proto "github.com/golang/protobuf/proto"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/gogoproto"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const valueKey = "value"
@@ -36,13 +36,13 @@ func (e errorDetails) Namespace() string     { return e.GetNamespace() }
 func (e errorDetails) Name() string          { return e.GetName() }
 func (e errorDetails) MessageFormat() string { return e.GetMessageFormat() }
 func (e errorDetails) PublicAttributes() map[string]interface{} {
-	attributes, err := gogoproto.Map(e.GetAttributes())
+	attributes, err := goproto.Map(e.GetAttributes())
 	if err != nil {
-		panic(fmt.Sprintf("Failed to decode error attributes: %s", err)) // Likely a bug in gogoproto.
+		panic(fmt.Sprintf("Failed to decode error attributes: %s", err)) // Likely a bug in goproto.
 	}
 	return attributes
 }
-func (e errorDetails) CorrelationID() string { return e.GetCorrelationID() }
+func (e errorDetails) CorrelationID() string { return e.GetCorrelationId() }
 func (e errorDetails) Cause() error {
 	cause := e.GetCause()
 	if cause == nil {
@@ -60,12 +60,11 @@ func (e errorDetails) Details() []proto.Message {
 
 	msgs := make([]proto.Message, 0, len(details))
 	for _, dAny := range details {
-		var msg types.DynamicAny
-		err := types.UnmarshalAny(dAny, &msg)
+		msg, err := dAny.UnmarshalNew()
 		if err != nil {
 			panic(fmt.Sprintf("Failed to decode error details: %s", err))
 		}
-		msgs = append(msgs, msg.Message)
+		msgs = append(msgs, msg)
 	}
 	return msgs
 }
@@ -75,11 +74,11 @@ func ErrorDetailsToProto(e errors.ErrorDetails) *ErrorDetails {
 		Namespace:     e.Namespace(),
 		Name:          e.Name(),
 		MessageFormat: e.MessageFormat(),
-		CorrelationID: e.CorrelationID(),
+		CorrelationId: e.CorrelationID(),
 		Code:          e.Code(),
 	}
 	if attributes := e.PublicAttributes(); len(attributes) > 0 {
-		attributesStruct, err := gogoproto.Struct(attributes)
+		attributesStruct, err := goproto.Struct(attributes)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to encode error attributes: %s", err)) // Likely a bug in ttn (invalid attribute type).
 		}
@@ -91,7 +90,7 @@ func ErrorDetailsToProto(e errors.ErrorDetails) *ErrorDetails {
 		}
 	}
 	for _, d := range e.Details() {
-		dAny, err := types.MarshalAny(d)
+		dAny, err := anypb.New(d)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to encode error details: %s", err))
 		}
@@ -129,12 +128,13 @@ func init() {
 	}
 }
 
-type valueErr func(interface{}) errors.Error
+type valueErr func(interface{}) *errors.Error
 
 func unexpectedValue(err interface {
-	WithAttributes(kv ...interface{}) errors.Error
-}) valueErr {
-	return func(value interface{}) errors.Error {
+	WithAttributes(kv ...interface{}) *errors.Error
+},
+) valueErr {
+	return func(value interface{}) *errors.Error {
 		return err.WithAttributes(valueKey, value)
 	}
 }
@@ -143,7 +143,7 @@ var (
 	errFieldHasMax        = errors.DefineInvalidArgument("field_with_max", "`{field}` should be lower or equal to `{max}`", valueKey)
 	errFieldBound         = errors.DefineInvalidArgument("field_bound", "`{field}` should be between `{min}` and `{max}`", valueKey)
 	errMissingIdentifiers = errors.DefineInvalidArgument("missing_identifiers", "missing identifiers")
-	errParse              = errors.DefineInvalidArgument("parse", "could not parse `{value}` into `{field}`", valueKey)
+	errParse              = errors.DefineInvalidArgument("parse", "parse `{value}` into `{field}`", valueKey)
 
 	errInvalidField = errors.DefineInvalidArgument("field", "invalid field `{field}`")
 )
@@ -160,6 +160,6 @@ func errCouldNotParse(lorawanField string) valueErr {
 	return unexpectedValue(errParse.WithAttributes("field", lorawanField))
 }
 
-func errMissing(lorawanField string) errors.Error {
+func errMissing(lorawanField string) *errors.Error {
 	return errMissingField.WithAttributes("field", lorawanField)
 }

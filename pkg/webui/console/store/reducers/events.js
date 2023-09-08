@@ -13,6 +13,8 @@
 // limitations under the License.
 
 import EVENT_STORE_LIMIT from '@console/constants/event-store-limit'
+import { EVENT_FILTERS } from '@console/constants/event-filters'
+import CONNECTION_STATUS from '@console/constants/connection-status'
 
 import { getCombinedDeviceId } from '@ttn-lw/lib/selectors/id'
 
@@ -22,6 +24,8 @@ import {
   createStatusClosedEvent,
   createStatusPausedEvent,
   createStatusResumedEvent,
+  createStatusFilterEnabled,
+  createStatusFilterDisabled,
   EVENT_STATUS_RESUMED,
 } from '@console/lib/events/definitions'
 import { createSyntheticEventFromError } from '@console/lib/events/utils'
@@ -37,9 +41,8 @@ import {
   createStopEventsStreamActionType,
   createEventStreamClosedActionType,
   createClearEventsActionType,
+  createSetEventsFilterActionType,
 } from '@console/store/actions/events'
-
-import CONNECTION_STATUS from '../../constants/connection-status'
 
 const addEvent = (state, event) => {
   const { events } = state
@@ -50,7 +53,16 @@ const addEvent = (state, event) => {
   }
 
   // See https://github.com/TheThingsNetwork/lorawan-stack/pull/2989
-  if (event.name === 'events.stream.start' || event.name === 'events.stream.stop') {
+  if (event.name === 'events.stream.start') {
+    if (event.data && event.data.value) {
+      return { confirmedFilter: event.data.value }
+    }
+
+    return {}
+  }
+
+  // See https://github.com/TheThingsNetwork/lorawan-stack/pull/2989
+  if (event.name === 'events.stream.stop') {
     return {}
   }
 
@@ -82,15 +94,6 @@ const addEvent = (state, event) => {
   return { events: newEvents, truncated: events.length + 1 > EVENT_STORE_LIMIT }
 }
 
-const defaultState = {
-  events: [],
-  truncated: false,
-  error: undefined,
-  interrupted: false,
-  paused: false,
-  status: CONNECTION_STATUS.DISCONNECTED,
-}
-
 const createNamedEventReducer = (reducerName = '') => {
   const START_EVENTS = createStartEventsStreamActionType(reducerName)
   const START_EVENTS_SUCCESS = createStartEventsStreamSuccessActionType(reducerName)
@@ -102,6 +105,20 @@ const createNamedEventReducer = (reducerName = '') => {
   const GET_EVENT_FAILURE = createGetEventMessageFailureActionType(reducerName)
   const CLEAR_EVENTS = createClearEventsActionType(reducerName)
   const EVENT_STREAM_CLOSED = createEventStreamClosedActionType(reducerName)
+  const SET_EVENTS_FILTER = createSetEventsFilterActionType(reducerName)
+
+  const defaultState = {
+    events: [],
+    truncated: false,
+    error: undefined,
+    interrupted: false,
+    paused: false,
+    status: CONNECTION_STATUS.DISCONNECTED,
+    filter: EVENT_FILTERS[reducerName]
+      ? EVENT_FILTERS[reducerName].find(f => f.id === 'default')
+      : undefined,
+    confirmedFilter: undefined,
+  }
 
   return (state = defaultState, action) => {
     switch (action.type) {
@@ -113,7 +130,9 @@ const createNamedEventReducer = (reducerName = '') => {
       case START_EVENTS_SUCCESS:
         return {
           ...state,
-          ...(state.interrupted ? addEvent(state, createStatusReconnectedEvent()) : state.events),
+          ...(state.interrupted && !action.silent
+            ? addEvent(state, createStatusReconnectedEvent())
+            : state.events),
           status: CONNECTION_STATUS.CONNECTED,
           interrupted: false,
           error: undefined,
@@ -160,7 +179,7 @@ const createNamedEventReducer = (reducerName = '') => {
       case EVENT_STREAM_CLOSED:
         return {
           ...state,
-          ...addEvent(state, createStatusClosedEvent()),
+          ...(!action.silent ? addEvent(state, createStatusClosedEvent()) : state.events),
           status: CONNECTION_STATUS.DISCONNECTED,
           interrupted: true,
         }
@@ -169,6 +188,20 @@ const createNamedEventReducer = (reducerName = '') => {
           ...state,
           events: [createStatusClearedEvent()],
           truncated: false,
+        }
+      case SET_EVENTS_FILTER:
+        const filter = action.filterId
+          ? EVENT_FILTERS[reducerName].find(f => f.id === action.filterId)
+          : undefined
+        return {
+          ...state,
+          ...addEvent(
+            state,
+            Boolean(action.filterId)
+              ? createStatusFilterEnabled({ ...filter, confirmedFilter: state.confirmedFilter })
+              : createStatusFilterDisabled(),
+          ),
+          filter,
         }
       default:
         return state
@@ -187,6 +220,7 @@ const createNamedEventsReducer = (reducerName = '') => {
   const CLEAR_EVENTS = createClearEventsActionType(reducerName)
   const STOP_EVENTS = createStopEventsStreamActionType(reducerName)
   const EVENT_STREAM_CLOSED = createEventStreamClosedActionType(reducerName)
+  const SET_EVENTS_FILTER = createSetEventsFilterActionType(reducerName)
   const event = createNamedEventReducer(reducerName)
 
   return (state = {}, action) => {
@@ -206,6 +240,7 @@ const createNamedEventsReducer = (reducerName = '') => {
       case EVENT_STREAM_CLOSED:
       case GET_EVENT_FAILURE:
       case GET_EVENT_SUCCESS:
+      case SET_EVENTS_FILTER:
       case CLEAR_EVENTS:
         return {
           ...state,

@@ -2,9 +2,60 @@
 
 The Things Stack components are primarily built in Go, we use React for web front-ends. It is assumed that you have decent knowledge and experience with these technologies. If you want to get more familiar with Go, we strongly recommend to take [A Tour of Go](https://tour.golang.org/).
 
+## Table of contents
+
+- [Development Environment](#development-environment)
+- [Cloning the Repository](#cloning-the-repository)
+- [Getting Started](#getting-started)
+- [Running a development build of The Things Stack](#running-a-development-build-of-the-things-stack)
+  - [Pre-requisites](#pre-requisites)
+  - [Steps](#steps)
+- [Using the CLI with the Development Environment](#using-the-cli-with-the-development-environment)
+- [Managing the Development Databases](#managing-the-development-databases)
+  - [PostgreSQL](#PostgreSQL)
+  - [Redis](#redis)
+- [Building the Frontend](#building-the-frontend)
+- [Starting The Things Stack](#starting-the-things-stack)
+- [Project Structure](#project-structure)
+  - [API](#api)
+  - [Documentation](#documentation)
+  - [Web UI](#web-ui)
+- [Code Style](#code-style)
+  - [Code Formatting](#code-formatting)
+  - [Line Length](#line-length)
+  - [Formatting and Linting](#formatting-and-linting)
+  - [Documentation Site](#documentation-site)
+- [Naming Guidelines](#naming-guidelines)
+  - [API Method Naming](#api-method-naming)
+  - [Variable Naming](#variable-naming)
+  - [Event Naming](#event-naming)
+  - [Error Naming](#error-naming)
+  - [Log Field Keys, Event Names, Error Names, Error Attributes and Task Identifiers](#log-field-keys-event-names-error-names-error-attributes-and-task-identifiers)
+  - [Comments](#comments)
+- [JavaScript Code Style](#javascript-code-style)
+  - [Code Formatting](#code-formatting)
+  - [Code Comments](#code-comments)
+  - [Import Statement Order](#import-statement-order)
+  - [React Component Syntax (Functional, Class Components and Hooks)](#react-component-syntax-functional-class-components-and-hooks)
+  - [React Component Types](#react-component-types)
+  - [Frontend Related Pull Requests](#frontend-related-pull-requests)
+- [Translations](#translations)
+  - [Backend Translations](#backend-translations)
+  - [Frontend Translations](#frontend-translations)
+- [Events](#events)
+- [Testing](#testing)
+  - [Unit Tests](#unit-tests)
+  - [End-to-end Tests](#end-to-end-tests)
+- [Building and Running](#building-and-running)
+- [Releasing](#releasing)
+  - [Release From Master](#release-from-master)
+  - [Release Backports](#release-backports)
+- [Troubleshooting](#troubleshooting)
+  - [Console](#console)
+
 ## Development Environment
 
-The Things Network's development tooling uses [Mage](https://magefile.org/). Under the hood, `mage` calls other tools such as `git`, `go`, `yarn`, `docker` etc. Recent versions are supported; Node v12.x and Go v1.16x.
+The Things Network's development tooling uses [Mage](https://magefile.org/). Under the hood, `mage` calls other tools such as `git`, `go`, `yarn`, `docker` etc. Recent versions are supported; Node v18.x and Go v1.18.x.
 
 - Follow [Go's installation guide](https://golang.org/doc/install) to install Go.
 - Download Node.js [from their website](https://nodejs.org) and install it.
@@ -58,7 +109,7 @@ This will build the frontend assets and place it in the `public` folder.
 $ tools/bin/mage dev:dbStart # This requires Docker to be running.
 ```
 
-This will start one instance each of `CockroachDB` and `Redis` as Docker containers. To verify this, you can run
+This will start one instance each of `postgres` and `Redis` as Docker containers. To verify this, you can run
 
 ```bash
 $ docker ps
@@ -116,9 +167,9 @@ $ tools/bin/mage dev:dbStop  # Stops all databases.
 $ tools/bin/mage dev:dbErase # Stops all databases and erase storage.
 ```
 
-### CockroachDB
+### PostgreSQL
 
-CockroachDB is a distributed SQL database that we use in the Identity Server.
+PostgreSQL is a SQL database that we use in the Identity Server.
 
 You can use `tools/bin/mage dev:dbSQL` to enter an SQL shell.
 
@@ -214,11 +265,11 @@ $ tools/bin/mage proto:clean proto:all jsSDK:definitions
 
 ### Documentation
 
-The documentation site for The Things Stack is built from the [`lorawan-stack-docs`(https://github.com/TheThingsIndustries/lorawan-stack-docs) repository.
+The documentation site for The Things Stack is built from the [`lorawan-stack-docs`](https://github.com/TheThingsIndustries/lorawan-stack-docs) repository.
 
 ### Web UI
 
-The Things Stack for LoRaWAN includes two frontend applications: the **Console** and **OAuth Provider**. Both applications use [React](https://reactjs.org/) as frontend framework. The `console` and `oauth` packages of the backend expose their respective web servers and handle all logic that cannot be done in the browser. Otherwise both applications are single page applications (SPA) that run entirely in the browser.
+The Things Stack for LoRaWAN includes two frontend applications: the **Console** and **Account App**. Both applications use [React](https://reactjs.org/) as frontend framework. The `console` and `account` packages of the backend expose their respective web servers and handle all logic that cannot be done in the browser. Otherwise both applications are single page applications (SPA) that run entirely in the browser.
 
 The folder structure of the frontend looks as follows:
 
@@ -259,28 +310,37 @@ The development server runs on `http://localhost:8080` and will proxy all api ca
 In order to set up The Things Stack to support running the frontend via `webpack-dev-server`, the following environment setup is needed:
 
 ```bash
-NODE_ENV="development"
-TTN_LW_LOG_LEVEL="debug"
-TTN_LW_IS_OAUTH_UI_JS_FILE="libs.bundle.js account.js"
-TTN_LW_CONSOLE_UI_JS_FILE="libs.bundle.js console.js"
-TTN_LW_CONSOLE_UI_CANONICAL_URL="http://localhost:8080/console"
-TTN_LW_CONSOLE_OAUTH_AUTHORIZE_URL="http://localhost:8080/oauth/authorize"
-TTN_LW_CONSOLE_OAUTH_LOGOUT_URL="http://localhost:8080/oauth/logout"
-TTN_LW_CONSOLE_OAUTH_TOKEN_URL="http://localhost:8080/oauth/token"
-TTN_LW_IS_OAUTH_UI_CANONICAL_URL="http://localhost:8080/oauth"
-TTN_LW_IS_EMAIL_NETWORK_IDENTITY_SERVER_URL="http://localhost:8080/oauth.js"
-TTN_LW_CONSOLE_UI_ASSETS_BASE_URL="http://localhost:8080/assets"
+# .dev.env
+export NODE_ENV="development"
+export TTN_LW_LOG_LEVEL="debug"
+export TTN_LW_CONSOLE_UI_CANONICAL_URL="http://localhost:8080/console"
+export TTN_LW_CONSOLE_OAUTH_AUTHORIZE_URL="http://localhost:8080/oauth/authorize"
+export TTN_LW_CONSOLE_OAUTH_LOGOUT_URL="http://localhost:8080/oauth/logout"
+export TTN_LW_CONSOLE_OAUTH_TOKEN_URL="http://localhost:8080/oauth/token"
+export TTN_LW_IS_OAUTH_UI_CANONICAL_URL="http://localhost:8080/oauth"
+export TTN_LW_IS_EMAIL_NETWORK_IDENTITY_SERVER_URL="http://localhost:8080/oauth"
+export TTN_LW_IS_EMAIL_PROVIDER="dir"
+export TTN_LW_IS_EMAIL_DIR=".dev/email"
+export TTN_LW_CONSOLE_UI_ASSETS_BASE_URL="http://localhost:8080/assets"
+export TTN_LW_IS_OAUTH_UI_CONSOLE_URL="http://localhost:8080/console"
+export TTN_LW_CONSOLE_UI_ACCOUNT_URL="http://localhost:8080/oauth"
 ```
+
+We recommend saving this configuration as an `.dev.env` file and sourcing it like `source .dev.env`. This allows you to easily apply development configuration when needed.
+
+> Note: It is important to **source these environment variables in all terminal sessions** that run The Things Stack or the `tools/bin/mage` commands. Failing to do so will result in erros such as blank page renders. See also [troubleshooting](#troubleshooting).
 
 #### Optional Configuration
 
 ##### Disable [Hot Module Replacement](https://webpack.js.org/concepts/hot-module-replacement/)
 
-> Note: Webpack-related configuration can be loaded from environment variables only. It cannot be sourced from a config file.
+If you experience trouble seeing the WebUIs updated after a code change, you can also disable hot module replacement and enforce a hard reload on code changes instead. This method is a bit slower but more robust. To do so apply the following variable:
 
 ```bash
 WEBPACK_DEV_SERVER_DISABLE_HMR="true"
 ```
+
+> Note: Webpack-related configuration can be loaded from environment variables only. It cannot be sourced from a config file.
 
 ##### Enable TLS in `webpack-dev-server`
 
@@ -319,7 +379,7 @@ We don't have strict rules for line length, but in our experience the following 
 
 Go code can be automatically formatted using tools such as [`gofmt`](https://godoc.org/github.com/golang/go/src/cmd/gofmt) and [`goimports`](https://godoc.org/golang.org/x/tools/cmd/goimports). The [Go language server](https://github.com/golang/tools/tree/master/gopls) can also help with formatting code. There are many editor plugins that automatically format your code when you save your files. We highly recommend using those.
 
-We use [`revive`](http://github.com/mgechev/revive) to lint Go code and [`eslint`](https://eslint.org) to lint JavaScript code. These tools should automatically be installed when initializing your development environment.
+We use [`golangci-lint`](https://golangci-lint.run/) to lint Go code and [`eslint`](https://eslint.org) to lint JavaScript code. These tools should automatically be installed when initializing your development environment.
 
 ### Documentation Site
 
@@ -732,47 +792,24 @@ We use [Cypress](https://cypress.io) for running frontend-based end-to-end tests
 
 #### Running frontend end-to-end tests locally
 
-Make sure to [build the frontend assets](#building-the-frontend), [start The Things Stack](#starting-the-things-stack) and run `tools/bin/mage dev:sqlDump` to save database dump before executing end-to-end tests.
+Make sure to [build the frontend assets](#building-the-frontend) and run `tools/bin/mage dev:initStack dev:sqlDump` to create a seed database which the tests can reset the database to in between runs. To run the stack when working on end-to-end tests, use the `tools/bin/mage dev:startDevStack` command. This will run the runs The Things Stack with proper configuration for the end-to-end tests. Note: this command does not output anything, but logs are written to `.cache/devStack.log`.
 
-`Cypress` provides two modes for running tests: headless and interactive.
-- Headless mode - will not display any browser GUI and output test progress into your terminal instead. This is helpful when one just needs see the results of the tests.
-- Interactive mode - will run an `Electron` based application together with the full-fledged browser. This is helpful when developig frontend applications as it provides hot reload, time travelling, browser extensions and DOM access.
+[Cypress](https://www.cypress.io/) provides two modes for running tests: headless and interactive.
+- **Headless mode** will not display any browser GUI and output test progress into your terminal instead. This is helpful when one just needs see the results of the tests.
+- **Interactive mode** will run an Electron based application together with the full-fledged browser. This is helpful when developing frontend applications as it provides hot reload, time travelling, browser extensions and DOM access.
 
 > Note: Currently, we test our frontend only in Chromium based browsers.
 
-You can run `Cypress` in the headless mode by running the following command:
+You can run Cypress in the headless mode by running the following command:
 
 ```bash
 $ tools/bin/mage js:cypressHeadless
 ```
 
-You can run `Cypress` in the interactive mode by running the following command:
+You can run Cypress in the interactive mode by running the following command:
 
 ```bash
 $ tools/bin/mage js:cypressInteractive
-```
-
-#### Code coverage
-
-Code coverage can be used to verify that tests invoke code for handling edge cases.
-To generate code coverage report run:
-
-- Global text summary.
-
-```bash
-$ npx nyc report --reporter=text-summary
-```
-
-- Per file text.
-
-```bash
-$ npx nyc report --reporter=text
-```
-
-- Per file with UI. This command will generate `index.html` file in the `coverage/cypress` folder.
-
-```bash
-$ npx nyc report --reporter=html
 ```
 
 #### JavaScript based tests
@@ -952,7 +989,7 @@ In some cases it can be necessary to select DOM elements using a special selecti
 
 ##### Test runner globals
 
-`Cypress` uses [Mocha](https://mochajs.org/) as the test runner internally, while for unit tests we use [Jest](https://jestjs.io/). To keep our tests consistent we prefer using globals from `Jest` when possible.
+Cypress uses [Mocha](https://mochajs.org/) as the test runner internally, while for unit tests we use [Jest](https://jestjs.io/). To keep our tests consistent we prefer using globals from `Jest` when possible.
 
 
 Jest globals | Mocha globals | Used for
@@ -987,7 +1024,7 @@ Jest globals | Mocha globals | Used for
   - One test file must have end-to-end tests dedicated only to a specific entity or view.
 2. `pkg/cypress/{console|oauth}/shared` contains all test specification not directly related to a single entity or a view. For example, `side-navigation.spec.js` or `header.spec.js` must be placed into the `cypress/console/shared` folder because both components are present on multiple views and are partially related to the stack entities. Make sure to scope cypress selections within the tested component using `cy.within`.
 3. `pkg/cypress/integration/smoke` contains tests that simulate a complete user story trying to do almost everything a typical user would do. For example, a typical smoke test can verify that the user is able to register, login, create application and register The Things Uno. For more details and diffeence between regular end-to-end and smoke tests see the [End-to-end tests structure](#organizing-end-to-end-tests) section.
-4. and 5. `Cypress` stores screenshots and videos to the appropriate folder after running end-to-end tests. These should not be added to the repository.
+4. and 5. Cypress stores screenshots and videos to the appropriate folder after running end-to-end tests. These should not be added to the repository.
 
 ##### Organizing end-to-end tests
 
@@ -1047,7 +1084,7 @@ It is also possible to use `go build`, or release snapshots, as described below.
 The Things Stack uses [GoReleaser](https://goreleaser.com/) for releases. If you want to build a release (snapshot), you first need to install GoReleaser:
 
 ```bash
-$ go install github.com/goreleaser/goreleaser@v0.161.1
+$ go install github.com/goreleaser/goreleaser@v1.2.5
 ```
 
 The command for building a release snapshot is:
@@ -1061,6 +1098,8 @@ The command for building a full release is:
 ```bash
 $ goreleaser -f .goreleaser.release.yml --rm-dist
 ```
+
+> Note: Goreleaser is configured to sign binaries, as per GitHub Action in `.github/workflows/release-*.yml`. If you're doing a release locally, you will need key's passphrase, or need to skip the signing step.
 
 > Note: You will at least need to have [`rpm`](http://rpm5.org/) and [`snapcraft`](https://snapcraft.io/) in your `PATH` if you want to build a full release.
 
@@ -1101,6 +1140,14 @@ Uncaught ReferenceError: libs_472226f4872c9448fc26 is not defined
 ```
 
 #### Possible causes
+
+##### Using incorrect or no configs
+
+If you plan to run the Console / Account App in development mode, it is important to ensure that the right configuration is loaded both for running The Things Stack itself, as well as the development tooling (e.g. `tools/bin/mage serve`).
+
+##### Possible solution
+
+Make sure that you source the environment variables as [described above](#development-configuration) **in all terminal sessions** that run The Things Stack or the `tools/bin/mage` commands.
 
 ##### Missing restart
 

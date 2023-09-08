@@ -1,0 +1,65 @@
+name: Pull Request Mergeability
+
+on:
+  pull_request_target:
+    branches:
+      - "v3.*"
+
+jobs:
+  # IMPORTANT: THIS JOB USES AN UNTRUSTED CHECKOUT!
+  # DO NOT RUN ANY CODE FROM THE REPOSITORY!
+  check_mergeability:
+    name: Check Mergeability
+    if: ${{ github.repository == 'TheThingsNetwork/lorawan-stack' }}
+    runs-on: ubuntu-22.04
+    env:
+      MERGE_CONFLICTS_IGNORE: |
+        CHANGELOG.md
+        config/messages.json
+        go.mod
+        go.sum
+        package.json
+        tools/go.mod
+        tools/go.sum
+        yarn.lock
+        pkg/webui/locales/en.json
+    timeout-minutes: 5
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global user.name github-actions
+          git config --global user.email github-actions@github.com
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.BOT_TOKEN }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Merge TheThingsNetwork/lorawan-stack:${{ github.event.pull_request.base.ref }}
+        continue-on-error: true
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git merge FETCH_HEAD -m "Merge ${{ github.event.pull_request.base.ref }} into #${{ github.event.inputs.pull_request_number }}"
+      - name: Check for conflicts with TheThingsNetwork/lorawan-stack:${{ github.event.pull_request.base.ref }}
+        run: |
+          conflicts=$(comm -23 <(git diff --name-only --diff-filter=U | sort) <(echo "$MERGE_CONFLICTS_IGNORE" | sort))
+          if [[ ! -z "$conflicts" ]]; then
+            echo "Merge conflicts detected."
+            echo ""
+            echo "$conflicts" | awk '{ print "::warning file=" $0 "::" $0 " has a conflict when merging TheThingsNetwork/lorawan-stack:${{ github.event.pull_request.base.ref }}."}'
+            false
+          fi
+      - name: Merge TheThingsIndustries/lorawan-stack:${{ github.event.pull_request.base.ref }}
+        continue-on-error: true
+        run: |
+          git fetch https://github.com/TheThingsIndustries/lorawan-stack ${{ github.event.pull_request.base.ref }}
+          git merge FETCH_HEAD -m "Merge remote/${{ github.event.pull_request.base.ref }} into #${{ github.event.inputs.pull_request_number }}"
+      - name: Check for conflicts with TheThingsIndustries/lorawan-stack:${{ github.event.pull_request.base.ref }}
+        run: |
+          conflicts=$(comm -23 <(git diff --name-only --diff-filter=U | sort) <(echo "$MERGE_CONFLICTS_IGNORE" | sort))
+          if [[ ! -z "$conflicts" ]]; then
+            echo "Merge conflicts detected."
+            echo ""
+            echo "$conflicts" | awk '{ print "::warning file=" $0 "::" $0 " has a conflict when merging TheThingsIndustries/lorawan-stack:${{ github.event.pull_request.base.ref }}."}'
+            false
+          fi

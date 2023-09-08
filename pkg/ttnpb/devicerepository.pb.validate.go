@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _devicerepository_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on EndDeviceBrand with the rules
 // defined in the proto definition for this message. If any rules are
@@ -52,14 +49,14 @@ func (m *EndDeviceBrand) ValidateFields(paths ...string) error {
 		switch name {
 		case "brand_id":
 
-			if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+			if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 				return EndDeviceBrandValidationError{
 					field:  "brand_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_EndDeviceBrand_BrandID_Pattern.MatchString(m.GetBrandID()) {
+			if !_EndDeviceBrand_BrandId_Pattern.MatchString(m.GetBrandId()) {
 				return EndDeviceBrandValidationError{
 					field:  "brand_id",
 					reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -72,14 +69,62 @@ func (m *EndDeviceBrand) ValidateFields(paths ...string) error {
 			// no validation rules for PrivateEnterpriseNumber
 		case "organization_unique_identifiers":
 
+			for idx, item := range m.GetOrganizationUniqueIdentifiers() {
+				_, _ = idx, item
+
+				if !_EndDeviceBrand_OrganizationUniqueIdentifiers_Pattern.MatchString(item) {
+					return EndDeviceBrandValidationError{
+						field:  fmt.Sprintf("organization_unique_identifiers[%v]", idx),
+						reason: "value does not match regex pattern \"[0-9A-F]{6}\"",
+					}
+				}
+
+			}
+
 		case "lora_alliance_vendor_id":
-			// no validation rules for LoRaAllianceVendorID
+			// no validation rules for LoraAllianceVendorId
 		case "website":
-			// no validation rules for Website
+
+			if m.GetWebsite() != "" {
+
+				if uri, err := url.Parse(m.GetWebsite()); err != nil {
+					return EndDeviceBrandValidationError{
+						field:  "website",
+						reason: "value must be a valid URI",
+						cause:  err,
+					}
+				} else if !uri.IsAbs() {
+					return EndDeviceBrandValidationError{
+						field:  "website",
+						reason: "value must be absolute",
+					}
+				}
+
+			}
+
 		case "email":
-			// no validation rules for Email
+
+			if m.GetEmail() != "" {
+
+				if err := m._validateEmail(m.GetEmail()); err != nil {
+					return EndDeviceBrandValidationError{
+						field:  "email",
+						reason: "value must be a valid email address",
+						cause:  err,
+					}
+				}
+
+			}
+
 		case "logo":
-			// no validation rules for Logo
+
+			if !_EndDeviceBrand_Logo_Pattern.MatchString(m.GetLogo()) {
+				return EndDeviceBrandValidationError{
+					field:  "logo",
+					reason: "value does not match regex pattern \"^$|^(([a-z0-9-]+\\\\/)+)?([a-z0-9_-]+\\\\.)+(png|svg)$\"",
+				}
+			}
+
 		default:
 			return EndDeviceBrandValidationError{
 				field:  name,
@@ -88,6 +133,56 @@ func (m *EndDeviceBrand) ValidateFields(paths ...string) error {
 		}
 	}
 	return nil
+}
+
+func (m *EndDeviceBrand) _validateHostname(host string) error {
+	s := strings.ToLower(strings.TrimSuffix(host, "."))
+
+	if len(host) > 253 {
+		return errors.New("hostname cannot exceed 253 characters")
+	}
+
+	for _, part := range strings.Split(s, ".") {
+		if l := len(part); l == 0 || l > 63 {
+			return errors.New("hostname part must be non-empty and cannot exceed 63 characters")
+		}
+
+		if part[0] == '-' {
+			return errors.New("hostname parts cannot begin with hyphens")
+		}
+
+		if part[len(part)-1] == '-' {
+			return errors.New("hostname parts cannot end with hyphens")
+		}
+
+		for _, r := range part {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+				return fmt.Errorf("hostname parts can only contain alphanumeric characters or hyphens, got %q", string(r))
+			}
+		}
+	}
+
+	return nil
+}
+
+func (m *EndDeviceBrand) _validateEmail(addr string) error {
+	a, err := mail.ParseAddress(addr)
+	if err != nil {
+		return err
+	}
+	addr = a.Address
+
+	if len(addr) > 254 {
+		return errors.New("email addresses cannot exceed 254 characters")
+	}
+
+	parts := strings.SplitN(addr, "@", 2)
+
+	if len(parts[0]) > 64 {
+		return errors.New("email address local phrase cannot exceed 64 characters")
+	}
+
+	return m._validateHostname(parts[1])
 }
 
 // EndDeviceBrandValidationError is the validation error returned by
@@ -144,7 +239,11 @@ var _ interface {
 	ErrorName() string
 } = EndDeviceBrandValidationError{}
 
-var _EndDeviceBrand_BrandID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _EndDeviceBrand_BrandId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+
+var _EndDeviceBrand_OrganizationUniqueIdentifiers_Pattern = regexp.MustCompile("[0-9A-F]{6}")
+
+var _EndDeviceBrand_Logo_Pattern = regexp.MustCompile("^$|^(([a-z0-9-]+\\/)+)?([a-z0-9_-]+\\.)+(png|svg)$")
 
 // ValidateFields checks the field values on EndDeviceModel with the rules
 // defined in the proto definition for this message. If any rules are
@@ -163,14 +262,14 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 		switch name {
 		case "brand_id":
 
-			if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+			if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 				return EndDeviceModelValidationError{
 					field:  "brand_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_EndDeviceModel_BrandID_Pattern.MatchString(m.GetBrandID()) {
+			if !_EndDeviceModel_BrandId_Pattern.MatchString(m.GetBrandId()) {
 				return EndDeviceModelValidationError{
 					field:  "brand_id",
 					reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -179,14 +278,14 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 
 		case "model_id":
 
-			if utf8.RuneCountInString(m.GetModelID()) > 36 {
+			if utf8.RuneCountInString(m.GetModelId()) > 36 {
 				return EndDeviceModelValidationError{
 					field:  "model_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_EndDeviceModel_ModelID_Pattern.MatchString(m.GetModelID()) {
+			if !_EndDeviceModel_ModelId_Pattern.MatchString(m.GetModelId()) {
 				return EndDeviceModelValidationError{
 					field:  "model_id",
 					reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -194,23 +293,9 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 			}
 
 		case "name":
-
-			if utf8.RuneCountInString(m.GetName()) > 50 {
-				return EndDeviceModelValidationError{
-					field:  "name",
-					reason: "value length must be at most 50 runes",
-				}
-			}
-
+			// no validation rules for Name
 		case "description":
-
-			if utf8.RuneCountInString(m.GetDescription()) > 2000 {
-				return EndDeviceModelValidationError{
-					field:  "description",
-					reason: "value length must be at most 2000 runes",
-				}
-			}
-
+			// no validation rules for Description
 		case "hardware_versions":
 
 			for idx, item := range m.GetHardwareVersions() {
@@ -246,6 +331,23 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 			}
 
 		case "sensors":
+
+			_EndDeviceModel_Sensors_Unique := make(map[string]struct{}, len(m.GetSensors()))
+
+			for idx, item := range m.GetSensors() {
+				_, _ = idx, item
+
+				if _, exists := _EndDeviceModel_Sensors_Unique[item]; exists {
+					return EndDeviceModelValidationError{
+						field:  fmt.Sprintf("sensors[%v]", idx),
+						reason: "repeated value must contain unique items",
+					}
+				} else {
+					_EndDeviceModel_Sensors_Unique[item] = struct{}{}
+				}
+
+				// no validation rules for Sensors[idx]
+			}
 
 		case "dimensions":
 
@@ -296,11 +398,41 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 			}
 
 		case "ip_code":
-			// no validation rules for IPCode
+			// no validation rules for IpCode
 		case "key_provisioning":
 
+			_EndDeviceModel_KeyProvisioning_Unique := make(map[KeyProvisioning]struct{}, len(m.GetKeyProvisioning()))
+
+			for idx, item := range m.GetKeyProvisioning() {
+				_, _ = idx, item
+
+				if _, exists := _EndDeviceModel_KeyProvisioning_Unique[item]; exists {
+					return EndDeviceModelValidationError{
+						field:  fmt.Sprintf("key_provisioning[%v]", idx),
+						reason: "repeated value must contain unique items",
+					}
+				} else {
+					_EndDeviceModel_KeyProvisioning_Unique[item] = struct{}{}
+				}
+
+				if _, ok := KeyProvisioning_name[int32(item)]; !ok {
+					return EndDeviceModelValidationError{
+						field:  fmt.Sprintf("key_provisioning[%v]", idx),
+						reason: "value must be one of the defined enum values",
+					}
+				}
+
+			}
+
 		case "key_security":
-			// no validation rules for KeySecurity
+
+			if _, ok := KeySecurity_name[int32(m.GetKeySecurity())]; !ok {
+				return EndDeviceModelValidationError{
+					field:  "key_security",
+					reason: "value must be one of the defined enum values",
+				}
+			}
+
 		case "photos":
 
 			if v, ok := interface{}(m.GetPhotos()).(interface{ ValidateFields(...string) error }); ok {
@@ -326,9 +458,43 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 			}
 
 		case "product_url":
-			// no validation rules for ProductURL
+
+			if m.GetProductUrl() != "" {
+
+				if uri, err := url.Parse(m.GetProductUrl()); err != nil {
+					return EndDeviceModelValidationError{
+						field:  "product_url",
+						reason: "value must be a valid URI",
+						cause:  err,
+					}
+				} else if !uri.IsAbs() {
+					return EndDeviceModelValidationError{
+						field:  "product_url",
+						reason: "value must be absolute",
+					}
+				}
+
+			}
+
 		case "datasheet_url":
-			// no validation rules for DatasheetURL
+
+			if m.GetDatasheetUrl() != "" {
+
+				if uri, err := url.Parse(m.GetDatasheetUrl()); err != nil {
+					return EndDeviceModelValidationError{
+						field:  "datasheet_url",
+						reason: "value must be a valid URI",
+						cause:  err,
+					}
+				} else if !uri.IsAbs() {
+					return EndDeviceModelValidationError{
+						field:  "datasheet_url",
+						reason: "value must be absolute",
+					}
+				}
+
+			}
+
 		case "resellers":
 
 			for idx, item := range m.GetResellers() {
@@ -359,6 +525,23 @@ func (m *EndDeviceModel) ValidateFields(paths ...string) error {
 			}
 
 		case "additional_radios":
+
+			_EndDeviceModel_AdditionalRadios_Unique := make(map[string]struct{}, len(m.GetAdditionalRadios()))
+
+			for idx, item := range m.GetAdditionalRadios() {
+				_, _ = idx, item
+
+				if _, exists := _EndDeviceModel_AdditionalRadios_Unique[item]; exists {
+					return EndDeviceModelValidationError{
+						field:  fmt.Sprintf("additional_radios[%v]", idx),
+						reason: "repeated value must contain unique items",
+					}
+				} else {
+					_EndDeviceModel_AdditionalRadios_Unique[item] = struct{}{}
+				}
+
+				// no validation rules for AdditionalRadios[idx]
+			}
 
 		default:
 			return EndDeviceModelValidationError{
@@ -424,9 +607,9 @@ var _ interface {
 	ErrorName() string
 } = EndDeviceModelValidationError{}
 
-var _EndDeviceModel_BrandID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _EndDeviceModel_BrandId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
-var _EndDeviceModel_ModelID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _EndDeviceModel_ModelId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
 // ValidateFields checks the field values on GetEndDeviceBrandRequest with the
 // rules defined in the proto definition for this message. If any rules are
@@ -445,7 +628,7 @@ func (m *GetEndDeviceBrandRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIDs).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetEndDeviceBrandRequestValidationError{
 						field:  "application_ids",
@@ -457,14 +640,14 @@ func (m *GetEndDeviceBrandRequest) ValidateFields(paths ...string) error {
 
 		case "brand_id":
 
-			if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+			if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 				return GetEndDeviceBrandRequestValidationError{
 					field:  "brand_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_GetEndDeviceBrandRequest_BrandID_Pattern.MatchString(m.GetBrandID()) {
+			if !_GetEndDeviceBrandRequest_BrandId_Pattern.MatchString(m.GetBrandId()) {
 				return GetEndDeviceBrandRequestValidationError{
 					field:  "brand_id",
 					reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -473,7 +656,7 @@ func (m *GetEndDeviceBrandRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetEndDeviceBrandRequestValidationError{
 						field:  "field_mask",
@@ -550,7 +733,7 @@ var _ interface {
 	ErrorName() string
 } = GetEndDeviceBrandRequestValidationError{}
 
-var _GetEndDeviceBrandRequest_BrandID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GetEndDeviceBrandRequest_BrandId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
 // ValidateFields checks the field values on ListEndDeviceBrandsRequest with
 // the rules defined in the proto definition for this message. If any rules
@@ -569,7 +752,7 @@ func (m *ListEndDeviceBrandsRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIDs).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListEndDeviceBrandsRequestValidationError{
 						field:  "application_ids",
@@ -610,7 +793,7 @@ func (m *ListEndDeviceBrandsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListEndDeviceBrandsRequestValidationError{
 						field:  "field_mask",
@@ -712,7 +895,7 @@ func (m *GetEndDeviceModelRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIDs).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetEndDeviceModelRequestValidationError{
 						field:  "application_ids",
@@ -724,14 +907,14 @@ func (m *GetEndDeviceModelRequest) ValidateFields(paths ...string) error {
 
 		case "brand_id":
 
-			if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+			if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 				return GetEndDeviceModelRequestValidationError{
 					field:  "brand_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_GetEndDeviceModelRequest_BrandID_Pattern.MatchString(m.GetBrandID()) {
+			if !_GetEndDeviceModelRequest_BrandId_Pattern.MatchString(m.GetBrandId()) {
 				return GetEndDeviceModelRequestValidationError{
 					field:  "brand_id",
 					reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -740,14 +923,14 @@ func (m *GetEndDeviceModelRequest) ValidateFields(paths ...string) error {
 
 		case "model_id":
 
-			if utf8.RuneCountInString(m.GetModelID()) > 36 {
+			if utf8.RuneCountInString(m.GetModelId()) > 36 {
 				return GetEndDeviceModelRequestValidationError{
 					field:  "model_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_GetEndDeviceModelRequest_ModelID_Pattern.MatchString(m.GetModelID()) {
+			if !_GetEndDeviceModelRequest_ModelId_Pattern.MatchString(m.GetModelId()) {
 				return GetEndDeviceModelRequestValidationError{
 					field:  "model_id",
 					reason: "value does not match regex pattern \"^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
@@ -756,7 +939,7 @@ func (m *GetEndDeviceModelRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetEndDeviceModelRequestValidationError{
 						field:  "field_mask",
@@ -833,9 +1016,9 @@ var _ interface {
 	ErrorName() string
 } = GetEndDeviceModelRequestValidationError{}
 
-var _GetEndDeviceModelRequest_BrandID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GetEndDeviceModelRequest_BrandId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
-var _GetEndDeviceModelRequest_ModelID_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+var _GetEndDeviceModelRequest_ModelId_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
 // ValidateFields checks the field values on ListEndDeviceModelsRequest with
 // the rules defined in the proto definition for this message. If any rules
@@ -854,7 +1037,7 @@ func (m *ListEndDeviceModelsRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIDs).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListEndDeviceModelsRequestValidationError{
 						field:  "application_ids",
@@ -866,14 +1049,14 @@ func (m *ListEndDeviceModelsRequest) ValidateFields(paths ...string) error {
 
 		case "brand_id":
 
-			if utf8.RuneCountInString(m.GetBrandID()) > 36 {
+			if utf8.RuneCountInString(m.GetBrandId()) > 36 {
 				return ListEndDeviceModelsRequestValidationError{
 					field:  "brand_id",
 					reason: "value length must be at most 36 runes",
 				}
 			}
 
-			if !_ListEndDeviceModelsRequest_BrandID_Pattern.MatchString(m.GetBrandID()) {
+			if !_ListEndDeviceModelsRequest_BrandId_Pattern.MatchString(m.GetBrandId()) {
 				return ListEndDeviceModelsRequestValidationError{
 					field:  "brand_id",
 					reason: "value does not match regex pattern \"^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$\"",
@@ -911,7 +1094,7 @@ func (m *ListEndDeviceModelsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return ListEndDeviceModelsRequestValidationError{
 						field:  "field_mask",
@@ -988,7 +1171,7 @@ var _ interface {
 	ErrorName() string
 } = ListEndDeviceModelsRequestValidationError{}
 
-var _ListEndDeviceModelsRequest_BrandID_Pattern = regexp.MustCompile("^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$")
+var _ListEndDeviceModelsRequest_BrandId_Pattern = regexp.MustCompile("^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$")
 
 var _ListEndDeviceModelsRequest_OrderBy_InLookup = map[string]struct{}{
 	"":          {},
@@ -1017,7 +1200,7 @@ func (m *GetTemplateRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIDs).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetTemplateRequestValidationError{
 						field:  "application_ids",
@@ -1029,10 +1212,22 @@ func (m *GetTemplateRequest) ValidateFields(paths ...string) error {
 
 		case "version_ids":
 
-			if v, ok := interface{}(m.GetVersionIDs()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetVersionIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetTemplateRequestValidationError{
 						field:  "version_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "end_device_profile_ids":
+
+			if v, ok := interface{}(m.GetEndDeviceProfileIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetTemplateRequestValidationError{
+						field:  "end_device_profile_ids",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
@@ -1122,7 +1317,7 @@ func (m *GetPayloadFormatterRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIDs).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetPayloadFormatterRequestValidationError{
 						field:  "application_ids",
@@ -1134,10 +1329,22 @@ func (m *GetPayloadFormatterRequest) ValidateFields(paths ...string) error {
 
 		case "version_ids":
 
-			if v, ok := interface{}(m.GetVersionIDs()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetVersionIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return GetPayloadFormatterRequestValidationError{
 						field:  "version_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "field_mask":
+
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return GetPayloadFormatterRequestValidationError{
+						field:  "field_mask",
 						reason: "embedded message failed validation",
 						cause:  err,
 					}
@@ -1409,34 +1616,76 @@ var _ interface {
 	ErrorName() string
 } = ListEndDeviceModelsResponseValidationError{}
 
-// ValidateFields checks the field values on MessagePayloadFormatter with the
+// ValidateFields checks the field values on EncodedMessagePayload with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
-func (m *MessagePayloadFormatter) ValidateFields(paths ...string) error {
+func (m *EncodedMessagePayload) ValidateFields(paths ...string) error {
 	if m == nil {
 		return nil
 	}
 
 	if len(paths) == 0 {
-		paths = MessagePayloadFormatterFieldPathsNested
+		paths = EncodedMessagePayloadFieldPathsNested
 	}
 
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
-		case "formatter":
+		case "f_port":
 
-			if _, ok := PayloadFormatter_name[int32(m.GetFormatter())]; !ok {
-				return MessagePayloadFormatterValidationError{
-					field:  "formatter",
-					reason: "value must be one of the defined enum values",
+			if m.GetFPort() > 255 {
+				return EncodedMessagePayloadValidationError{
+					field:  "f_port",
+					reason: "value must be less than or equal to 255",
 				}
 			}
 
-		case "formatter_parameter":
-			// no validation rules for FormatterParameter
+		case "frm_payload":
+			// no validation rules for FrmPayload
+		case "warnings":
+
+			if len(m.GetWarnings()) > 10 {
+				return EncodedMessagePayloadValidationError{
+					field:  "warnings",
+					reason: "value must contain no more than 10 item(s)",
+				}
+			}
+
+			for idx, item := range m.GetWarnings() {
+				_, _ = idx, item
+
+				if utf8.RuneCountInString(item) > 100 {
+					return EncodedMessagePayloadValidationError{
+						field:  fmt.Sprintf("warnings[%v]", idx),
+						reason: "value length must be at most 100 runes",
+					}
+				}
+
+			}
+
+		case "errors":
+
+			if len(m.GetErrors()) > 10 {
+				return EncodedMessagePayloadValidationError{
+					field:  "errors",
+					reason: "value must contain no more than 10 item(s)",
+				}
+			}
+
+			for idx, item := range m.GetErrors() {
+				_, _ = idx, item
+
+				if utf8.RuneCountInString(item) > 100 {
+					return EncodedMessagePayloadValidationError{
+						field:  fmt.Sprintf("errors[%v]", idx),
+						reason: "value length must be at most 100 runes",
+					}
+				}
+
+			}
+
 		default:
-			return MessagePayloadFormatterValidationError{
+			return EncodedMessagePayloadValidationError{
 				field:  name,
 				reason: "invalid field path",
 			}
@@ -1445,9 +1694,9 @@ func (m *MessagePayloadFormatter) ValidateFields(paths ...string) error {
 	return nil
 }
 
-// MessagePayloadFormatterValidationError is the validation error returned by
-// MessagePayloadFormatter.ValidateFields if the designated constraints aren't met.
-type MessagePayloadFormatterValidationError struct {
+// EncodedMessagePayloadValidationError is the validation error returned by
+// EncodedMessagePayload.ValidateFields if the designated constraints aren't met.
+type EncodedMessagePayloadValidationError struct {
 	field  string
 	reason string
 	cause  error
@@ -1455,24 +1704,24 @@ type MessagePayloadFormatterValidationError struct {
 }
 
 // Field function returns field value.
-func (e MessagePayloadFormatterValidationError) Field() string { return e.field }
+func (e EncodedMessagePayloadValidationError) Field() string { return e.field }
 
 // Reason function returns reason value.
-func (e MessagePayloadFormatterValidationError) Reason() string { return e.reason }
+func (e EncodedMessagePayloadValidationError) Reason() string { return e.reason }
 
 // Cause function returns cause value.
-func (e MessagePayloadFormatterValidationError) Cause() error { return e.cause }
+func (e EncodedMessagePayloadValidationError) Cause() error { return e.cause }
 
 // Key function returns key value.
-func (e MessagePayloadFormatterValidationError) Key() bool { return e.key }
+func (e EncodedMessagePayloadValidationError) Key() bool { return e.key }
 
 // ErrorName returns error name.
-func (e MessagePayloadFormatterValidationError) ErrorName() string {
-	return "MessagePayloadFormatterValidationError"
+func (e EncodedMessagePayloadValidationError) ErrorName() string {
+	return "EncodedMessagePayloadValidationError"
 }
 
 // Error satisfies the builtin error interface
-func (e MessagePayloadFormatterValidationError) Error() string {
+func (e EncodedMessagePayloadValidationError) Error() string {
 	cause := ""
 	if e.cause != nil {
 		cause = fmt.Sprintf(" | caused by: %v", e.cause)
@@ -1484,14 +1733,14 @@ func (e MessagePayloadFormatterValidationError) Error() string {
 	}
 
 	return fmt.Sprintf(
-		"invalid %sMessagePayloadFormatter.%s: %s%s",
+		"invalid %sEncodedMessagePayload.%s: %s%s",
 		key,
 		e.field,
 		e.reason,
 		cause)
 }
 
-var _ error = MessagePayloadFormatterValidationError{}
+var _ error = EncodedMessagePayloadValidationError{}
 
 var _ interface {
 	Field() string
@@ -1499,7 +1748,410 @@ var _ interface {
 	Key() bool
 	Cause() error
 	ErrorName() string
-} = MessagePayloadFormatterValidationError{}
+} = EncodedMessagePayloadValidationError{}
+
+// ValidateFields checks the field values on DecodedMessagePayload with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *DecodedMessagePayload) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = DecodedMessagePayloadFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "data":
+
+			if v, ok := interface{}(m.GetData()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return DecodedMessagePayloadValidationError{
+						field:  "data",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "warnings":
+
+			if len(m.GetWarnings()) > 10 {
+				return DecodedMessagePayloadValidationError{
+					field:  "warnings",
+					reason: "value must contain no more than 10 item(s)",
+				}
+			}
+
+			for idx, item := range m.GetWarnings() {
+				_, _ = idx, item
+
+				if utf8.RuneCountInString(item) > 100 {
+					return DecodedMessagePayloadValidationError{
+						field:  fmt.Sprintf("warnings[%v]", idx),
+						reason: "value length must be at most 100 runes",
+					}
+				}
+
+			}
+
+		case "errors":
+
+			if len(m.GetErrors()) > 10 {
+				return DecodedMessagePayloadValidationError{
+					field:  "errors",
+					reason: "value must contain no more than 10 item(s)",
+				}
+			}
+
+			for idx, item := range m.GetErrors() {
+				_, _ = idx, item
+
+				if utf8.RuneCountInString(item) > 100 {
+					return DecodedMessagePayloadValidationError{
+						field:  fmt.Sprintf("errors[%v]", idx),
+						reason: "value length must be at most 100 runes",
+					}
+				}
+
+			}
+
+		default:
+			return DecodedMessagePayloadValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// DecodedMessagePayloadValidationError is the validation error returned by
+// DecodedMessagePayload.ValidateFields if the designated constraints aren't met.
+type DecodedMessagePayloadValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DecodedMessagePayloadValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DecodedMessagePayloadValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DecodedMessagePayloadValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DecodedMessagePayloadValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DecodedMessagePayloadValidationError) ErrorName() string {
+	return "DecodedMessagePayloadValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e DecodedMessagePayloadValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDecodedMessagePayload.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DecodedMessagePayloadValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DecodedMessagePayloadValidationError{}
+
+// ValidateFields checks the field values on MessagePayloadDecoder with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *MessagePayloadDecoder) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = MessagePayloadDecoderFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "formatter":
+
+			if _, ok := PayloadFormatter_name[int32(m.GetFormatter())]; !ok {
+				return MessagePayloadDecoderValidationError{
+					field:  "formatter",
+					reason: "value must be one of the defined enum values",
+				}
+			}
+
+		case "formatter_parameter":
+			// no validation rules for FormatterParameter
+		case "codec_id":
+
+			if utf8.RuneCountInString(m.GetCodecId()) > 36 {
+				return MessagePayloadDecoderValidationError{
+					field:  "codec_id",
+					reason: "value length must be at most 36 runes",
+				}
+			}
+
+			if !_MessagePayloadDecoder_CodecId_Pattern.MatchString(m.GetCodecId()) {
+				return MessagePayloadDecoderValidationError{
+					field:  "codec_id",
+					reason: "value does not match regex pattern \"^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$\"",
+				}
+			}
+
+		case "examples":
+
+			if len(m.GetExamples()) > 20 {
+				return MessagePayloadDecoderValidationError{
+					field:  "examples",
+					reason: "value must contain no more than 20 item(s)",
+				}
+			}
+
+			for idx, item := range m.GetExamples() {
+				_, _ = idx, item
+
+				if v, ok := interface{}(item).(interface{ ValidateFields(...string) error }); ok {
+					if err := v.ValidateFields(subs...); err != nil {
+						return MessagePayloadDecoderValidationError{
+							field:  fmt.Sprintf("examples[%v]", idx),
+							reason: "embedded message failed validation",
+							cause:  err,
+						}
+					}
+				}
+
+			}
+
+		default:
+			return MessagePayloadDecoderValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// MessagePayloadDecoderValidationError is the validation error returned by
+// MessagePayloadDecoder.ValidateFields if the designated constraints aren't met.
+type MessagePayloadDecoderValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e MessagePayloadDecoderValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e MessagePayloadDecoderValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e MessagePayloadDecoderValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e MessagePayloadDecoderValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e MessagePayloadDecoderValidationError) ErrorName() string {
+	return "MessagePayloadDecoderValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e MessagePayloadDecoderValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sMessagePayloadDecoder.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = MessagePayloadDecoderValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = MessagePayloadDecoderValidationError{}
+
+var _MessagePayloadDecoder_CodecId_Pattern = regexp.MustCompile("^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$")
+
+// ValidateFields checks the field values on MessagePayloadEncoder with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *MessagePayloadEncoder) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = MessagePayloadEncoderFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "formatter":
+
+			if _, ok := PayloadFormatter_name[int32(m.GetFormatter())]; !ok {
+				return MessagePayloadEncoderValidationError{
+					field:  "formatter",
+					reason: "value must be one of the defined enum values",
+				}
+			}
+
+		case "formatter_parameter":
+			// no validation rules for FormatterParameter
+		case "codec_id":
+
+			if utf8.RuneCountInString(m.GetCodecId()) > 36 {
+				return MessagePayloadEncoderValidationError{
+					field:  "codec_id",
+					reason: "value length must be at most 36 runes",
+				}
+			}
+
+			if !_MessagePayloadEncoder_CodecId_Pattern.MatchString(m.GetCodecId()) {
+				return MessagePayloadEncoderValidationError{
+					field:  "codec_id",
+					reason: "value does not match regex pattern \"^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$\"",
+				}
+			}
+
+		case "examples":
+
+			if len(m.GetExamples()) > 20 {
+				return MessagePayloadEncoderValidationError{
+					field:  "examples",
+					reason: "value must contain no more than 20 item(s)",
+				}
+			}
+
+			for idx, item := range m.GetExamples() {
+				_, _ = idx, item
+
+				if v, ok := interface{}(item).(interface{ ValidateFields(...string) error }); ok {
+					if err := v.ValidateFields(subs...); err != nil {
+						return MessagePayloadEncoderValidationError{
+							field:  fmt.Sprintf("examples[%v]", idx),
+							reason: "embedded message failed validation",
+							cause:  err,
+						}
+					}
+				}
+
+			}
+
+		default:
+			return MessagePayloadEncoderValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// MessagePayloadEncoderValidationError is the validation error returned by
+// MessagePayloadEncoder.ValidateFields if the designated constraints aren't met.
+type MessagePayloadEncoderValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e MessagePayloadEncoderValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e MessagePayloadEncoderValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e MessagePayloadEncoderValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e MessagePayloadEncoderValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e MessagePayloadEncoderValidationError) ErrorName() string {
+	return "MessagePayloadEncoderValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e MessagePayloadEncoderValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sMessagePayloadEncoder.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = MessagePayloadEncoderValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = MessagePayloadEncoderValidationError{}
+
+var _MessagePayloadEncoder_CodecId_Pattern = regexp.MustCompile("^([a-z0-9](?:[-]?[a-z0-9]){2,}|)?$")
 
 // ValidateFields checks the field values on EndDeviceModel_HardwareVersion
 // with the rules defined in the proto definition for this message. If any
@@ -1609,6 +2261,23 @@ func (m *EndDeviceModel_FirmwareVersion) ValidateFields(paths ...string) error {
 		case "numeric":
 			// no validation rules for Numeric
 		case "supported_hardware_versions":
+
+			_EndDeviceModel_FirmwareVersion_SupportedHardwareVersions_Unique := make(map[string]struct{}, len(m.GetSupportedHardwareVersions()))
+
+			for idx, item := range m.GetSupportedHardwareVersions() {
+				_, _ = idx, item
+
+				if _, exists := _EndDeviceModel_FirmwareVersion_SupportedHardwareVersions_Unique[item]; exists {
+					return EndDeviceModel_FirmwareVersionValidationError{
+						field:  fmt.Sprintf("supported_hardware_versions[%v]", idx),
+						reason: "repeated value must contain unique items",
+					}
+				} else {
+					_EndDeviceModel_FirmwareVersion_SupportedHardwareVersions_Unique[item] = struct{}{}
+				}
+
+				// no validation rules for SupportedHardwareVersions[idx]
+			}
 
 		case "profiles":
 
@@ -2043,8 +2712,38 @@ func (m *EndDeviceModel_Photos) ValidateFields(paths ...string) error {
 		_ = subs
 		switch name {
 		case "main":
-			// no validation rules for Main
+
+			if !_EndDeviceModel_Photos_Main_Pattern.MatchString(m.GetMain()) {
+				return EndDeviceModel_PhotosValidationError{
+					field:  "main",
+					reason: "value does not match regex pattern \"^$|^(([a-z0-9-]+\\\\/)+)?([a-z0-9_-]+\\\\.)+(png|jpg|jpeg)$\"",
+				}
+			}
+
 		case "other":
+
+			_EndDeviceModel_Photos_Other_Unique := make(map[string]struct{}, len(m.GetOther()))
+
+			for idx, item := range m.GetOther() {
+				_, _ = idx, item
+
+				if _, exists := _EndDeviceModel_Photos_Other_Unique[item]; exists {
+					return EndDeviceModel_PhotosValidationError{
+						field:  fmt.Sprintf("other[%v]", idx),
+						reason: "repeated value must contain unique items",
+					}
+				} else {
+					_EndDeviceModel_Photos_Other_Unique[item] = struct{}{}
+				}
+
+				if !_EndDeviceModel_Photos_Other_Pattern.MatchString(item) {
+					return EndDeviceModel_PhotosValidationError{
+						field:  fmt.Sprintf("other[%v]", idx),
+						reason: "value does not match regex pattern \"^$|^(([a-z0-9-]+\\\\/)+)?([a-z0-9_-]+\\\\.)+(png|jpg|jpeg)$\"",
+					}
+				}
+
+			}
 
 		default:
 			return EndDeviceModel_PhotosValidationError{
@@ -2112,6 +2811,10 @@ var _ interface {
 	ErrorName() string
 } = EndDeviceModel_PhotosValidationError{}
 
+var _EndDeviceModel_Photos_Main_Pattern = regexp.MustCompile("^$|^(([a-z0-9-]+\\/)+)?([a-z0-9_-]+\\.)+(png|jpg|jpeg)$")
+
+var _EndDeviceModel_Photos_Other_Pattern = regexp.MustCompile("^$|^(([a-z0-9-]+\\/)+)?([a-z0-9_-]+\\.)+(png|jpg|jpeg)$")
+
 // ValidateFields checks the field values on EndDeviceModel_Videos with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -2128,8 +2831,38 @@ func (m *EndDeviceModel_Videos) ValidateFields(paths ...string) error {
 		_ = subs
 		switch name {
 		case "main":
-			// no validation rules for Main
+
+			if !_EndDeviceModel_Videos_Main_Pattern.MatchString(m.GetMain()) {
+				return EndDeviceModel_VideosValidationError{
+					field:  "main",
+					reason: "value does not match regex pattern \"^(?:https?:\\\\/\\\\/(?:www\\\\.)?youtu(?:be\\\\.com\\\\/watch\\\\?v=|\\\\.be\\\\/)(?:[\\\\w\\\\-_]*)(?:&(amp;)?[\\\\w\\\\?=]*)?)$|^(?:https?:\\\\/\\\\/(?:www\\\\.)?vimeo\\\\.com\\\\/(?:channels\\\\/(?:\\\\w+\\\\/)?|groups\\\\/([^\\\\/]*)\\\\/videos\\\\/|)(?:\\\\d+)(?:|\\\\/\\\\?))$\"",
+				}
+			}
+
 		case "other":
+
+			_EndDeviceModel_Videos_Other_Unique := make(map[string]struct{}, len(m.GetOther()))
+
+			for idx, item := range m.GetOther() {
+				_, _ = idx, item
+
+				if _, exists := _EndDeviceModel_Videos_Other_Unique[item]; exists {
+					return EndDeviceModel_VideosValidationError{
+						field:  fmt.Sprintf("other[%v]", idx),
+						reason: "repeated value must contain unique items",
+					}
+				} else {
+					_EndDeviceModel_Videos_Other_Unique[item] = struct{}{}
+				}
+
+				if !_EndDeviceModel_Videos_Other_Pattern.MatchString(item) {
+					return EndDeviceModel_VideosValidationError{
+						field:  fmt.Sprintf("other[%v]", idx),
+						reason: "value does not match regex pattern \"^(?:https?:\\\\/\\\\/(?:www\\\\.)?youtu(?:be\\\\.com\\\\/watch\\\\?v=|\\\\.be\\\\/)(?:[\\\\w\\\\-_]*)(?:&(amp;)?[\\\\w\\\\?=]*)?)$|^(?:https?:\\\\/\\\\/(?:www\\\\.)?vimeo\\\\.com\\\\/(?:channels\\\\/(?:\\\\w+\\\\/)?|groups\\\\/([^\\\\/]*)\\\\/videos\\\\/|)(?:\\\\d+)(?:|\\\\/\\\\?))$\"",
+					}
+				}
+
+			}
 
 		default:
 			return EndDeviceModel_VideosValidationError{
@@ -2197,6 +2930,10 @@ var _ interface {
 	ErrorName() string
 } = EndDeviceModel_VideosValidationError{}
 
+var _EndDeviceModel_Videos_Main_Pattern = regexp.MustCompile("^(?:https?:\\/\\/(?:www\\.)?youtu(?:be\\.com\\/watch\\?v=|\\.be\\/)(?:[\\w\\-_]*)(?:&(amp;)?[\\w\\?=]*)?)$|^(?:https?:\\/\\/(?:www\\.)?vimeo\\.com\\/(?:channels\\/(?:\\w+\\/)?|groups\\/([^\\/]*)\\/videos\\/|)(?:\\d+)(?:|\\/\\?))$")
+
+var _EndDeviceModel_Videos_Other_Pattern = regexp.MustCompile("^(?:https?:\\/\\/(?:www\\.)?youtu(?:be\\.com\\/watch\\?v=|\\.be\\/)(?:[\\w\\-_]*)(?:&(amp;)?[\\w\\?=]*)?)$|^(?:https?:\\/\\/(?:www\\.)?vimeo\\.com\\/(?:channels\\/(?:\\w+\\/)?|groups\\/([^\\/]*)\\/videos\\/|)(?:\\d+)(?:|\\/\\?))$")
+
 // ValidateFields checks the field values on EndDeviceModel_Reseller with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -2217,7 +2954,24 @@ func (m *EndDeviceModel_Reseller) ValidateFields(paths ...string) error {
 		case "region":
 
 		case "url":
-			// no validation rules for URL
+
+			if m.GetUrl() != "" {
+
+				if uri, err := url.Parse(m.GetUrl()); err != nil {
+					return EndDeviceModel_ResellerValidationError{
+						field:  "url",
+						reason: "value must be a valid URI",
+						cause:  err,
+					}
+				} else if !uri.IsAbs() {
+					return EndDeviceModel_ResellerValidationError{
+						field:  "url",
+						reason: "value must be absolute",
+					}
+				}
+
+			}
+
 		default:
 			return EndDeviceModel_ResellerValidationError{
 				field:  name,
@@ -2415,12 +3169,56 @@ func (m *EndDeviceModel_FirmwareVersion_Profile) ValidateFields(paths ...string)
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
+		case "vendor_id":
+
+			if utf8.RuneCountInString(m.GetVendorId()) > 36 {
+				return EndDeviceModel_FirmwareVersion_ProfileValidationError{
+					field:  "vendor_id",
+					reason: "value length must be at most 36 runes",
+				}
+			}
+
+			if !_EndDeviceModel_FirmwareVersion_Profile_VendorId_Pattern.MatchString(m.GetVendorId()) {
+				return EndDeviceModel_FirmwareVersion_ProfileValidationError{
+					field:  "vendor_id",
+					reason: "value does not match regex pattern \"^$|^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
+				}
+			}
+
 		case "profile_id":
-			// no validation rules for ProfileID
+
+			if utf8.RuneCountInString(m.GetProfileId()) > 36 {
+				return EndDeviceModel_FirmwareVersion_ProfileValidationError{
+					field:  "profile_id",
+					reason: "value length must be at most 36 runes",
+				}
+			}
+
+			if !_EndDeviceModel_FirmwareVersion_Profile_ProfileId_Pattern.MatchString(m.GetProfileId()) {
+				return EndDeviceModel_FirmwareVersion_ProfileValidationError{
+					field:  "profile_id",
+					reason: "value does not match regex pattern \"^$|^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
+				}
+			}
+
 		case "lorawan_certified":
-			// no validation rules for LoRaWANCertified
+			// no validation rules for LorawanCertified
 		case "codec_id":
-			// no validation rules for CodecID
+
+			if utf8.RuneCountInString(m.GetCodecId()) > 36 {
+				return EndDeviceModel_FirmwareVersion_ProfileValidationError{
+					field:  "codec_id",
+					reason: "value length must be at most 36 runes",
+				}
+			}
+
+			if !_EndDeviceModel_FirmwareVersion_Profile_CodecId_Pattern.MatchString(m.GetCodecId()) {
+				return EndDeviceModel_FirmwareVersion_ProfileValidationError{
+					field:  "codec_id",
+					reason: "value does not match regex pattern \"^$|^[a-z0-9](?:[-]?[a-z0-9]){2,}$\"",
+				}
+			}
+
 		default:
 			return EndDeviceModel_FirmwareVersion_ProfileValidationError{
 				field:  name,
@@ -2487,6 +3285,12 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = EndDeviceModel_FirmwareVersion_ProfileValidationError{}
+
+var _EndDeviceModel_FirmwareVersion_Profile_VendorId_Pattern = regexp.MustCompile("^$|^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+
+var _EndDeviceModel_FirmwareVersion_Profile_ProfileId_Pattern = regexp.MustCompile("^$|^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+
+var _EndDeviceModel_FirmwareVersion_Profile_CodecId_Pattern = regexp.MustCompile("^$|^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
 // ValidateFields checks the field values on
 // EndDeviceModel_OperatingConditions_Limits with the rules defined in the
@@ -2683,3 +3487,330 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = EndDeviceModel_Compliances_ComplianceValidationError{}
+
+// ValidateFields checks the field values on
+// GetTemplateRequest_EndDeviceProfileIdentifiers with the rules defined in
+// the proto definition for this message. If any rules are violated, an error
+// is returned.
+func (m *GetTemplateRequest_EndDeviceProfileIdentifiers) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = GetTemplateRequest_EndDeviceProfileIdentifiersFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "vendor_id":
+
+			if m.GetVendorId() < 1 {
+				return GetTemplateRequest_EndDeviceProfileIdentifiersValidationError{
+					field:  "vendor_id",
+					reason: "value must be greater than or equal to 1",
+				}
+			}
+
+		case "vendor_profile_id":
+			// no validation rules for VendorProfileId
+		default:
+			return GetTemplateRequest_EndDeviceProfileIdentifiersValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// GetTemplateRequest_EndDeviceProfileIdentifiersValidationError is the
+// validation error returned by
+// GetTemplateRequest_EndDeviceProfileIdentifiers.ValidateFields if the
+// designated constraints aren't met.
+type GetTemplateRequest_EndDeviceProfileIdentifiersValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GetTemplateRequest_EndDeviceProfileIdentifiersValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GetTemplateRequest_EndDeviceProfileIdentifiersValidationError) Reason() string {
+	return e.reason
+}
+
+// Cause function returns cause value.
+func (e GetTemplateRequest_EndDeviceProfileIdentifiersValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GetTemplateRequest_EndDeviceProfileIdentifiersValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GetTemplateRequest_EndDeviceProfileIdentifiersValidationError) ErrorName() string {
+	return "GetTemplateRequest_EndDeviceProfileIdentifiersValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e GetTemplateRequest_EndDeviceProfileIdentifiersValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGetTemplateRequest_EndDeviceProfileIdentifiers.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GetTemplateRequest_EndDeviceProfileIdentifiersValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GetTemplateRequest_EndDeviceProfileIdentifiersValidationError{}
+
+// ValidateFields checks the field values on MessagePayloadDecoder_Example with
+// the rules defined in the proto definition for this message. If any rules
+// are violated, an error is returned.
+func (m *MessagePayloadDecoder_Example) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = MessagePayloadDecoder_ExampleFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "description":
+
+			if utf8.RuneCountInString(m.GetDescription()) > 200 {
+				return MessagePayloadDecoder_ExampleValidationError{
+					field:  "description",
+					reason: "value length must be at most 200 runes",
+				}
+			}
+
+		case "input":
+
+			if v, ok := interface{}(m.GetInput()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return MessagePayloadDecoder_ExampleValidationError{
+						field:  "input",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "output":
+
+			if v, ok := interface{}(m.GetOutput()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return MessagePayloadDecoder_ExampleValidationError{
+						field:  "output",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return MessagePayloadDecoder_ExampleValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// MessagePayloadDecoder_ExampleValidationError is the validation error
+// returned by MessagePayloadDecoder_Example.ValidateFields if the designated
+// constraints aren't met.
+type MessagePayloadDecoder_ExampleValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e MessagePayloadDecoder_ExampleValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e MessagePayloadDecoder_ExampleValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e MessagePayloadDecoder_ExampleValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e MessagePayloadDecoder_ExampleValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e MessagePayloadDecoder_ExampleValidationError) ErrorName() string {
+	return "MessagePayloadDecoder_ExampleValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e MessagePayloadDecoder_ExampleValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sMessagePayloadDecoder_Example.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = MessagePayloadDecoder_ExampleValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = MessagePayloadDecoder_ExampleValidationError{}
+
+// ValidateFields checks the field values on MessagePayloadEncoder_Example with
+// the rules defined in the proto definition for this message. If any rules
+// are violated, an error is returned.
+func (m *MessagePayloadEncoder_Example) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = MessagePayloadEncoder_ExampleFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "description":
+
+			if utf8.RuneCountInString(m.GetDescription()) > 200 {
+				return MessagePayloadEncoder_ExampleValidationError{
+					field:  "description",
+					reason: "value length must be at most 200 runes",
+				}
+			}
+
+		case "input":
+
+			if v, ok := interface{}(m.GetInput()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return MessagePayloadEncoder_ExampleValidationError{
+						field:  "input",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "output":
+
+			if v, ok := interface{}(m.GetOutput()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return MessagePayloadEncoder_ExampleValidationError{
+						field:  "output",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return MessagePayloadEncoder_ExampleValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// MessagePayloadEncoder_ExampleValidationError is the validation error
+// returned by MessagePayloadEncoder_Example.ValidateFields if the designated
+// constraints aren't met.
+type MessagePayloadEncoder_ExampleValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e MessagePayloadEncoder_ExampleValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e MessagePayloadEncoder_ExampleValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e MessagePayloadEncoder_ExampleValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e MessagePayloadEncoder_ExampleValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e MessagePayloadEncoder_ExampleValidationError) ErrorName() string {
+	return "MessagePayloadEncoder_ExampleValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e MessagePayloadEncoder_ExampleValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sMessagePayloadEncoder_Example.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = MessagePayloadEncoder_ExampleValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = MessagePayloadEncoder_ExampleValidationError{}

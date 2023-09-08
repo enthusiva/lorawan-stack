@@ -56,6 +56,16 @@ export const eventMessages = defineMessages({
   'synthetic.status.resumed:preview': 'The event stream has been resumed after being paused',
   'synthetic.status.resumed:details':
     'The event stream has been resumed by the user and will receive new subsequent event data. Note that event data which was possibly emitted during the stream pause will not be re-delivered.',
+
+  'synthetic.status.filter_enabled:type': 'Filter enabled',
+  'synthetic.status.filter_enabled:preview': 'An event filter has been enabled',
+  'synthetic.status.filter_enabled:details':
+    'The event stream will now be filtered, meaning that some event types may be suppressed. See the details below for more information about the currently enabled filter.',
+
+  'synthetic.status.filter_disabled:type': 'Filter disabled',
+  'synthetic.status.filter_disabled:preview': 'The previously set event filter has been disabled',
+  'synthetic.status.filter_disabled:details':
+    'The event stream will not be filtered anymore. This means that you will see all events that come out of the event stream for this entity.',
 })
 
 export const EVENT_UNKNOWN_ERROR = 'synthetic.error.unknown'
@@ -66,6 +76,8 @@ export const EVENT_STATUS_CLOSED = 'synthetic.status.closed'
 export const EVENT_STATUS_CLEARED = 'synthetic.status.cleared'
 export const EVENT_STATUS_PAUSED = 'synthetic.status.paused'
 export const EVENT_STATUS_RESUMED = 'synthetic.status.resumed'
+export const EVENT_STATUS_FILTER_ENABLED = 'synthetic.status.filter_enabled'
+export const EVENT_STATUS_FILTER_DISABLED = 'synthetic.status.filter_disabled'
 
 export const createUnknownErrorEvent = defineSyntheticEvent(EVENT_UNKNOWN_ERROR)
 export const createNetworkErrorEvent = defineSyntheticEvent(EVENT_NETWORK_ERROR)
@@ -75,3 +87,5 @@ export const createStatusClosedEvent = defineSyntheticEvent(EVENT_STATUS_CLOSED)
 export const createStatusClearedEvent = defineSyntheticEvent(EVENT_STATUS_CLEARED)
 export const createStatusPausedEvent = defineSyntheticEvent(EVENT_STATUS_PAUSED)
 export const createStatusResumedEvent = defineSyntheticEvent(EVENT_STATUS_RESUMED)
+export const createStatusFilterEnabled = defineSyntheticEvent(EVENT_STATUS_FILTER_ENABLED)
+export const createStatusFilterDisabled = defineSyntheticEvent(EVENT_STATUS_FILTER_DISABLED)

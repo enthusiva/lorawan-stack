@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React from 'react'
-import { ToastContainer as Container, Slide } from 'react-toastify'
+import { ToastContainer as Container, cssTransition } from 'react-toastify'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 
@@ -22,39 +22,39 @@ import createToast from './toast'
 import './react-toastify.styl'
 import style from './toast.styl'
 
-class ToastContainer extends React.Component {
-  static propTypes = {
-    autoClose: PropTypes.oneOfType([PropTypes.bool, PropTypes.number]),
-    closeButton: PropTypes.oneOfType([PropTypes.bool, PropTypes.element]),
-    closeOnClick: PropTypes.bool,
-    hideProgressBar: PropTypes.bool,
-    pauseOnFocusLoss: PropTypes.bool,
-    pauseOnHover: PropTypes.bool,
-    position: PropTypes.oneOf([
-      'bottom-right',
-      'bottom-left',
-      'top-right',
-      'top-left',
-      'top-center',
-      'bottom-center',
-    ]),
-    transition: PropTypes.func,
-  }
+const ToastContainer = props => (
+  <Container toastClassName={style.toast} bodyClassName={style.body} {...props} />
+)
 
-  static defaultProps = {
-    position: 'bottom-right',
-    autoClose: 4000,
-    closeButton: false,
-    hideProgressBar: true,
-    pauseOnHover: true,
-    closeOnClick: true,
-    pauseOnFocusLoss: true,
-    transition: Slide,
-  }
+ToastContainer.propTypes = {
+  autoClose: PropTypes.oneOfType([PropTypes.bool, PropTypes.number]),
+  closeButton: PropTypes.oneOfType([PropTypes.bool, PropTypes.element]),
+  closeOnClick: PropTypes.bool,
+  hideProgressBar: PropTypes.bool,
+  limit: PropTypes.number,
+  pauseOnFocusLoss: PropTypes.bool,
+  pauseOnHover: PropTypes.bool,
+  position: PropTypes.oneOf([
+    'bottom-right',
+    'bottom-left',
+    'top-right',
+    'top-left',
+    'top-center',
+    'bottom-center',
+  ]),
+  transition: PropTypes.func,
+}
 
-  render() {
-    return <Container toastClassName={style.toast} bodyClassName={style.body} {...this.props} />
-  }
+ToastContainer.defaultProps = {
+  autoClose: undefined,
+  position: 'bottom-right',
+  closeButton: false,
+  hideProgressBar: true,
+  pauseOnHover: true,
+  closeOnClick: true,
+  pauseOnFocusLoss: true,
+  limit: 2,
+  transition: cssTransition({ enter: style.slideInRight, exit: style.slideOutRight }),
 }
 
 const toast = createToast()

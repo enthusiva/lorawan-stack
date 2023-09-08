@@ -18,6 +18,7 @@ import {
   GET_GTW,
   GET_GTW_SUCCESS,
   UPDATE_GTW_SUCCESS,
+  UPDATE_GTW_LOCATION_SUCCESS,
   DELETE_GTW_SUCCESS,
   GET_GTWS_LIST_SUCCESS,
   UPDATE_GTW_STATS,
@@ -38,12 +39,10 @@ const defaultState = {
   statistics: defaultStatisticsState,
 }
 
-const gateway = (state = {}, gateway) => {
-  return {
-    ...state,
-    ...gateway,
-  }
-}
+const gateway = (state = {}, gateway) => ({
+  ...state,
+  ...gateway,
+})
 
 const statistics = (state = defaultStatisticsState, { type, payload }) => {
   switch (type) {
@@ -92,6 +91,30 @@ const gateways = (state = defaultState, action) => {
           [id]: gateway(state.entities[id], payload),
         },
       }
+    case UPDATE_GTW_LOCATION_SUCCESS: {
+      const { id } = payload
+      const antennaLocations = payload.event.data.antenna_locations
+
+      const composedLocations = antennaLocations.map(antennaLocation => ({
+        location: {
+          ...antennaLocation,
+          // Locations from status messages can currently not be trusted
+          // in terms of integrity since they are not sent over a secure connection.
+          trusted: false,
+        },
+      }))
+
+      return {
+        ...state,
+        entities: {
+          ...state.entities,
+          [id]: {
+            ...state.entities[id],
+            antennas: composedLocations,
+          },
+        },
+      }
+    }
     case DELETE_GTW_SUCCESS:
       const { [payload.id]: deleted, ...rest } = state.entities
 

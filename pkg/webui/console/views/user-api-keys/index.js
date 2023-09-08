@@ -13,12 +13,14 @@
 // limitations under the License.
 
 import React from 'react'
-import { Switch, Route } from 'react-router'
+import { Routes, Route } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import ErrorView from '@ttn-lw/lib/components/error-view'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
 
 import UserApiKeyEdit from '@console/views/user-api-key-edit'
 import UserApiKeyAdd from '@console/views/user-api-key-add'
@@ -26,22 +28,30 @@ import SubViewError from '@console/views/sub-view-error'
 import UserApiKeysList from '@console/views/user-api-keys-list'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
-const UserApiKeys = ({ match }) => (
-  <ErrorView ErrorComponent={SubViewError}>
-    <Switch>
-      <Route exact path={match.path} component={UserApiKeysList} />
-      <Route exact path={`${match.path}/add`} component={UserApiKeyAdd} />
-      <Route path={`${match.path}/:apiKeyId`} component={UserApiKeyEdit} />
-    </Switch>
-  </ErrorView>
-)
+import { apiKeyPath as apiKeyPathRegexp } from '@console/lib/regexp'
 
-UserApiKeys.propTypes = {
-  match: PropTypes.match.isRequired,
+const UserApiKeys = () => {
+  useBreadcrumbs(
+    'usr.single.api-keys',
+    <Breadcrumb path={`/user/api-keys`} content={sharedMessages.personalApiKeys} />,
+  )
+
+  return (
+    <ErrorView errorRender={SubViewError}>
+      <Routes>
+        <Route index Component={UserApiKeysList} />
+        <Route path="add" Component={UserApiKeyAdd} />
+        <Route
+          path=":apiKeyId/*"
+          element={
+            <ValidateRouteParam check={{ apiKeyId: apiKeyPathRegexp }} Component={UserApiKeyEdit} />
+          }
+        />
+        <Route path="*" Component={GenericNotFound} />
+      </Routes>
+    </ErrorView>
+  )
 }
 
-export default withBreadcrumb('usr.single.api-keys', () => (
-  <Breadcrumb path={`/user/api-keys`} content={sharedMessages.personalApiKeys} />
-))(UserApiKeys)
+export default UserApiKeys

@@ -17,11 +17,12 @@ package mac
 import (
 	"context"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/networkserver/internal/time"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var (
@@ -39,52 +40,52 @@ const (
 	DefaultStatusTimePeriodicity         = 24 * time.Hour
 )
 
-func deviceStatusCountPeriodicity(dev *ttnpb.EndDevice, defaults ttnpb.MACSettings) uint32 {
-	if dev.MACSettings != nil && dev.MACSettings.StatusCountPeriodicity != nil {
-		return dev.MACSettings.StatusCountPeriodicity.Value
+func DeviceStatusCountPeriodicity(dev *ttnpb.EndDevice, defaults *ttnpb.MACSettings) uint32 {
+	if v := dev.GetMacSettings().GetStatusCountPeriodicity(); v != nil {
+		return v.Value
 	}
-	if defaults.StatusCountPeriodicity != nil {
+	if defaults.GetStatusCountPeriodicity() != nil {
 		return defaults.StatusCountPeriodicity.Value
 	}
 	return DefaultStatusCountPeriodicity
 }
 
-func deviceStatusTimePeriodicity(dev *ttnpb.EndDevice, defaults ttnpb.MACSettings) time.Duration {
-	if dev.MACSettings != nil && dev.MACSettings.StatusTimePeriodicity != nil {
-		return *dev.MACSettings.StatusTimePeriodicity
+func DeviceStatusTimePeriodicity(dev *ttnpb.EndDevice, defaults *ttnpb.MACSettings) time.Duration {
+	if v := dev.GetMacSettings().GetStatusTimePeriodicity(); v != nil {
+		return ttnpb.StdDurationOrZero(v)
 	}
-	if defaults.StatusTimePeriodicity != nil {
-		return *defaults.StatusTimePeriodicity
+	if defaults.GetStatusTimePeriodicity() != nil {
+		return ttnpb.StdDurationOrZero(defaults.StatusTimePeriodicity)
 	}
 	return DefaultStatusTimePeriodicity
 }
 
-func DeviceNeedsDevStatusReqAt(dev *ttnpb.EndDevice, defaults ttnpb.MACSettings) (time.Time, bool) {
-	if dev.MACState == nil {
+func DeviceNeedsDevStatusReqAt(dev *ttnpb.EndDevice, defaults *ttnpb.MACSettings) (time.Time, bool) {
+	if dev.MacState == nil {
 		return time.Time{}, false
 	}
-	tp := deviceStatusTimePeriodicity(dev, defaults)
+	tp := DeviceStatusTimePeriodicity(dev, defaults)
 	if tp == 0 {
 		return time.Time{}, false
 	}
 	if dev.LastDevStatusReceivedAt == nil {
 		return time.Time{}, true
 	}
-	return dev.LastDevStatusReceivedAt.Add(tp).UTC(), true
+	return ttnpb.StdTime(dev.LastDevStatusReceivedAt).Add(tp).UTC(), true
 }
 
-func DeviceNeedsDevStatusReq(dev *ttnpb.EndDevice, defaults ttnpb.MACSettings, transmitAt time.Time) bool {
-	if dev.GetMulticast() || dev.GetMACState() == nil {
+func DeviceNeedsDevStatusReq(dev *ttnpb.EndDevice, defaults *ttnpb.MACSettings, transmitAt time.Time) bool {
+	if dev.GetMulticast() || dev.GetMacState() == nil {
 		return false
 	}
 	timedAt, timeBound := DeviceNeedsDevStatusReqAt(dev, defaults)
-	cp := deviceStatusCountPeriodicity(dev, defaults)
+	cp := DeviceStatusCountPeriodicity(dev, defaults)
 	return (cp != 0 || timeBound) && dev.LastDevStatusReceivedAt == nil ||
-		cp != 0 && dev.MACState.LastDevStatusFCntUp+cp <= dev.Session.LastFCntUp ||
+		cp != 0 && dev.MacState.LastDevStatusFCntUp+cp <= dev.Session.LastFCntUp ||
 		timeBound && !timedAt.After(transmitAt)
 }
 
-func EnqueueDevStatusReq(ctx context.Context, dev *ttnpb.EndDevice, maxDownLen, maxUpLen uint16, defaults ttnpb.MACSettings, transmitAt time.Time) EnqueueState {
+func EnqueueDevStatusReq(ctx context.Context, dev *ttnpb.EndDevice, maxDownLen, maxUpLen uint16, defaults *ttnpb.MACSettings, transmitAt time.Time) EnqueueState {
 	if !DeviceNeedsDevStatusReq(dev, defaults, transmitAt) {
 		return EnqueueState{
 			MaxDownLen: maxDownLen,
@@ -94,20 +95,20 @@ func EnqueueDevStatusReq(ctx context.Context, dev *ttnpb.EndDevice, maxDownLen, 
 	}
 
 	var st EnqueueState
-	dev.MACState.PendingRequests, st = enqueueMACCommand(ttnpb.CID_DEV_STATUS, maxDownLen, maxUpLen, func(nDown, nUp uint16) ([]*ttnpb.MACCommand, uint16, events.Builders, bool) {
+	dev.MacState.PendingRequests, st = enqueueMACCommand(ttnpb.MACCommandIdentifier_CID_DEV_STATUS, maxDownLen, maxUpLen, func(nDown, nUp uint16) ([]*ttnpb.MACCommand, uint16, events.Builders, bool) {
 		if nDown < 1 || nUp < 1 {
 			return nil, 0, nil, false
 		}
 		log.FromContext(ctx).Debug("Enqueued DevStatusReq")
 		return []*ttnpb.MACCommand{
-				ttnpb.CID_DEV_STATUS.MACCommand(),
+				ttnpb.MACCommandIdentifier_CID_DEV_STATUS.MACCommand(),
 			},
 			1,
 			events.Builders{
 				EvtEnqueueDevStatusRequest,
 			},
 			true
-	}, dev.MACState.PendingRequests...)
+	}, dev.MacState.PendingRequests...)
 	return st
 }
 
@@ -117,23 +118,28 @@ func HandleDevStatusAns(ctx context.Context, dev *ttnpb.EndDevice, pld *ttnpb.MA
 	}
 
 	var err error
-	dev.MACState.PendingRequests, err = handleMACResponse(ttnpb.CID_DEV_STATUS, func(*ttnpb.MACCommand) error {
-		switch pld.Battery {
-		case 0:
-			dev.PowerState = ttnpb.PowerState_POWER_EXTERNAL
-			dev.BatteryPercentage = nil
-		case 255:
-			dev.PowerState = ttnpb.PowerState_POWER_UNKNOWN
-			dev.BatteryPercentage = nil
-		default:
-			dev.PowerState = ttnpb.PowerState_POWER_BATTERY
-			dev.BatteryPercentage = &pbtypes.FloatValue{Value: float32(pld.Battery-1) / 253}
-		}
-		dev.DownlinkMargin = pld.Margin
-		dev.LastDevStatusReceivedAt = &recvAt
-		dev.MACState.LastDevStatusFCntUp = fCntUp
-		return nil
-	}, dev.MACState.PendingRequests...)
+	dev.MacState.PendingRequests, err = handleMACResponse(
+		ttnpb.MACCommandIdentifier_CID_DEV_STATUS,
+		false,
+		func(*ttnpb.MACCommand) error {
+			switch pld.Battery {
+			case 0:
+				dev.PowerState = ttnpb.PowerState_POWER_EXTERNAL
+				dev.BatteryPercentage = nil
+			case 255:
+				dev.PowerState = ttnpb.PowerState_POWER_UNKNOWN
+				dev.BatteryPercentage = nil
+			default:
+				dev.PowerState = ttnpb.PowerState_POWER_BATTERY
+				dev.BatteryPercentage = &wrapperspb.FloatValue{Value: float32(pld.Battery-1) / 253}
+			}
+			dev.DownlinkMargin = pld.Margin
+			dev.LastDevStatusReceivedAt = timestamppb.New(recvAt)
+			dev.MacState.LastDevStatusFCntUp = fCntUp
+			return nil
+		},
+		dev.MacState.PendingRequests...,
+	)
 	return events.Builders{
 		EvtReceiveDevStatusAnswer.With(events.WithData(pld)),
 	}, err

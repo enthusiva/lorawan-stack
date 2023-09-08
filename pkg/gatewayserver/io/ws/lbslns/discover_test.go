@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smartystreets/assertions"
-	"go.thethings.network/lorawan-stack/v3/pkg/basicstation"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws"
+	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/ws/id6"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
@@ -34,9 +34,9 @@ func TestDiscover(t *testing.T) {
 	var lbsLNS lbsLNS
 	eui := types.EUI64{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}
 	mockServer := mockServer{
-		ids: ttnpb.GatewayIdentifiers{
-			GatewayID: "eui-1111111111111111",
-			EUI:       &eui,
+		ids: &ttnpb.GatewayIdentifiers{
+			GatewayId: "eui-1111111111111111",
+			Eui:       eui.Bytes(),
 		},
 	}
 	info := ws.ServerInfo{
@@ -52,14 +52,14 @@ func TestDiscover(t *testing.T) {
 		{
 			Name: "Valid",
 			Query: DiscoverQuery{
-				EUI: basicstation.EUI{
+				EUI: id6.EUI{
 					Prefix: "router",
 					EUI64:  eui,
 				},
 			},
 			ExpectedResponse: DiscoverResponse{
-				EUI: basicstation.EUI{Prefix: "router", EUI64: eui},
-				Muxs: basicstation.EUI{
+				EUI: id6.EUI{Prefix: "router", EUI64: eui},
+				Muxs: id6.EUI{
 					Prefix: "muxs",
 				},
 				URI: "wss://thethings.example.com:8887/traffic/eui-1111111111111111",

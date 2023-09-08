@@ -16,18 +16,16 @@ package web_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 
-	"github.com/gogo/protobuf/types"
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/web"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/web/redis"
 	"go.thethings.network/lorawan-stack/v3/pkg/cluster"
 	"go.thethings.network/lorawan-stack/v3/pkg/component"
 	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	mockis "go.thethings.network/lorawan-stack/v3/pkg/identityserver/mock"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmetadata"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -38,8 +36,14 @@ import (
 func TestWebhookRegistryRPC(t *testing.T) {
 	a, ctx := test.New(t)
 
-	is, isAddr := startMockIS(ctx)
-	is.add(ctx, registeredApplicationID, registeredApplicationKey)
+	is, isAddr, closeIS := mockis.New(ctx)
+	defer closeIS()
+	is.ApplicationRegistry().Add(ctx, registeredApplicationID, registeredApplicationKey,
+		ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_APPLICATION_DEVICES_READ,
+		ttnpb.Right_RIGHT_APPLICATION_DEVICES_WRITE,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE)
 
 	c := componenttest.NewComponent(t, &component.Config{
 		ServiceBase: config.ServiceBase{
@@ -55,7 +59,10 @@ func TestWebhookRegistryRPC(t *testing.T) {
 	redisClient, flush := test.NewRedis(ctx, "applicationserver_test")
 	defer flush()
 	defer redisClient.Close()
-	webhookReg := &redis.WebhookRegistry{Redis: redisClient}
+	webhookReg := &redis.WebhookRegistry{Redis: redisClient, LockTTL: test.Delay << 10}
+	if err := webhookReg.Init(ctx); !a.So(err, should.BeNil) {
+		t.FailNow()
+	}
 	srv := web.NewWebhookRegistryRPC(webhookReg, nil)
 	c.RegisterGRPC(&mockRegisterer{ctx, srv})
 	componenttest.StartComponent(t, c)
@@ -83,10 +90,8 @@ func TestWebhookRegistryRPC(t *testing.T) {
 	// Check empty.
 	{
 		res, err := client.List(ctx, &ttnpb.ListApplicationWebhooksRequest{
-			ApplicationIdentifiers: registeredApplicationID,
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"base_url"},
-			},
+			ApplicationIds: registeredApplicationID,
+			FieldMask:      ttnpb.FieldMask("base_url"),
 		}, creds)
 		a.So(err, should.BeNil)
 		a.So(res.Webhooks, should.BeEmpty)
@@ -95,16 +100,15 @@ func TestWebhookRegistryRPC(t *testing.T) {
 	// Add.
 	{
 		_, err := client.Set(ctx, &ttnpb.SetApplicationWebhookRequest{
-			ApplicationWebhook: ttnpb.ApplicationWebhook{
-				ApplicationWebhookIdentifiers: ttnpb.ApplicationWebhookIdentifiers{
-					ApplicationIdentifiers: registeredApplicationID,
-					WebhookID:              registeredWebhookID,
+			Webhook: &ttnpb.ApplicationWebhook{
+				Ids: &ttnpb.ApplicationWebhookIdentifiers{
+					ApplicationIds: registeredApplicationID,
+					WebhookId:      registeredWebhookID,
 				},
-				BaseURL: "http://localhost/test",
+				BaseUrl: "http://localhost/test",
+				Format:  "json",
 			},
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"base_url"},
-			},
+			FieldMask: ttnpb.FieldMask("base_url", "format"),
 		}, creds)
 		a.So(err, should.BeNil)
 	}
@@ -112,36 +116,32 @@ func TestWebhookRegistryRPC(t *testing.T) {
 	// List; assert one.
 	{
 		res, err := client.List(ctx, &ttnpb.ListApplicationWebhooksRequest{
-			ApplicationIdentifiers: registeredApplicationID,
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"base_url"},
-			},
+			ApplicationIds: registeredApplicationID,
+			FieldMask:      ttnpb.FieldMask("base_url"),
 		}, creds)
 		a.So(err, should.BeNil)
 		a.So(res.Webhooks, should.HaveLength, 1)
-		a.So(res.Webhooks[0].BaseURL, should.Equal, "http://localhost/test")
+		a.So(res.Webhooks[0].BaseUrl, should.Equal, "http://localhost/test")
 	}
 
 	// Get.
 	{
 		res, err := client.Get(ctx, &ttnpb.GetApplicationWebhookRequest{
-			ApplicationWebhookIdentifiers: ttnpb.ApplicationWebhookIdentifiers{
-				ApplicationIdentifiers: registeredApplicationID,
-				WebhookID:              registeredWebhookID,
+			Ids: &ttnpb.ApplicationWebhookIdentifiers{
+				ApplicationIds: registeredApplicationID,
+				WebhookId:      registeredWebhookID,
 			},
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"base_url"},
-			},
+			FieldMask: ttnpb.FieldMask("base_url"),
 		}, creds)
 		a.So(err, should.BeNil)
-		a.So(res.BaseURL, should.Equal, "http://localhost/test")
+		a.So(res.BaseUrl, should.Equal, "http://localhost/test")
 	}
 
 	// Delete.
 	{
 		_, err := client.Delete(ctx, &ttnpb.ApplicationWebhookIdentifiers{
-			ApplicationIdentifiers: registeredApplicationID,
-			WebhookID:              registeredWebhookID,
+			ApplicationIds: registeredApplicationID,
+			WebhookId:      registeredWebhookID,
 		}, creds)
 		a.So(err, should.BeNil)
 	}
@@ -149,10 +149,8 @@ func TestWebhookRegistryRPC(t *testing.T) {
 	// Check empty.
 	{
 		res, err := client.List(ctx, &ttnpb.ListApplicationWebhooksRequest{
-			ApplicationIdentifiers: registeredApplicationID,
-			FieldMask: pbtypes.FieldMask{
-				Paths: []string{"base_url"},
-			},
+			ApplicationIds: registeredApplicationID,
+			FieldMask:      ttnpb.FieldMask("base_url"),
 		}, creds)
 		a.So(err, should.BeNil)
 		a.So(res.Webhooks, should.BeEmpty)
@@ -228,14 +226,14 @@ description: Bar`),
 
 			a := assertions.New(t)
 
+			c := componenttest.NewComponent(t, &component.Config{})
+
 			config := web.TemplatesConfig{
-				Static:     tc.contents,
-				HTTPClient: http.DefaultClient,
+				Static: tc.contents,
 			}
-			store, err := config.NewTemplateStore()
+			store, err := config.NewTemplateStore(ctx, c)
 			a.So(err, should.BeNil)
 
-			c := componenttest.NewComponent(t, &component.Config{})
 			c.RegisterGRPC(&mockRegisterer{ctx, web.NewWebhookRegistryRPC(nil, store)})
 			componenttest.StartComponent(t, c)
 			defer c.Close()
@@ -243,19 +241,14 @@ description: Bar`),
 			client := ttnpb.NewApplicationWebhookRegistryClient(c.LoopbackConn())
 
 			getRes, err := client.GetTemplate(ctx, &ttnpb.GetApplicationWebhookTemplateRequest{
-				ApplicationWebhookTemplateIdentifiers: ttnpb.ApplicationWebhookTemplateIdentifiers{
-					TemplateID: "foo",
+				Ids: &ttnpb.ApplicationWebhookTemplateIdentifiers{
+					TemplateId: "foo",
 				},
 			})
 			tc.assertGet(a, getRes, err)
 
 			listRes, err := client.ListTemplates(ctx, &ttnpb.ListApplicationWebhookTemplatesRequest{
-				FieldMask: types.FieldMask{
-					Paths: []string{
-						"name",
-						"description",
-					},
-				},
+				FieldMask: ttnpb.FieldMask("name", "description"),
 			})
 			tc.assertList(a, listRes, err)
 		})

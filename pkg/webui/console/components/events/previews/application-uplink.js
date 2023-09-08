@@ -14,9 +14,10 @@
 
 import React from 'react'
 
+import { getDataRate, getSignalInformation } from '@console/components/events/utils'
+
 import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import getByPath from '@ttn-lw/lib/get-by-path'
 
 import messages from '../messages'
 
@@ -26,14 +27,8 @@ import JSONPayload from './shared/json-payload'
 const ApplicationUplinkPreview = React.memo(({ event }) => {
   const { data, identifiers } = event
   const deviceIds = identifiers[0].device_ids
-  let snr, rssi
-
-  if ('rx_metadata' in data) {
-    snr = data.rx_metadata[0].snr
-    rssi = data.rx_metadata[0].rssi
-  }
-
-  const bandwidth = getByPath(data, 'settings.data_rate.lora.bandwidth')
+  const { snr, rssi } = getSignalInformation(data)
+  const dataRate = getDataRate(data)
 
   return (
     <DescriptionList>
@@ -46,12 +41,12 @@ const ApplicationUplinkPreview = React.memo(({ event }) => {
           )}
         </DescriptionList.Item>
       ) : (
-        <DescriptionList.Byte title={messages.MACPayload} data={data.frm_payload} convertToHex />
+        <DescriptionList.Byte title={messages.payload} data={data.frm_payload} convertToHex />
       )}
       <DescriptionList.Item title={messages.fPort} data={data.f_port} />
+      <DescriptionList.Item title={messages.dataRate} data={dataRate} />
       <DescriptionList.Item title={messages.snr} data={snr} />
       <DescriptionList.Item title={messages.rssi} data={rssi} />
-      <DescriptionList.Item title={messages.bandwidth} data={bandwidth} />
     </DescriptionList>
   )
 })

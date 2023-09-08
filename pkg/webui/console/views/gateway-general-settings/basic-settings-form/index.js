@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,76 +13,103 @@
 // limitations under the License.
 
 import React from 'react'
+import { useSelector } from 'react-redux'
 
+import DeleteModalButton from '@ttn-lw/components/delete-modal-button'
 import SubmitButton from '@ttn-lw/components/submit-button'
 import SubmitBar from '@ttn-lw/components/submit-bar'
 import Form from '@ttn-lw/components/form'
 import Input from '@ttn-lw/components/input'
 import Checkbox from '@ttn-lw/components/checkbox'
 import KeyValueMap from '@ttn-lw/components/key-value-map'
-import ModalButton from '@ttn-lw/components/button/modal-button'
+
+import CollaboratorSelect from '@ttn-lw/containers/collaborator-select'
+import { decodeContact, encodeContact } from '@ttn-lw/containers/collaborator-select/util'
+
+import Message from '@ttn-lw/lib/components/message'
 
 import Require from '@console/lib/components/require'
 
 import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
+import tooltipIds from '@ttn-lw/lib/constants/tooltip-ids'
 
-import { mapAttributesToFormValue } from '@console/lib/attributes'
+import { encodeAttributes, decodeAttributes } from '@console/lib/attributes'
+
+import { selectIsConfiguration } from '@console/store/selectors/identity-server'
+import { selectUserId } from '@console/store/selectors/logout'
 
 import m from '../messages'
 
 import validationSchema from './validation-schema'
 
+const decodeSecret = value => {
+  if (Boolean(value)) {
+    return atob(value)
+  }
+
+  return ''
+}
+
+const encodeSecret = value => {
+  if (Boolean(value)) {
+    return btoa(value)
+  }
+
+  return ''
+}
+
 const BasicSettingsForm = React.memo(props => {
   const {
     gateway,
+    gtwId,
     onSubmit,
-    onSubmitSuccess,
     onDelete,
-    onDeleteFailure,
-    onDeleteSuccess,
     mayDeleteGateway,
+    mayEditSecrets,
+    shouldConfirmDelete,
+    mayPurge,
   } = props
 
+  const userId = useSelector(selectUserId)
+  const isConfig = useSelector(selectIsConfiguration)
+  const isResctrictedUser =
+    isConfig && isConfig.collaborator_rights?.set_others_as_contacts === false
   const [error, setError] = React.useState(undefined)
 
-  const onGatewayDelete = React.useCallback(async () => {
-    try {
-      await onDelete()
-      onDeleteSuccess()
-    } catch (error) {
-      onDeleteFailure()
-    }
-  }, [onDelete, onDeleteFailure, onDeleteSuccess])
+  const onGatewayDelete = React.useCallback(
+    async shouldPurge => {
+      try {
+        setError(undefined)
 
-  const initialValues = React.useMemo(() => {
-    const initialValues = {
-      ...gateway,
-      attributes: mapAttributesToFormValue(gateway.attributes),
-    }
-    if (Boolean(initialValues.lbs_lns_secret) && initialValues.lbs_lns_secret.value !== undefined) {
-      initialValues.lbs_lns_secret.value = atob(initialValues.lbs_lns_secret.value)
-    }
-    return validationSchema.cast(initialValues)
-  }, [gateway])
+        await onDelete(shouldPurge)
+      } catch (error) {
+        setError(error)
+      }
+    },
+    [onDelete],
+  )
+
+  const initialValues = React.useMemo(() => validationSchema.cast(gateway), [gateway])
 
   const onFormSubmit = React.useCallback(
     async (values, { resetForm, setSubmitting }) => {
       const castedValues = validationSchema.cast(values)
-      if (Boolean(castedValues.lbs_lns_secret) && castedValues.lbs_lns_secret.value !== undefined) {
-        castedValues.lbs_lns_secret.value = btoa(castedValues.lbs_lns_secret.value)
+      if (castedValues?.lbs_lns_secret?.value === '') {
+        castedValues.lbs_lns_secret = null
       }
+
+      const update = castedValues
       setError(undefined)
       try {
-        await onSubmit(castedValues)
+        await onSubmit(update)
         resetForm({ values: castedValues })
-        onSubmitSuccess()
       } catch (err) {
         setSubmitting(false)
         setError(err)
       }
     },
-    [onSubmit, onSubmitSuccess],
+    [onSubmit],
   )
 
   return (
@@ -100,6 +127,7 @@ const BasicSettingsForm = React.memo(props => {
         required
         disabled
         component={Input}
+        tooltipId={tooltipIds.GATEWAY_ID}
       />
       <Form.Field
         title={sharedMessages.gatewayEUI}
@@ -109,12 +137,14 @@ const BasicSettingsForm = React.memo(props => {
         max={8}
         placeholder={sharedMessages.gatewayEUI}
         component={Input}
+        tooltipId={tooltipIds.GATEWAY_EUI}
       />
       <Form.Field
         title={sharedMessages.gatewayName}
         placeholder={sharedMessages.gatewayNamePlaceholder}
         name="name"
         component={Input}
+        tooltipId={tooltipIds.GATEWAY_NAME}
       />
       <Form.Field
         title={sharedMessages.gatewayDescription}
@@ -123,6 +153,7 @@ const BasicSettingsForm = React.memo(props => {
         name="description"
         type="textarea"
         component={Input}
+        tooltipId={tooltipIds.GATEWAY_DESCRIPTION}
       />
       <Form.Field
         title={sharedMessages.gatewayServerAddress}
@@ -137,19 +168,33 @@ const BasicSettingsForm = React.memo(props => {
         component={Checkbox}
         label={sharedMessages.enabled}
         description={sharedMessages.requireAuthenticatedConnectionDescription}
+        tooltipId={tooltipIds.REQUIRE_AUTHENTICATED_CONNECTION}
       />
       <Form.Field
         title={sharedMessages.lbsLNSSecret}
         description={sharedMessages.lbsLNSSecretDescription}
         name="lbs_lns_secret.value"
+        decode={decodeSecret}
+        encode={encodeSecret}
         component={Input}
+        disabled={!mayEditSecrets}
+        sensitive
       />
       <Form.Field
         title={sharedMessages.gatewayStatus}
         name="status_public"
         component={Checkbox}
-        label={sharedMessages.public}
+        label={sharedMessages.gatewayStatusPublic}
         description={sharedMessages.statusDescription}
+        tooltipId={tooltipIds.GATEWAY_STATUS_PUBLIC}
+      />
+      <Form.Field
+        title={sharedMessages.gatewayLocation}
+        name="location_public"
+        component={Checkbox}
+        label={sharedMessages.gatewayLocationPublic}
+        description={sharedMessages.locationDescription}
+        tooltipId={tooltipIds.GATEWAY_LOCATION_PUBLIC}
       />
       <Form.Field
         name="attributes"
@@ -159,6 +204,9 @@ const BasicSettingsForm = React.memo(props => {
         addMessage={sharedMessages.addAttributes}
         component={KeyValueMap}
         description={sharedMessages.attributeDescription}
+        tooltipId={tooltipIds.GATEWAY_ATTRIBUTES}
+        encode={encodeAttributes}
+        decode={decodeAttributes}
       />
       <Form.Field
         title={sharedMessages.automaticUpdates}
@@ -174,22 +222,59 @@ const BasicSettingsForm = React.memo(props => {
         component={Input}
         autoComplete="on"
       />
+      <Form.Field
+        title={sharedMessages.packetBroker}
+        label={sharedMessages.disabled}
+        name="disable_packet_broker_forwarding"
+        component={Checkbox}
+        description={m.disablePacketBrokerForwarding}
+        tooltipId={tooltipIds.DISABLE_PACKET_BROKER_FORWARDING}
+      />
+      <Form.SubTitle title={sharedMessages.contactInformation} className="mb-cs-s" />
+      <CollaboratorSelect
+        name="administrative_contact"
+        title={sharedMessages.adminContact}
+        placeholder={sharedMessages.contactFieldPlaceholder}
+        entity={'gateway'}
+        entityId={gtwId}
+        encode={encodeContact}
+        decode={decodeContact}
+        required
+        isResctrictedUser={isResctrictedUser}
+        userId={userId}
+      />
+      <Message
+        content={m.adminContactDescription}
+        component="p"
+        className="mt-cs-xs tc-subtle-gray"
+      />
+      <CollaboratorSelect
+        name="technical_contact"
+        title={sharedMessages.technicalContact}
+        placeholder={sharedMessages.contactFieldPlaceholder}
+        entity={'gateway'}
+        entityId={gtwId}
+        encode={encodeContact}
+        decode={decodeContact}
+        required
+        isResctrictedUser={isResctrictedUser}
+        userId={userId}
+      />
+      <Message
+        content={m.techContactDescription}
+        component="p"
+        className="mt-cs-xs tc-subtle-gray"
+      />
       <SubmitBar>
         <Form.Submit component={SubmitButton} message={sharedMessages.saveChanges} />
-        <Require featureCheck={mayDeleteGateway}>
-          <ModalButton
-            type="button"
-            icon="delete"
+        <Require condition={mayDeleteGateway}>
+          <DeleteModalButton
+            entityId={gtwId}
+            entityName={gateway.name}
             message={m.deleteGateway}
-            modalData={{
-              message: {
-                values: { gtwName: gateway.name || gateway.ids.gateway_id },
-                ...m.modalWarning,
-              },
-            }}
             onApprove={onGatewayDelete}
-            naked
-            danger
+            shouldConfirm={shouldConfirmDelete}
+            mayPurge={mayPurge}
           />
         </Require>
       </SubmitBar>
@@ -199,12 +284,13 @@ const BasicSettingsForm = React.memo(props => {
 
 BasicSettingsForm.propTypes = {
   gateway: PropTypes.gateway.isRequired,
-  mayDeleteGateway: PropTypes.shape({}).isRequired,
+  gtwId: PropTypes.string.isRequired,
+  mayDeleteGateway: PropTypes.bool.isRequired,
+  mayEditSecrets: PropTypes.bool.isRequired,
+  mayPurge: PropTypes.bool.isRequired,
   onDelete: PropTypes.func.isRequired,
-  onDeleteFailure: PropTypes.func.isRequired,
-  onDeleteSuccess: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
-  onSubmitSuccess: PropTypes.func.isRequired,
+  shouldConfirmDelete: PropTypes.bool.isRequired,
 }
 
 export default BasicSettingsForm

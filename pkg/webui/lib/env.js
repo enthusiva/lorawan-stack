@@ -28,6 +28,7 @@ const env = {
     language: envSelector.selectLanguageConfig(),
     supportLink: envSelector.selectSupportLinkConfig(),
     documentationBaseUrl: envSelector.selectDocumentationUrlConfig(),
+    pageStatusBaseUrl: envSelector.selectPageStatusBaseUrlConfig(),
   },
   pageData: envSelector.selectPageData(),
   sentryDsn: envSelector.selectSentryDsnConfig(),
@@ -35,6 +36,7 @@ const env = {
   siteName: envSelector.selectApplicationSiteName(),
   siteTitle: envSelector.selectApplicationSiteTitle(),
   siteSubTitle: envSelector.selectApplicationSiteSubTitle(),
+  devEUIConfig: envSelector.selectDevEUIConfig(),
 }
 
 export default env

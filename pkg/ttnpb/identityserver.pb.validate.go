@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _identityserver_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on AuthInfoResponse with the rules
 // defined in the proto definition for this message. If any rules are
@@ -67,19 +64,19 @@ func (m *AuthInfoResponse) ValidateFields(paths ...string) error {
 		case "access_method":
 			if len(subs) == 0 {
 				subs = []string{
-					"api_key", "oauth_access_token", "user_session",
+					"api_key", "oauth_access_token", "user_session", "gateway_token",
 				}
 			}
 			for name, subs := range _processPaths(subs) {
 				_ = subs
 				switch name {
 				case "api_key":
-					w, ok := m.AccessMethod.(*AuthInfoResponse_APIKey)
+					w, ok := m.AccessMethod.(*AuthInfoResponse_ApiKey)
 					if !ok || w == nil {
 						continue
 					}
 
-					if v, ok := interface{}(m.GetAPIKey()).(interface{ ValidateFields(...string) error }); ok {
+					if v, ok := interface{}(m.GetApiKey()).(interface{ ValidateFields(...string) error }); ok {
 						if err := v.ValidateFields(subs...); err != nil {
 							return AuthInfoResponseValidationError{
 								field:  "api_key",
@@ -90,12 +87,12 @@ func (m *AuthInfoResponse) ValidateFields(paths ...string) error {
 					}
 
 				case "oauth_access_token":
-					w, ok := m.AccessMethod.(*AuthInfoResponse_OAuthAccessToken)
+					w, ok := m.AccessMethod.(*AuthInfoResponse_OauthAccessToken)
 					if !ok || w == nil {
 						continue
 					}
 
-					if v, ok := interface{}(m.GetOAuthAccessToken()).(interface{ ValidateFields(...string) error }); ok {
+					if v, ok := interface{}(m.GetOauthAccessToken()).(interface{ ValidateFields(...string) error }); ok {
 						if err := v.ValidateFields(subs...); err != nil {
 							return AuthInfoResponseValidationError{
 								field:  "oauth_access_token",
@@ -115,6 +112,22 @@ func (m *AuthInfoResponse) ValidateFields(paths ...string) error {
 						if err := v.ValidateFields(subs...); err != nil {
 							return AuthInfoResponseValidationError{
 								field:  "user_session",
+								reason: "embedded message failed validation",
+								cause:  err,
+							}
+						}
+					}
+
+				case "gateway_token":
+					w, ok := m.AccessMethod.(*AuthInfoResponse_GatewayToken_)
+					if !ok || w == nil {
+						continue
+					}
+
+					if v, ok := interface{}(m.GetGatewayToken()).(interface{ ValidateFields(...string) error }); ok {
+						if err := v.ValidateFields(subs...); err != nil {
+							return AuthInfoResponseValidationError{
+								field:  "gateway_token",
 								reason: "embedded message failed validation",
 								cause:  err,
 							}
@@ -317,6 +330,42 @@ func (m *IsConfiguration) ValidateFields(paths ...string) error {
 				}
 			}
 
+		case "user_login":
+
+			if v, ok := interface{}(m.GetUserLogin()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return IsConfigurationValidationError{
+						field:  "user_login",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "admin_rights":
+
+			if v, ok := interface{}(m.GetAdminRights()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return IsConfigurationValidationError{
+						field:  "admin_rights",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "collaborator_rights":
+
+			if v, ok := interface{}(m.GetCollaboratorRights()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return IsConfigurationValidationError{
+						field:  "collaborator_rights",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
 		default:
 			return IsConfigurationValidationError{
 				field:  name,
@@ -492,7 +541,14 @@ func (m *AuthInfoResponse_APIKeyAccess) ValidateFields(paths ...string) error {
 		switch name {
 		case "api_key":
 
-			if v, ok := interface{}(&m.APIKey).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApiKey() == nil {
+				return AuthInfoResponse_APIKeyAccessValidationError{
+					field:  "api_key",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApiKey()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return AuthInfoResponse_APIKeyAccessValidationError{
 						field:  "api_key",
@@ -504,7 +560,14 @@ func (m *AuthInfoResponse_APIKeyAccess) ValidateFields(paths ...string) error {
 
 		case "entity_ids":
 
-			if v, ok := interface{}(&m.EntityIDs).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetEntityIds() == nil {
+				return AuthInfoResponse_APIKeyAccessValidationError{
+					field:  "entity_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetEntityIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return AuthInfoResponse_APIKeyAccessValidationError{
 						field:  "entity_ids",
@@ -580,6 +643,109 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = AuthInfoResponse_APIKeyAccessValidationError{}
+
+// ValidateFields checks the field values on AuthInfoResponse_GatewayToken with
+// the rules defined in the proto definition for this message. If any rules
+// are violated, an error is returned.
+func (m *AuthInfoResponse_GatewayToken) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = AuthInfoResponse_GatewayTokenFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "gateway_ids":
+
+			if m.GetGatewayIds() == nil {
+				return AuthInfoResponse_GatewayTokenValidationError{
+					field:  "gateway_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return AuthInfoResponse_GatewayTokenValidationError{
+						field:  "gateway_ids",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		case "rights":
+
+		default:
+			return AuthInfoResponse_GatewayTokenValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// AuthInfoResponse_GatewayTokenValidationError is the validation error
+// returned by AuthInfoResponse_GatewayToken.ValidateFields if the designated
+// constraints aren't met.
+type AuthInfoResponse_GatewayTokenValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e AuthInfoResponse_GatewayTokenValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e AuthInfoResponse_GatewayTokenValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e AuthInfoResponse_GatewayTokenValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e AuthInfoResponse_GatewayTokenValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e AuthInfoResponse_GatewayTokenValidationError) ErrorName() string {
+	return "AuthInfoResponse_GatewayTokenValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e AuthInfoResponse_GatewayTokenValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sAuthInfoResponse_GatewayToken.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = AuthInfoResponse_GatewayTokenValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = AuthInfoResponse_GatewayTokenValidationError{}
 
 // ValidateFields checks the field values on IsConfiguration_UserRegistration
 // with the rules defined in the proto definition for this message. If any
@@ -1043,6 +1209,288 @@ var _ interface {
 	ErrorName() string
 } = IsConfiguration_UserRightsValidationError{}
 
+// ValidateFields checks the field values on IsConfiguration_UserLogin with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *IsConfiguration_UserLogin) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = IsConfiguration_UserLoginFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "disable_credentials_login":
+
+			if v, ok := interface{}(m.GetDisableCredentialsLogin()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return IsConfiguration_UserLoginValidationError{
+						field:  "disable_credentials_login",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return IsConfiguration_UserLoginValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// IsConfiguration_UserLoginValidationError is the validation error returned by
+// IsConfiguration_UserLogin.ValidateFields if the designated constraints
+// aren't met.
+type IsConfiguration_UserLoginValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e IsConfiguration_UserLoginValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e IsConfiguration_UserLoginValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e IsConfiguration_UserLoginValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e IsConfiguration_UserLoginValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e IsConfiguration_UserLoginValidationError) ErrorName() string {
+	return "IsConfiguration_UserLoginValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e IsConfiguration_UserLoginValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sIsConfiguration_UserLogin.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = IsConfiguration_UserLoginValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = IsConfiguration_UserLoginValidationError{}
+
+// ValidateFields checks the field values on IsConfiguration_AdminRights with
+// the rules defined in the proto definition for this message. If any rules
+// are violated, an error is returned.
+func (m *IsConfiguration_AdminRights) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = IsConfiguration_AdminRightsFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "all":
+
+			if v, ok := interface{}(m.GetAll()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return IsConfiguration_AdminRightsValidationError{
+						field:  "all",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return IsConfiguration_AdminRightsValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// IsConfiguration_AdminRightsValidationError is the validation error returned
+// by IsConfiguration_AdminRights.ValidateFields if the designated constraints
+// aren't met.
+type IsConfiguration_AdminRightsValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e IsConfiguration_AdminRightsValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e IsConfiguration_AdminRightsValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e IsConfiguration_AdminRightsValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e IsConfiguration_AdminRightsValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e IsConfiguration_AdminRightsValidationError) ErrorName() string {
+	return "IsConfiguration_AdminRightsValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e IsConfiguration_AdminRightsValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sIsConfiguration_AdminRights.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = IsConfiguration_AdminRightsValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = IsConfiguration_AdminRightsValidationError{}
+
+// ValidateFields checks the field values on IsConfiguration_CollaboratorRights
+// with the rules defined in the proto definition for this message. If any
+// rules are violated, an error is returned.
+func (m *IsConfiguration_CollaboratorRights) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = IsConfiguration_CollaboratorRightsFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "set_others_as_contacts":
+
+			if v, ok := interface{}(m.GetSetOthersAsContacts()).(interface{ ValidateFields(...string) error }); ok {
+				if err := v.ValidateFields(subs...); err != nil {
+					return IsConfiguration_CollaboratorRightsValidationError{
+						field:  "set_others_as_contacts",
+						reason: "embedded message failed validation",
+						cause:  err,
+					}
+				}
+			}
+
+		default:
+			return IsConfiguration_CollaboratorRightsValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// IsConfiguration_CollaboratorRightsValidationError is the validation error
+// returned by IsConfiguration_CollaboratorRights.ValidateFields if the
+// designated constraints aren't met.
+type IsConfiguration_CollaboratorRightsValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e IsConfiguration_CollaboratorRightsValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e IsConfiguration_CollaboratorRightsValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e IsConfiguration_CollaboratorRightsValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e IsConfiguration_CollaboratorRightsValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e IsConfiguration_CollaboratorRightsValidationError) ErrorName() string {
+	return "IsConfiguration_CollaboratorRightsValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e IsConfiguration_CollaboratorRightsValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sIsConfiguration_CollaboratorRights.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = IsConfiguration_CollaboratorRightsValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = IsConfiguration_CollaboratorRightsValidationError{}
+
 // ValidateFields checks the field values on
 // IsConfiguration_UserRegistration_Invitation with the rules defined in the
 // proto definition for this message. If any rules are violated, an error is returned.
@@ -1072,7 +1520,7 @@ func (m *IsConfiguration_UserRegistration_Invitation) ValidateFields(paths ...st
 
 		case "token_ttl":
 
-			if v, ok := interface{}(m.GetTokenTTL()).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetTokenTtl()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return IsConfiguration_UserRegistration_InvitationValidationError{
 						field:  "token_ttl",

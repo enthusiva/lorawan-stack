@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // ensure the imports are used
@@ -29,11 +29,8 @@ var (
 	_ = time.Duration(0)
 	_ = (*url.URL)(nil)
 	_ = (*mail.Address)(nil)
-	_ = types.DynamicAny{}
+	_ = anypb.Any{}
 )
-
-// define the regex for a UUID once up-front
-var _search_services_uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 // ValidateFields checks the field values on SearchApplicationsRequest with the
 // rules defined in the proto definition for this message. If any rules are
@@ -50,9 +47,18 @@ func (m *SearchApplicationsRequest) ValidateFields(paths ...string) error {
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchApplicationsRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
 		case "id_contains":
 
-			if utf8.RuneCountInString(m.GetIDContains()) > 50 {
+			if utf8.RuneCountInString(m.GetIdContains()) > 50 {
 				return SearchApplicationsRequestValidationError{
 					field:  "id_contains",
 					reason: "value length must be at most 50 runes",
@@ -114,7 +120,7 @@ func (m *SearchApplicationsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchApplicationsRequestValidationError{
 						field:  "field_mask",
@@ -125,7 +131,14 @@ func (m *SearchApplicationsRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "order":
-			// no validation rules for Order
+
+			if _, ok := _SearchApplicationsRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return SearchApplicationsRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ application_id -application_id name -name created_at -created_at]",
+				}
+			}
+
 		case "limit":
 
 			if m.GetLimit() > 1000 {
@@ -208,6 +221,16 @@ var _ interface {
 
 var _SearchApplicationsRequest_AttributesContain_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
+var _SearchApplicationsRequest_Order_InLookup = map[string]struct{}{
+	"":                {},
+	"application_id":  {},
+	"-application_id": {},
+	"name":            {},
+	"-name":           {},
+	"created_at":      {},
+	"-created_at":     {},
+}
+
 // ValidateFields checks the field values on SearchClientsRequest with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -223,9 +246,18 @@ func (m *SearchClientsRequest) ValidateFields(paths ...string) error {
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchClientsRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
 		case "id_contains":
 
-			if utf8.RuneCountInString(m.GetIDContains()) > 50 {
+			if utf8.RuneCountInString(m.GetIdContains()) > 50 {
 				return SearchClientsRequestValidationError{
 					field:  "id_contains",
 					reason: "value length must be at most 50 runes",
@@ -312,7 +344,7 @@ func (m *SearchClientsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchClientsRequestValidationError{
 						field:  "field_mask",
@@ -323,7 +355,14 @@ func (m *SearchClientsRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "order":
-			// no validation rules for Order
+
+			if _, ok := _SearchClientsRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return SearchClientsRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ client_id -client_id name -name created_at -created_at]",
+				}
+			}
+
 		case "limit":
 
 			if m.GetLimit() > 1000 {
@@ -405,6 +444,16 @@ var _ interface {
 
 var _SearchClientsRequest_AttributesContain_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
+var _SearchClientsRequest_Order_InLookup = map[string]struct{}{
+	"":            {},
+	"client_id":   {},
+	"-client_id":  {},
+	"name":        {},
+	"-name":       {},
+	"created_at":  {},
+	"-created_at": {},
+}
+
 // ValidateFields checks the field values on SearchGatewaysRequest with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -420,9 +469,18 @@ func (m *SearchGatewaysRequest) ValidateFields(paths ...string) error {
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchGatewaysRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
 		case "id_contains":
 
-			if utf8.RuneCountInString(m.GetIDContains()) > 50 {
+			if utf8.RuneCountInString(m.GetIdContains()) > 50 {
 				return SearchGatewaysRequestValidationError{
 					field:  "id_contains",
 					reason: "value length must be at most 50 runes",
@@ -484,7 +542,7 @@ func (m *SearchGatewaysRequest) ValidateFields(paths ...string) error {
 
 		case "eui_contains":
 
-			if utf8.RuneCountInString(m.GetEUIContains()) > 16 {
+			if utf8.RuneCountInString(m.GetEuiContains()) > 16 {
 				return SearchGatewaysRequestValidationError{
 					field:  "eui_contains",
 					reason: "value length must be at most 16 runes",
@@ -493,7 +551,7 @@ func (m *SearchGatewaysRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchGatewaysRequestValidationError{
 						field:  "field_mask",
@@ -504,7 +562,14 @@ func (m *SearchGatewaysRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "order":
-			// no validation rules for Order
+
+			if _, ok := _SearchGatewaysRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return SearchGatewaysRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ gateway_id -gateway_id gateway_eui -gateway_eui name -name created_at -created_at]",
+				}
+			}
+
 		case "limit":
 
 			if m.GetLimit() > 1000 {
@@ -586,6 +651,18 @@ var _ interface {
 
 var _SearchGatewaysRequest_AttributesContain_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
+var _SearchGatewaysRequest_Order_InLookup = map[string]struct{}{
+	"":             {},
+	"gateway_id":   {},
+	"-gateway_id":  {},
+	"gateway_eui":  {},
+	"-gateway_eui": {},
+	"name":         {},
+	"-name":        {},
+	"created_at":   {},
+	"-created_at":  {},
+}
+
 // ValidateFields checks the field values on SearchOrganizationsRequest with
 // the rules defined in the proto definition for this message. If any rules
 // are violated, an error is returned.
@@ -601,9 +678,18 @@ func (m *SearchOrganizationsRequest) ValidateFields(paths ...string) error {
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchOrganizationsRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
 		case "id_contains":
 
-			if utf8.RuneCountInString(m.GetIDContains()) > 50 {
+			if utf8.RuneCountInString(m.GetIdContains()) > 50 {
 				return SearchOrganizationsRequestValidationError{
 					field:  "id_contains",
 					reason: "value length must be at most 50 runes",
@@ -665,7 +751,7 @@ func (m *SearchOrganizationsRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchOrganizationsRequestValidationError{
 						field:  "field_mask",
@@ -676,7 +762,14 @@ func (m *SearchOrganizationsRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "order":
-			// no validation rules for Order
+
+			if _, ok := _SearchOrganizationsRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return SearchOrganizationsRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ organization_id -organization_id name -name created_at -created_at]",
+				}
+			}
+
 		case "limit":
 
 			if m.GetLimit() > 1000 {
@@ -759,6 +852,16 @@ var _ interface {
 
 var _SearchOrganizationsRequest_AttributesContain_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
+var _SearchOrganizationsRequest_Order_InLookup = map[string]struct{}{
+	"":                 {},
+	"organization_id":  {},
+	"-organization_id": {},
+	"name":             {},
+	"-name":            {},
+	"created_at":       {},
+	"-created_at":      {},
+}
+
 // ValidateFields checks the field values on SearchUsersRequest with the rules
 // defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -774,9 +877,18 @@ func (m *SearchUsersRequest) ValidateFields(paths ...string) error {
 	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
 		_ = subs
 		switch name {
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchUsersRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
 		case "id_contains":
 
-			if utf8.RuneCountInString(m.GetIDContains()) > 50 {
+			if utf8.RuneCountInString(m.GetIdContains()) > 50 {
 				return SearchUsersRequestValidationError{
 					field:  "id_contains",
 					reason: "value length must be at most 50 runes",
@@ -863,7 +975,7 @@ func (m *SearchUsersRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchUsersRequestValidationError{
 						field:  "field_mask",
@@ -874,7 +986,14 @@ func (m *SearchUsersRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "order":
-			// no validation rules for Order
+
+			if _, ok := _SearchUsersRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return SearchUsersRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ user_id -user_id name -name primary_email_address -primary_email_address state -state admin -admin created_at -created_at]",
+				}
+			}
+
 		case "limit":
 
 			if m.GetLimit() > 1000 {
@@ -956,6 +1075,287 @@ var _ interface {
 
 var _SearchUsersRequest_AttributesContain_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
 
+var _SearchUsersRequest_Order_InLookup = map[string]struct{}{
+	"":                       {},
+	"user_id":                {},
+	"-user_id":               {},
+	"name":                   {},
+	"-name":                  {},
+	"primary_email_address":  {},
+	"-primary_email_address": {},
+	"state":                  {},
+	"-state":                 {},
+	"admin":                  {},
+	"-admin":                 {},
+	"created_at":             {},
+	"-created_at":            {},
+}
+
+// ValidateFields checks the field values on SearchAccountsRequest with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *SearchAccountsRequest) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = SearchAccountsRequestFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchAccountsRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
+		case "only_users":
+			// no validation rules for OnlyUsers
+		case "collaborator_of":
+			if len(subs) == 0 {
+				subs = []string{
+					"application_ids", "client_ids", "gateway_ids", "organization_ids",
+				}
+			}
+			for name, subs := range _processPaths(subs) {
+				_ = subs
+				switch name {
+				case "application_ids":
+					w, ok := m.CollaboratorOf.(*SearchAccountsRequest_ApplicationIds)
+					if !ok || w == nil {
+						continue
+					}
+
+					if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
+						if err := v.ValidateFields(subs...); err != nil {
+							return SearchAccountsRequestValidationError{
+								field:  "application_ids",
+								reason: "embedded message failed validation",
+								cause:  err,
+							}
+						}
+					}
+
+				case "client_ids":
+					w, ok := m.CollaboratorOf.(*SearchAccountsRequest_ClientIds)
+					if !ok || w == nil {
+						continue
+					}
+
+					if v, ok := interface{}(m.GetClientIds()).(interface{ ValidateFields(...string) error }); ok {
+						if err := v.ValidateFields(subs...); err != nil {
+							return SearchAccountsRequestValidationError{
+								field:  "client_ids",
+								reason: "embedded message failed validation",
+								cause:  err,
+							}
+						}
+					}
+
+				case "gateway_ids":
+					w, ok := m.CollaboratorOf.(*SearchAccountsRequest_GatewayIds)
+					if !ok || w == nil {
+						continue
+					}
+
+					if v, ok := interface{}(m.GetGatewayIds()).(interface{ ValidateFields(...string) error }); ok {
+						if err := v.ValidateFields(subs...); err != nil {
+							return SearchAccountsRequestValidationError{
+								field:  "gateway_ids",
+								reason: "embedded message failed validation",
+								cause:  err,
+							}
+						}
+					}
+
+				case "organization_ids":
+					w, ok := m.CollaboratorOf.(*SearchAccountsRequest_OrganizationIds)
+					if !ok || w == nil {
+						continue
+					}
+
+					if v, ok := interface{}(m.GetOrganizationIds()).(interface{ ValidateFields(...string) error }); ok {
+						if err := v.ValidateFields(subs...); err != nil {
+							return SearchAccountsRequestValidationError{
+								field:  "organization_ids",
+								reason: "embedded message failed validation",
+								cause:  err,
+							}
+						}
+					}
+
+				}
+			}
+		default:
+			return SearchAccountsRequestValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// SearchAccountsRequestValidationError is the validation error returned by
+// SearchAccountsRequest.ValidateFields if the designated constraints aren't met.
+type SearchAccountsRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e SearchAccountsRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e SearchAccountsRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e SearchAccountsRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e SearchAccountsRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e SearchAccountsRequestValidationError) ErrorName() string {
+	return "SearchAccountsRequestValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e SearchAccountsRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sSearchAccountsRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = SearchAccountsRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = SearchAccountsRequestValidationError{}
+
+// ValidateFields checks the field values on SearchAccountsResponse with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, an error is returned.
+func (m *SearchAccountsResponse) ValidateFields(paths ...string) error {
+	if m == nil {
+		return nil
+	}
+
+	if len(paths) == 0 {
+		paths = SearchAccountsResponseFieldPathsNested
+	}
+
+	for name, subs := range _processPaths(append(paths[:0:0], paths...)) {
+		_ = subs
+		switch name {
+		case "account_ids":
+
+			for idx, item := range m.GetAccountIds() {
+				_, _ = idx, item
+
+				if v, ok := interface{}(item).(interface{ ValidateFields(...string) error }); ok {
+					if err := v.ValidateFields(subs...); err != nil {
+						return SearchAccountsResponseValidationError{
+							field:  fmt.Sprintf("account_ids[%v]", idx),
+							reason: "embedded message failed validation",
+							cause:  err,
+						}
+					}
+				}
+
+			}
+
+		default:
+			return SearchAccountsResponseValidationError{
+				field:  name,
+				reason: "invalid field path",
+			}
+		}
+	}
+	return nil
+}
+
+// SearchAccountsResponseValidationError is the validation error returned by
+// SearchAccountsResponse.ValidateFields if the designated constraints aren't met.
+type SearchAccountsResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e SearchAccountsResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e SearchAccountsResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e SearchAccountsResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e SearchAccountsResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e SearchAccountsResponseValidationError) ErrorName() string {
+	return "SearchAccountsResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e SearchAccountsResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sSearchAccountsResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = SearchAccountsResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = SearchAccountsResponseValidationError{}
+
 // ValidateFields checks the field values on SearchEndDevicesRequest with the
 // rules defined in the proto definition for this message. If any rules are
 // violated, an error is returned.
@@ -973,7 +1373,14 @@ func (m *SearchEndDevicesRequest) ValidateFields(paths ...string) error {
 		switch name {
 		case "application_ids":
 
-			if v, ok := interface{}(&m.ApplicationIdentifiers).(interface{ ValidateFields(...string) error }); ok {
+			if m.GetApplicationIds() == nil {
+				return SearchEndDevicesRequestValidationError{
+					field:  "application_ids",
+					reason: "value is required",
+				}
+			}
+
+			if v, ok := interface{}(m.GetApplicationIds()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchEndDevicesRequestValidationError{
 						field:  "application_ids",
@@ -983,9 +1390,18 @@ func (m *SearchEndDevicesRequest) ValidateFields(paths ...string) error {
 				}
 			}
 
+		case "query":
+
+			if utf8.RuneCountInString(m.GetQuery()) > 50 {
+				return SearchEndDevicesRequestValidationError{
+					field:  "query",
+					reason: "value length must be at most 50 runes",
+				}
+			}
+
 		case "id_contains":
 
-			if utf8.RuneCountInString(m.GetIDContains()) > 50 {
+			if utf8.RuneCountInString(m.GetIdContains()) > 50 {
 				return SearchEndDevicesRequestValidationError{
 					field:  "id_contains",
 					reason: "value length must be at most 50 runes",
@@ -1047,7 +1463,7 @@ func (m *SearchEndDevicesRequest) ValidateFields(paths ...string) error {
 
 		case "dev_eui_contains":
 
-			if utf8.RuneCountInString(m.GetDevEUIContains()) > 16 {
+			if utf8.RuneCountInString(m.GetDevEuiContains()) > 16 {
 				return SearchEndDevicesRequestValidationError{
 					field:  "dev_eui_contains",
 					reason: "value length must be at most 16 runes",
@@ -1056,7 +1472,7 @@ func (m *SearchEndDevicesRequest) ValidateFields(paths ...string) error {
 
 		case "join_eui_contains":
 
-			if utf8.RuneCountInString(m.GetJoinEUIContains()) > 16 {
+			if utf8.RuneCountInString(m.GetJoinEuiContains()) > 16 {
 				return SearchEndDevicesRequestValidationError{
 					field:  "join_eui_contains",
 					reason: "value length must be at most 16 runes",
@@ -1074,7 +1490,7 @@ func (m *SearchEndDevicesRequest) ValidateFields(paths ...string) error {
 
 		case "field_mask":
 
-			if v, ok := interface{}(&m.FieldMask).(interface{ ValidateFields(...string) error }); ok {
+			if v, ok := interface{}(m.GetFieldMask()).(interface{ ValidateFields(...string) error }); ok {
 				if err := v.ValidateFields(subs...); err != nil {
 					return SearchEndDevicesRequestValidationError{
 						field:  "field_mask",
@@ -1085,7 +1501,14 @@ func (m *SearchEndDevicesRequest) ValidateFields(paths ...string) error {
 			}
 
 		case "order":
-			// no validation rules for Order
+
+			if _, ok := _SearchEndDevicesRequest_Order_InLookup[m.GetOrder()]; !ok {
+				return SearchEndDevicesRequestValidationError{
+					field:  "order",
+					reason: "value must be in list [ device_id -device_id join_eui -join_eui dev_eui -dev_eui name -name description -description created_at -created_at last_seen_at -last_seen_at]",
+				}
+			}
+
 		case "limit":
 
 			if m.GetLimit() > 1000 {
@@ -1164,3 +1587,21 @@ var _ interface {
 } = SearchEndDevicesRequestValidationError{}
 
 var _SearchEndDevicesRequest_AttributesContain_Pattern = regexp.MustCompile("^[a-z0-9](?:[-]?[a-z0-9]){2,}$")
+
+var _SearchEndDevicesRequest_Order_InLookup = map[string]struct{}{
+	"":              {},
+	"device_id":     {},
+	"-device_id":    {},
+	"join_eui":      {},
+	"-join_eui":     {},
+	"dev_eui":       {},
+	"-dev_eui":      {},
+	"name":          {},
+	"-name":         {},
+	"description":   {},
+	"-description":  {},
+	"created_at":    {},
+	"-created_at":   {},
+	"last_seen_at":  {},
+	"-last_seen_at": {},
+}

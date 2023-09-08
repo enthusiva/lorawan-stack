@@ -17,76 +17,36 @@ package ttnpb_test
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	. "go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
-func TestMACVersionCompare(t *testing.T) {
-	for _, tc := range []struct {
-		A, B     MACVersion
-		Expected int
-		Panics   bool
-	}{
-		{
-			A:        MAC_V1_0,
-			B:        MAC_V1_0_1,
-			Expected: -1,
-		},
-		{
-			A:        MAC_V1_1,
-			B:        MAC_V1_0,
-			Expected: 1,
-		},
-		{
-			A:        MAC_V1_1,
-			B:        MAC_V1_1,
-			Expected: 0,
-		},
-		{
-			A:        MAC_V1_0_2,
-			B:        MAC_V1_1,
-			Expected: -1,
-		},
-		{
-			A:      MAC_UNKNOWN,
-			B:      MAC_V1_1,
-			Panics: true,
-		},
-		{
-			A:      MAC_UNKNOWN,
-			B:      MAC_UNKNOWN,
-			Panics: true,
-		},
-		{
-			A:      MAC_V1_0,
-			B:      MAC_UNKNOWN,
-			Panics: true,
-		},
-	} {
-		a := assertions.New(t)
+func TestDataRateIndex(t *testing.T) {
+	a := assertions.New(t)
+	a.So(DataRateIndex_DATA_RATE_4.String(), should.Equal, "DATA_RATE_4")
 
-		if tc.Panics {
-			a.So(func() { tc.A.Compare(tc.B) }, should.Panic)
-			return
-		}
+	b, err := DataRateIndex_DATA_RATE_4.MarshalText()
+	a.So(err, should.BeNil)
+	a.So(string(b), should.Resemble, "4")
 
-		a.So(tc.A.Compare(tc.B), should.Equal, tc.Expected)
-		if tc.A != tc.B {
-			a.So(tc.B.Compare(tc.A), should.Equal, -tc.Expected)
-		}
+	for _, str := range []string{"4", "DATA_RATE_4"} {
+		var idx DataRateIndex
+		err = idx.UnmarshalText([]byte(str))
+		a.So(idx, should.Equal, DataRateIndex_DATA_RATE_4)
 	}
 }
 
-func TestDataRateIndex(t *testing.T) {
+func TestDeviceEIRP(t *testing.T) {
 	a := assertions.New(t)
-	a.So(DATA_RATE_4.String(), should.Equal, "4")
+	a.So(DeviceEIRP_DEVICE_EIRP_10.String(), should.Equal, "DEVICE_EIRP_10")
 
-	b, err := DATA_RATE_4.MarshalText()
+	b, err := DeviceEIRP_DEVICE_EIRP_10.MarshalText()
 	a.So(err, should.BeNil)
-	a.So(b, should.Resemble, []byte("4"))
+	a.So(b, should.Resemble, []byte("DEVICE_EIRP_10"))
 
-	var idx DataRateIndex
-	err = idx.UnmarshalText([]byte("4"))
-	a.So(idx, should.Equal, DATA_RATE_4)
+	var v DeviceEIRP
+	err = v.UnmarshalText([]byte("DEVICE_EIRP_10"))
+	a.So(v, should.Equal, DeviceEIRP_DEVICE_EIRP_10)
+	a.So(err, should.BeNil)
 }

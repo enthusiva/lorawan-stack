@@ -19,21 +19,21 @@ import (
 	"testing"
 
 	"github.com/mohae/deepcopy"
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	. "go.thethings.network/lorawan-stack/v3/pkg/pfconfig/cpf"
 	"go.thethings.network/lorawan-stack/v3/pkg/pfconfig/shared"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
 
 func TestBuildLorad(t *testing.T) {
 	fps := frequencyplans.NewStore(test.FrequencyPlansFetcher)
 
 	sx1301Config := func(fpID string) shared.SX1301Config {
-		return *test.Must(shared.BuildSX1301Config(test.Must(fps.GetByID(fpID)).(*frequencyplans.FrequencyPlan))).(*shared.SX1301Config)
+		return *test.Must(shared.BuildSX1301Config(test.Must(fps.GetByID(fpID))))
 	}
 
 	for _, tc := range []struct {
@@ -52,7 +52,7 @@ func TestBuildLorad(t *testing.T) {
 		{
 			Name: "EU868/No antennas",
 			Gateway: &ttnpb.Gateway{
-				FrequencyPlanID: test.EUFrequencyPlanID,
+				FrequencyPlanId: test.EUFrequencyPlanID,
 			},
 			Config: &LoradConfig{
 				SX1301Conf: LoradSX1301Conf{
@@ -69,11 +69,11 @@ func TestBuildLorad(t *testing.T) {
 		{
 			Name: "EU868/1 antenna",
 			Gateway: &ttnpb.Gateway{
-				FrequencyPlanID: test.EUFrequencyPlanID,
-				Antennas: []ttnpb.GatewayAntenna{
+				FrequencyPlanId: test.EUFrequencyPlanID,
+				Antennas: []*ttnpb.GatewayAntenna{
 					{
 						Gain: 4,
-						Location: ttnpb.Location{
+						Location: &ttnpb.Location{
 							Latitude:  0.42,
 							Longitude: 42.42,
 						},
@@ -101,27 +101,53 @@ func TestBuildLorad(t *testing.T) {
 			},
 		},
 		{
-			Name: "EU868/3 antennas",
+			Name: "EU868/1 antenna/No location",
 			Gateway: &ttnpb.Gateway{
-				FrequencyPlanID: test.EUFrequencyPlanID,
-				Antennas: []ttnpb.GatewayAntenna{
+				FrequencyPlanId: test.EUFrequencyPlanID,
+				Antennas: []*ttnpb.GatewayAntenna{
 					{
 						Gain: 4,
-						Location: ttnpb.Location{
+					},
+				},
+			},
+			Config: &LoradConfig{
+				SX1301Conf: LoradSX1301Conf{
+					SX1301Config: func() shared.SX1301Config {
+						conf := sx1301Config(test.EUFrequencyPlanID)
+						conf.AntennaGain = 4
+						return conf
+					}(),
+					AntennaGainDesc:   "Antenna gain, in dBi",
+					InsertionLoss:     0.5,
+					InsertionLossDesc: "Insertion loss, in dBi",
+				},
+			},
+			ErrorAssertion: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeNil)
+			},
+		},
+		{
+			Name: "EU868/3 antennas",
+			Gateway: &ttnpb.Gateway{
+				FrequencyPlanId: test.EUFrequencyPlanID,
+				Antennas: []*ttnpb.GatewayAntenna{
+					{
+						Gain: 4,
+						Location: &ttnpb.Location{
 							Latitude:  0.42,
 							Longitude: 42.42,
 						},
 					},
 					{
 						Gain: 5,
-						Location: ttnpb.Location{
+						Location: &ttnpb.Location{
 							Latitude:  0.43,
 							Longitude: 42.43,
 						},
 					},
 					{
 						Gain: 2,
-						Location: ttnpb.Location{
+						Location: &ttnpb.Location{
 							Latitude:  -42,
 							Longitude: 42,
 						},
@@ -151,7 +177,7 @@ func TestBuildLorad(t *testing.T) {
 	} {
 		t.Run(tc.Name, func(t *testing.T) {
 			a := assertions.New(t)
-			gtw := deepcopy.Copy(tc.Gateway).(*ttnpb.Gateway)
+			gtw := ttnpb.Clone(tc.Gateway)
 			conf, err := BuildLorad(gtw, fps)
 			a.So(gtw, should.Resemble, tc.Gateway)
 			if a.So(tc.ErrorAssertion(t, err), should.BeTrue) {
@@ -197,8 +223,8 @@ func TestBuildLorafwd(t *testing.T) {
 		{
 			Name: "EUI set/address:host",
 			Gateway: &ttnpb.Gateway{
-				GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-					EUI: &eui,
+				Ids: &ttnpb.GatewayIdentifiers{
+					Eui: eui.Bytes(),
 				},
 				GatewayServerAddress: host,
 			},
@@ -219,8 +245,8 @@ func TestBuildLorafwd(t *testing.T) {
 		{
 			Name: "EUI set/address:'host:port'",
 			Gateway: &ttnpb.Gateway{
-				GatewayIdentifiers: ttnpb.GatewayIdentifiers{
-					EUI: &eui,
+				Ids: &ttnpb.GatewayIdentifiers{
+					Eui: eui.Bytes(),
 				},
 				GatewayServerAddress: fmt.Sprintf("%s:%d", host, 42),
 			},
@@ -241,7 +267,7 @@ func TestBuildLorafwd(t *testing.T) {
 	} {
 		t.Run(tc.Name, func(t *testing.T) {
 			a := assertions.New(t)
-			gtw := deepcopy.Copy(tc.Gateway).(*ttnpb.Gateway)
+			gtw := ttnpb.Clone(tc.Gateway)
 			conf, err := BuildLorafwd(gtw)
 			a.So(gtw, should.Resemble, tc.Gateway)
 			if a.So(tc.ErrorAssertion(t, err), should.BeTrue) {

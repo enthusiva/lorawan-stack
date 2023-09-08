@@ -16,20 +16,24 @@ package grpc
 
 import (
 	"context"
+	"net"
 	"time"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/config"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/frequencyplans"
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io"
+	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/scheduling"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
 	"go.thethings.network/lorawan-stack/v3/pkg/ratelimit"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmetadata"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Option represents an option for the gRPC frontend.
@@ -56,6 +60,8 @@ func WithMQTTV2ConfigProvider(provider config.MQTTConfigProvider) Option {
 }
 
 type impl struct {
+	ttnpb.UnimplementedGtwGsServer
+
 	server               io.Server
 	mqttConfigProvider   config.MQTTConfigProvider
 	mqttv2ConfigProvider config.MQTTConfigProvider
@@ -72,36 +78,49 @@ func New(server io.Server, opts ...Option) ttnpb.GtwGsServer {
 	return i
 }
 
-func (*impl) Protocol() string            { return "grpc" }
-func (*impl) SupportsDownlinkClaim() bool { return false }
+func (*impl) Protocol() string                          { return "grpc" }
+func (*impl) SupportsDownlinkClaim() bool               { return false }
+func (*impl) DutyCycleStyle() scheduling.DutyCycleStyle { return scheduling.DefaultDutyCycleStyle }
 
-var errConnect = errors.Define("connect", "failed to connect gateway `{gateway_uid}`")
+var errConnect = errors.Define("connect", "connect gateway `{gateway_uid}`")
 
 // LinkGateway links the gateway to the Gateway Server.
 func (s *impl) LinkGateway(link ttnpb.GtwGs_LinkGatewayServer) error {
 	ctx := log.NewContextWithField(link.Context(), "namespace", "gatewayserver/io/grpc")
 
-	ids := ttnpb.GatewayIdentifiers{
-		GatewayID: rpcmetadata.FromIncomingContext(ctx).ID,
+	ids := &ttnpb.GatewayIdentifiers{
+		GatewayId: rpcmetadata.FromIncomingContext(ctx).ID,
 	}
 	ctx, ids, err := s.server.FillGatewayContext(ctx, ids)
 	if err != nil {
 		return err
 	}
-	if err = ids.ValidateContext(ctx); err != nil {
+	if err = s.server.ValidateGatewayID(ctx, ids); err != nil {
 		return err
 	}
-	if err = rights.RequireGateway(ctx, ids, ttnpb.RIGHT_GATEWAY_LINK); err != nil {
+	if err = rights.RequireGateway(ctx, ids, ttnpb.Right_RIGHT_GATEWAY_LINK); err != nil {
 		return err
 	}
 
-	if peer, ok := peer.FromContext(ctx); ok {
-		ctx = log.NewContextWithField(ctx, "remote_addr", peer.Addr.String())
+	var addr string
+	if p, ok := peer.FromContext(ctx); ok {
+		remoteAddr := p.Addr.String()
+		if remoteAddr == "pipe" {
+			remoteAddr = "127.0.0.0:0"
+		}
+		addr, _, err = net.SplitHostPort(remoteAddr)
+		if err != nil {
+			return err
+		}
+		ctx = log.NewContextWithField(ctx, "remote_addr", p.Addr.String())
 	}
 	uid := unique.ID(ctx, ids)
 	ctx = log.NewContextWithField(ctx, "gateway_uid", uid)
 	logger := log.FromContext(ctx)
-	conn, err := s.server.Connect(ctx, s, ids)
+
+	conn, err := s.server.Connect(ctx, s, ids, &ttnpb.GatewayRemoteAddress{
+		Ip: addr,
+	})
 	if err != nil {
 		logger.WithError(err).Warn("Failed to connect")
 		return errConnect.WithCause(err).WithAttributes("gateway_uid", uid)
@@ -130,9 +149,9 @@ func (s *impl) LinkGateway(link ttnpb.GtwGs_LinkGatewayServer) error {
 				"uplink_count", len(msg.UplinkMessages),
 			)).Debug("Received message")
 
-			for _, up := range msg.UplinkMessages {
-				up.ReceivedAt = now
-				if err := conn.HandleUp(up); err != nil {
+			for _, up := range io.UniqueUplinkMessagesByRSSI(msg.UplinkMessages) {
+				up.ReceivedAt = timestamppb.New(now)
+				if err := conn.HandleUp(up, nil); err != nil {
 					logger.WithError(err).Warn("Failed to handle uplink message")
 				}
 			}
@@ -142,7 +161,7 @@ func (s *impl) LinkGateway(link ttnpb.GtwGs_LinkGatewayServer) error {
 				}
 			}
 			if ack := msg.TxAcknowledgment; ack != nil {
-				if token, ok := s.tokens.ParseTokenFromCorrelationIDs(ack.GetCorrelationIDs()); ok {
+				if token, ok := s.tokens.ParseTokenFromCorrelationIDs(ack.GetCorrelationIds()); ok {
 					if down, _, ok := s.tokens.Get(token, time.Now()); ok {
 						ack.DownlinkMessage = down
 					}
@@ -159,8 +178,11 @@ func (s *impl) LinkGateway(link ttnpb.GtwGs_LinkGatewayServer) error {
 		case <-conn.Context().Done():
 			return conn.Context().Err()
 		case down := <-conn.Down():
-			token := s.tokens.Next(down, time.Now())
-			down.CorrelationIDs = append(down.CorrelationIDs, s.tokens.FormatCorrelationID(token))
+			correlationIDs := make([]string, 0, len(down.CorrelationIds)+1)
+			correlationIDs = append(correlationIDs, down.CorrelationIds...)
+			correlationIDs = append(correlationIDs, s.tokens.FormatCorrelationID(s.tokens.Next(down, time.Now())))
+			ctx := events.ContextWithCorrelationID(ctx, correlationIDs...)
+			down.CorrelationIds = events.CorrelationIDsFromContext(ctx)
 			msg := &ttnpb.GatewayDown{
 				DownlinkMessage: down,
 			}
@@ -174,16 +196,16 @@ func (s *impl) LinkGateway(link ttnpb.GtwGs_LinkGatewayServer) error {
 	}
 }
 
-func (s *impl) GetConcentratorConfig(ctx context.Context, _ *pbtypes.Empty) (*ttnpb.ConcentratorConfig, error) {
+func (s *impl) GetConcentratorConfig(ctx context.Context, _ *emptypb.Empty) (*ttnpb.ConcentratorConfig, error) {
 	ctx = log.NewContextWithField(ctx, "namespace", "gatewayserver/io/grpc")
 
-	ids := ttnpb.GatewayIdentifiers{
-		GatewayID: rpcmetadata.FromIncomingContext(ctx).ID,
+	ids := &ttnpb.GatewayIdentifiers{
+		GatewayId: rpcmetadata.FromIncomingContext(ctx).ID,
 	}
 	if err := ids.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
-	if err := rights.RequireGateway(ctx, ids, ttnpb.RIGHT_GATEWAY_LINK); err != nil {
+	if err := rights.RequireGateway(ctx, ids, ttnpb.Right_RIGHT_GATEWAY_LINK); err != nil {
 		return nil, err
 	}
 	fps, err := s.server.GetFrequencyPlans(ctx, ids)
@@ -202,7 +224,7 @@ func (s *impl) GetConcentratorConfig(ctx context.Context, _ *pbtypes.Empty) (*tt
 var errNoMQTTConfigProvider = errors.DefineUnimplemented("no_configuration_provider", "no MQTT configuration provider available")
 
 func getMQTTConnectionProvider(ctx context.Context, ids *ttnpb.GatewayIdentifiers, provider config.MQTTConfigProvider) (*ttnpb.MQTTConnectionInfo, error) {
-	if err := rights.RequireGateway(ctx, *ids, ttnpb.RIGHT_GATEWAY_INFO); err != nil {
+	if err := rights.RequireGateway(ctx, ids, ttnpb.Right_RIGHT_GATEWAY_INFO); err != nil {
 		return nil, err
 	}
 	if provider == nil {
@@ -214,8 +236,8 @@ func getMQTTConnectionProvider(ctx context.Context, ids *ttnpb.GatewayIdentifier
 	}
 	return &ttnpb.MQTTConnectionInfo{
 		PublicAddress:    config.PublicAddress,
-		PublicTLSAddress: config.PublicTLSAddress,
-		Username:         unique.ID(ctx, *ids),
+		PublicTlsAddress: config.PublicTLSAddress,
+		Username:         unique.ID(ctx, ids),
 	}, nil
 }
 

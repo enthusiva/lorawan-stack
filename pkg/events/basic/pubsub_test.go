@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/events"
 	"go.thethings.network/lorawan-stack/v3/pkg/events/basic"
 	"go.thethings.network/lorawan-stack/v3/pkg/events/internal/eventstest"
@@ -34,7 +34,7 @@ func Example() {
 
 var timeout = (1 << 10) * test.Delay
 
-func TestPubSub(t *testing.T) {
+func TestPubSub(t *testing.T) { //nolint:paralleltest
 	events.IncludeCaller = true
 
 	test.RunTest(t, test.TestConfig{

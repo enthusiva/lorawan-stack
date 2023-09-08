@@ -19,12 +19,12 @@ import (
 	"sort"
 	"strings"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmetadata"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Option is an option that is used to build events.
@@ -37,23 +37,23 @@ type optionFunc func(e *event)
 func (f optionFunc) applyTo(e *event) { f(e) }
 
 // WithIdentifiers returns an option that sets the identifiers of the event.
-func WithIdentifiers(identifiers ...ttnpb.Identifiers) Option {
+func WithIdentifiers(identifiers ...EntityIdentifiers) Option {
 	return optionFunc(func(e *event) {
 		for _, ids := range identifiers {
-			e.innerEvent.Identifiers = append(e.innerEvent.Identifiers, ids.EntityIdentifiers())
+			e.innerEvent.Identifiers = append(e.innerEvent.Identifiers, ids.GetEntityIdentifiers())
 		}
 	})
 }
 
 // WithData returns an option that sets the data of the event.
-func WithData(data interface{}) Option {
+func WithData(data any) Option {
 	return optionFunc(func(e *event) {
 		e.data = data
-		if data, ok := data.(interface{ GetCorrelationIDs() []string }); ok {
-			if cids := data.GetCorrelationIDs(); len(cids) > 0 {
+		if data, ok := data.(interface{ GetCorrelationIds() []string }); ok {
+			if cids := data.GetCorrelationIds(); len(cids) > 0 {
 				cids = append(cids[:0:0], cids...)
 				sort.Strings(cids)
-				e.innerEvent.CorrelationIDs = mergeStrings(e.innerEvent.CorrelationIDs, cids)
+				e.innerEvent.CorrelationIds = mergeStrings(e.innerEvent.CorrelationIds, cids)
 			}
 		}
 	})
@@ -77,10 +77,10 @@ func WithAuthFromContext() Option {
 		if md.AuthValue != "" {
 			if tokenType, tokenID, _, err := auth.SplitToken(md.AuthValue); err == nil {
 				authentication.TokenType = tokenType.String()
-				authentication.TokenID = tokenID
+				authentication.TokenId = tokenID
 			}
 		}
-		if authentication.TokenID != "" || authentication.TokenType != "" || authentication.Type != "" {
+		if authentication.TokenId != "" || authentication.TokenType != "" || authentication.Type != "" {
 			e.innerEvent.Authentication = authentication
 		}
 	})
@@ -91,13 +91,13 @@ func WithClientInfoFromContext() Option {
 	return optionFunc(func(e *event) {
 		if p, ok := peer.FromContext(e.ctx); ok && p.Addr != nil && p.Addr.String() != "pipe" {
 			if host, _, err := net.SplitHostPort(p.Addr.String()); err == nil {
-				e.innerEvent.RemoteIP = host
+				e.innerEvent.RemoteIp = host
 			}
 		}
 		md := rpcmetadata.FromIncomingContext(e.ctx)
 		if md.XForwardedFor != "" {
 			xff := strings.Split(md.XForwardedFor, ",")
-			e.innerEvent.RemoteIP = strings.Trim(xff[0], " ")
+			e.innerEvent.RemoteIp = strings.Trim(xff[0], " ")
 		}
 		if md := rpcmetadata.FromIncomingContext(e.ctx); md.UserAgent != "" {
 			e.innerEvent.UserAgent = md.UserAgent
@@ -118,7 +118,7 @@ func (definitionOptionFunc) applyTo(*event) {}
 func (f definitionOptionFunc) applyToDefinition(d *definition) { f(d) }
 
 // WithDataType returns an option that sets the data type of the event (for documentation).
-func WithDataType(t interface{}) DefinitionOption {
+func WithDataType(t any) DefinitionOption {
 	msg, err := marshalData(t)
 	if err != nil {
 		panic(err)
@@ -132,9 +132,9 @@ var errorDataType, _ = marshalData(&ttnpb.ErrorDetails{
 	Namespace:     "pkg/example",
 	Name:          "example",
 	MessageFormat: "example error for `{attr_name}`",
-	Attributes: &pbtypes.Struct{
-		Fields: map[string]*pbtypes.Value{
-			"attr_name": {Kind: &pbtypes.Value_StringValue{
+	Attributes: &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"attr_name": {Kind: &structpb.Value_StringValue{
 				StringValue: "attr_value",
 			}},
 		},
@@ -151,9 +151,18 @@ func WithErrorDataType() DefinitionOption {
 
 var updatedFieldsDataType, _ = marshalData([]string{"list.of", "updated.fields"})
 
-// WithUpdatedFieldsDataType is a convenience function that sets the data type of the event to a slice of updated fields.
+// WithUpdatedFieldsDataType is a convenience function that sets the data type
+// of the event to a slice of updated fields.
 func WithUpdatedFieldsDataType() DefinitionOption {
 	return definitionOptionFunc(func(d *definition) {
 		d.dataType = updatedFieldsDataType
+	})
+}
+
+// WithPropagateToParent returns an option that propagate the event to its parent.
+// Typically used to propagate end device events to applications.
+func WithPropagateToParent() DefinitionOption {
+	return definitionOptionFunc(func(d *definition) {
+		d.propagateToParent = true
 	})
 }

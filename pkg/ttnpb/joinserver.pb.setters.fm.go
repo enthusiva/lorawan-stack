@@ -2,12 +2,7 @@
 
 package ttnpb
 
-import (
-	fmt "fmt"
-
-	types "github.com/gogo/protobuf/types"
-	go_thethings_network_lorawan_stack_v3_pkg_types "go.thethings.network/lorawan-stack/v3/pkg/types"
-)
+import fmt "fmt"
 
 func (dst *SessionKeyRequest) SetFields(src *SessionKeyRequest, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
@@ -17,29 +12,27 @@ func (dst *SessionKeyRequest) SetFields(src *SessionKeyRequest, paths ...string)
 				return fmt.Errorf("'session_key_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.SessionKeyID = src.SessionKeyID
+				dst.SessionKeyId = src.SessionKeyId
 			} else {
-				dst.SessionKeyID = nil
+				dst.SessionKeyId = nil
 			}
 		case "dev_eui":
 			if len(subs) > 0 {
 				return fmt.Errorf("'dev_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.DevEUI = src.DevEUI
+				dst.DevEui = src.DevEui
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.EUI64
-				dst.DevEUI = zero
+				dst.DevEui = nil
 			}
 		case "join_eui":
 			if len(subs) > 0 {
 				return fmt.Errorf("'join_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.JoinEUI = src.JoinEUI
+				dst.JoinEui = src.JoinEui
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.EUI64
-				dst.JoinEUI = zero
+				dst.JoinEui = nil
 			}
 
 		default:
@@ -55,10 +48,18 @@ func (dst *NwkSKeysResponse) SetFields(src *NwkSKeysResponse, paths ...string) e
 		case "f_nwk_s_int_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *KeyEnvelope
-				if src != nil {
-					newSrc = &src.FNwkSIntKey
+				if (src == nil || src.FNwkSIntKey == nil) && dst.FNwkSIntKey == nil {
+					continue
 				}
-				newDst = &dst.FNwkSIntKey
+				if src != nil {
+					newSrc = src.FNwkSIntKey
+				}
+				if dst.FNwkSIntKey != nil {
+					newDst = dst.FNwkSIntKey
+				} else {
+					newDst = &KeyEnvelope{}
+					dst.FNwkSIntKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -66,17 +67,24 @@ func (dst *NwkSKeysResponse) SetFields(src *NwkSKeysResponse, paths ...string) e
 				if src != nil {
 					dst.FNwkSIntKey = src.FNwkSIntKey
 				} else {
-					var zero KeyEnvelope
-					dst.FNwkSIntKey = zero
+					dst.FNwkSIntKey = nil
 				}
 			}
 		case "s_nwk_s_int_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *KeyEnvelope
-				if src != nil {
-					newSrc = &src.SNwkSIntKey
+				if (src == nil || src.SNwkSIntKey == nil) && dst.SNwkSIntKey == nil {
+					continue
 				}
-				newDst = &dst.SNwkSIntKey
+				if src != nil {
+					newSrc = src.SNwkSIntKey
+				}
+				if dst.SNwkSIntKey != nil {
+					newDst = dst.SNwkSIntKey
+				} else {
+					newDst = &KeyEnvelope{}
+					dst.SNwkSIntKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -84,17 +92,24 @@ func (dst *NwkSKeysResponse) SetFields(src *NwkSKeysResponse, paths ...string) e
 				if src != nil {
 					dst.SNwkSIntKey = src.SNwkSIntKey
 				} else {
-					var zero KeyEnvelope
-					dst.SNwkSIntKey = zero
+					dst.SNwkSIntKey = nil
 				}
 			}
 		case "nwk_s_enc_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *KeyEnvelope
-				if src != nil {
-					newSrc = &src.NwkSEncKey
+				if (src == nil || src.NwkSEncKey == nil) && dst.NwkSEncKey == nil {
+					continue
 				}
-				newDst = &dst.NwkSEncKey
+				if src != nil {
+					newSrc = src.NwkSEncKey
+				}
+				if dst.NwkSEncKey != nil {
+					newDst = dst.NwkSEncKey
+				} else {
+					newDst = &KeyEnvelope{}
+					dst.NwkSEncKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -102,8 +117,7 @@ func (dst *NwkSKeysResponse) SetFields(src *NwkSKeysResponse, paths ...string) e
 				if src != nil {
 					dst.NwkSEncKey = src.NwkSEncKey
 				} else {
-					var zero KeyEnvelope
-					dst.NwkSEncKey = zero
+					dst.NwkSEncKey = nil
 				}
 			}
 
@@ -120,10 +134,18 @@ func (dst *AppSKeyResponse) SetFields(src *AppSKeyResponse, paths ...string) err
 		case "app_s_key":
 			if len(subs) > 0 {
 				var newDst, newSrc *KeyEnvelope
-				if src != nil {
-					newSrc = &src.AppSKey
+				if (src == nil || src.AppSKey == nil) && dst.AppSKey == nil {
+					continue
 				}
-				newDst = &dst.AppSKey
+				if src != nil {
+					newSrc = src.AppSKey
+				}
+				if dst.AppSKey != nil {
+					newDst = dst.AppSKey
+				} else {
+					newDst = &KeyEnvelope{}
+					dst.AppSKey = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
@@ -131,8 +153,7 @@ func (dst *AppSKeyResponse) SetFields(src *AppSKeyResponse, paths ...string) err
 				if src != nil {
 					dst.AppSKey = src.AppSKey
 				} else {
-					var zero KeyEnvelope
-					dst.AppSKey = zero
+					dst.AppSKey = nil
 				}
 			}
 
@@ -149,19 +170,26 @@ func (dst *CryptoServicePayloadRequest) SetFields(src *CryptoServicePayloadReque
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *EndDeviceIdentifiers
-				if src != nil {
-					newSrc = &src.EndDeviceIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.EndDeviceIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &EndDeviceIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.EndDeviceIdentifiers = src.EndDeviceIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero EndDeviceIdentifiers
-					dst.EndDeviceIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "lorawan_version":
@@ -169,10 +197,9 @@ func (dst *CryptoServicePayloadRequest) SetFields(src *CryptoServicePayloadReque
 				return fmt.Errorf("'lorawan_version' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.LoRaWANVersion = src.LoRaWANVersion
+				dst.LorawanVersion = src.LorawanVersion
 			} else {
-				var zero MACVersion
-				dst.LoRaWANVersion = zero
+				dst.LorawanVersion = 0
 			}
 		case "payload":
 			if len(subs) > 0 {
@@ -188,10 +215,10 @@ func (dst *CryptoServicePayloadRequest) SetFields(src *CryptoServicePayloadReque
 				return fmt.Errorf("'provisioner_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ProvisionerID = src.ProvisionerID
+				dst.ProvisionerId = src.ProvisionerId
 			} else {
 				var zero string
-				dst.ProvisionerID = zero
+				dst.ProvisionerId = zero
 			}
 		case "provisioning_data":
 			if len(subs) > 0 {
@@ -236,19 +263,26 @@ func (dst *JoinAcceptMICRequest) SetFields(src *JoinAcceptMICRequest, paths ...s
 		case "payload_request":
 			if len(subs) > 0 {
 				var newDst, newSrc *CryptoServicePayloadRequest
-				if src != nil {
-					newSrc = &src.CryptoServicePayloadRequest
+				if (src == nil || src.PayloadRequest == nil) && dst.PayloadRequest == nil {
+					continue
 				}
-				newDst = &dst.CryptoServicePayloadRequest
+				if src != nil {
+					newSrc = src.PayloadRequest
+				}
+				if dst.PayloadRequest != nil {
+					newDst = dst.PayloadRequest
+				} else {
+					newDst = &CryptoServicePayloadRequest{}
+					dst.PayloadRequest = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.CryptoServicePayloadRequest = src.CryptoServicePayloadRequest
+					dst.PayloadRequest = src.PayloadRequest
 				} else {
-					var zero CryptoServicePayloadRequest
-					dst.CryptoServicePayloadRequest = zero
+					dst.PayloadRequest = nil
 				}
 			}
 		case "join_request_type":
@@ -258,8 +292,7 @@ func (dst *JoinAcceptMICRequest) SetFields(src *JoinAcceptMICRequest, paths ...s
 			if src != nil {
 				dst.JoinRequestType = src.JoinRequestType
 			} else {
-				var zero RejoinType
-				dst.JoinRequestType = zero
+				dst.JoinRequestType = 0
 			}
 		case "dev_nonce":
 			if len(subs) > 0 {
@@ -268,8 +301,7 @@ func (dst *JoinAcceptMICRequest) SetFields(src *JoinAcceptMICRequest, paths ...s
 			if src != nil {
 				dst.DevNonce = src.DevNonce
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.DevNonce
-				dst.DevNonce = zero
+				dst.DevNonce = nil
 			}
 
 		default:
@@ -285,19 +317,26 @@ func (dst *DeriveSessionKeysRequest) SetFields(src *DeriveSessionKeysRequest, pa
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *EndDeviceIdentifiers
-				if src != nil {
-					newSrc = &src.EndDeviceIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.EndDeviceIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &EndDeviceIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.EndDeviceIdentifiers = src.EndDeviceIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero EndDeviceIdentifiers
-					dst.EndDeviceIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "lorawan_version":
@@ -305,10 +344,9 @@ func (dst *DeriveSessionKeysRequest) SetFields(src *DeriveSessionKeysRequest, pa
 				return fmt.Errorf("'lorawan_version' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.LoRaWANVersion = src.LoRaWANVersion
+				dst.LorawanVersion = src.LorawanVersion
 			} else {
-				var zero MACVersion
-				dst.LoRaWANVersion = zero
+				dst.LorawanVersion = 0
 			}
 		case "join_nonce":
 			if len(subs) > 0 {
@@ -317,8 +355,7 @@ func (dst *DeriveSessionKeysRequest) SetFields(src *DeriveSessionKeysRequest, pa
 			if src != nil {
 				dst.JoinNonce = src.JoinNonce
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.JoinNonce
-				dst.JoinNonce = zero
+				dst.JoinNonce = nil
 			}
 		case "dev_nonce":
 			if len(subs) > 0 {
@@ -327,28 +364,26 @@ func (dst *DeriveSessionKeysRequest) SetFields(src *DeriveSessionKeysRequest, pa
 			if src != nil {
 				dst.DevNonce = src.DevNonce
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.DevNonce
-				dst.DevNonce = zero
+				dst.DevNonce = nil
 			}
 		case "net_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'net_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.NetID = src.NetID
+				dst.NetId = src.NetId
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.NetID
-				dst.NetID = zero
+				dst.NetId = nil
 			}
 		case "provisioner_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'provisioner_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ProvisionerID = src.ProvisionerID
+				dst.ProvisionerId = src.ProvisionerId
 			} else {
 				var zero string
-				dst.ProvisionerID = zero
+				dst.ProvisionerId = zero
 			}
 		case "provisioning_data":
 			if len(subs) > 0 {
@@ -373,19 +408,26 @@ func (dst *GetRootKeysRequest) SetFields(src *GetRootKeysRequest, paths ...strin
 		case "ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *EndDeviceIdentifiers
-				if src != nil {
-					newSrc = &src.EndDeviceIdentifiers
+				if (src == nil || src.Ids == nil) && dst.Ids == nil {
+					continue
 				}
-				newDst = &dst.EndDeviceIdentifiers
+				if src != nil {
+					newSrc = src.Ids
+				}
+				if dst.Ids != nil {
+					newDst = dst.Ids
+				} else {
+					newDst = &EndDeviceIdentifiers{}
+					dst.Ids = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.EndDeviceIdentifiers = src.EndDeviceIdentifiers
+					dst.Ids = src.Ids
 				} else {
-					var zero EndDeviceIdentifiers
-					dst.EndDeviceIdentifiers = zero
+					dst.Ids = nil
 				}
 			}
 		case "provisioner_id":
@@ -393,10 +435,10 @@ func (dst *GetRootKeysRequest) SetFields(src *GetRootKeysRequest, paths ...strin
 				return fmt.Errorf("'provisioner_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ProvisionerID = src.ProvisionerID
+				dst.ProvisionerId = src.ProvisionerId
 			} else {
 				var zero string
-				dst.ProvisionerID = zero
+				dst.ProvisionerId = zero
 			}
 		case "provisioning_data":
 			if len(subs) > 0 {
@@ -421,19 +463,26 @@ func (dst *ProvisionEndDevicesRequest) SetFields(src *ProvisionEndDevicesRequest
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "provisioner_id":
@@ -441,10 +490,10 @@ func (dst *ProvisionEndDevicesRequest) SetFields(src *ProvisionEndDevicesRequest
 				return fmt.Errorf("'provisioner_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ProvisionerID = src.ProvisionerID
+				dst.ProvisionerId = src.ProvisionerId
 			} else {
 				var zero string
-				dst.ProvisionerID = zero
+				dst.ProvisionerId = zero
 			}
 		case "provisioning_data":
 			if len(subs) > 0 {
@@ -472,99 +521,108 @@ func (dst *ProvisionEndDevicesRequest) SetFields(src *ProvisionEndDevicesRequest
 			for oneofName, oneofSubs := range subPathMap {
 				switch oneofName {
 				case "list":
-					_, srcOk := src.EndDevices.(*ProvisionEndDevicesRequest_List)
-					if !srcOk && src.EndDevices != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.EndDevices.(*ProvisionEndDevicesRequest_List)
+					}
+					if srcValid := srcTypeOk || src == nil || src.EndDevices == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'list', while different oneof is set in source")
 					}
-					_, dstOk := dst.EndDevices.(*ProvisionEndDevicesRequest_List)
-					if !dstOk && dst.EndDevices != nil {
+					_, dstTypeOk := dst.EndDevices.(*ProvisionEndDevicesRequest_List)
+					if dstValid := dstTypeOk || dst.EndDevices == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'list', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ProvisionEndDevicesRequest_IdentifiersList
-						if !srcOk && !dstOk {
-							continue
-						}
-						if srcOk {
+						if srcTypeOk {
 							newSrc = src.EndDevices.(*ProvisionEndDevicesRequest_List).List
 						}
-						if dstOk {
+						if dstTypeOk {
 							newDst = dst.EndDevices.(*ProvisionEndDevicesRequest_List).List
-						} else {
+						} else if srcTypeOk {
 							newDst = &ProvisionEndDevicesRequest_IdentifiersList{}
 							dst.EndDevices = &ProvisionEndDevicesRequest_List{List: newDst}
+						} else {
+							dst.EndDevices = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.EndDevices = src.EndDevices
 						} else {
 							dst.EndDevices = nil
 						}
 					}
 				case "range":
-					_, srcOk := src.EndDevices.(*ProvisionEndDevicesRequest_Range)
-					if !srcOk && src.EndDevices != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.EndDevices.(*ProvisionEndDevicesRequest_Range)
+					}
+					if srcValid := srcTypeOk || src == nil || src.EndDevices == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'range', while different oneof is set in source")
 					}
-					_, dstOk := dst.EndDevices.(*ProvisionEndDevicesRequest_Range)
-					if !dstOk && dst.EndDevices != nil {
+					_, dstTypeOk := dst.EndDevices.(*ProvisionEndDevicesRequest_Range)
+					if dstValid := dstTypeOk || dst.EndDevices == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'range', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ProvisionEndDevicesRequest_IdentifiersRange
-						if !srcOk && !dstOk {
-							continue
-						}
-						if srcOk {
+						if srcTypeOk {
 							newSrc = src.EndDevices.(*ProvisionEndDevicesRequest_Range).Range
 						}
-						if dstOk {
+						if dstTypeOk {
 							newDst = dst.EndDevices.(*ProvisionEndDevicesRequest_Range).Range
-						} else {
+						} else if srcTypeOk {
 							newDst = &ProvisionEndDevicesRequest_IdentifiersRange{}
 							dst.EndDevices = &ProvisionEndDevicesRequest_Range{Range: newDst}
+						} else {
+							dst.EndDevices = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.EndDevices = src.EndDevices
 						} else {
 							dst.EndDevices = nil
 						}
 					}
 				case "from_data":
-					_, srcOk := src.EndDevices.(*ProvisionEndDevicesRequest_FromData)
-					if !srcOk && src.EndDevices != nil {
+					var srcTypeOk bool
+					if src != nil {
+						_, srcTypeOk = src.EndDevices.(*ProvisionEndDevicesRequest_FromData)
+					}
+					if srcValid := srcTypeOk || src == nil || src.EndDevices == nil || len(oneofSubs) == 0; !srcValid {
 						return fmt.Errorf("attempt to set oneof 'from_data', while different oneof is set in source")
 					}
-					_, dstOk := dst.EndDevices.(*ProvisionEndDevicesRequest_FromData)
-					if !dstOk && dst.EndDevices != nil {
+					_, dstTypeOk := dst.EndDevices.(*ProvisionEndDevicesRequest_FromData)
+					if dstValid := dstTypeOk || dst.EndDevices == nil || len(oneofSubs) == 0; !dstValid {
 						return fmt.Errorf("attempt to set oneof 'from_data', while different oneof is set in destination")
 					}
 					if len(oneofSubs) > 0 {
 						var newDst, newSrc *ProvisionEndDevicesRequest_IdentifiersFromData
-						if !srcOk && !dstOk {
-							continue
-						}
-						if srcOk {
+						if srcTypeOk {
 							newSrc = src.EndDevices.(*ProvisionEndDevicesRequest_FromData).FromData
 						}
-						if dstOk {
+						if dstTypeOk {
 							newDst = dst.EndDevices.(*ProvisionEndDevicesRequest_FromData).FromData
-						} else {
+						} else if srcTypeOk {
 							newDst = &ProvisionEndDevicesRequest_IdentifiersFromData{}
 							dst.EndDevices = &ProvisionEndDevicesRequest_FromData{FromData: newDst}
+						} else {
+							dst.EndDevices = nil
+							continue
 						}
 						if err := newDst.SetFields(newSrc, oneofSubs...); err != nil {
 							return err
 						}
 					} else {
-						if src != nil {
+						if srcTypeOk {
 							dst.EndDevices = src.EndDevices
 						} else {
 							dst.EndDevices = nil
@@ -591,34 +649,34 @@ func (dst *ApplicationActivationSettings) SetFields(src *ApplicationActivationSe
 				return fmt.Errorf("'kek_label' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.KEKLabel = src.KEKLabel
+				dst.KekLabel = src.KekLabel
 			} else {
 				var zero string
-				dst.KEKLabel = zero
+				dst.KekLabel = zero
 			}
 		case "kek":
 			if len(subs) > 0 {
 				var newDst, newSrc *KeyEnvelope
-				if (src == nil || src.KEK == nil) && dst.KEK == nil {
+				if (src == nil || src.Kek == nil) && dst.Kek == nil {
 					continue
 				}
 				if src != nil {
-					newSrc = src.KEK
+					newSrc = src.Kek
 				}
-				if dst.KEK != nil {
-					newDst = dst.KEK
+				if dst.Kek != nil {
+					newDst = dst.Kek
 				} else {
 					newDst = &KeyEnvelope{}
-					dst.KEK = newDst
+					dst.Kek = newDst
 				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.KEK = src.KEK
+					dst.Kek = src.Kek
 				} else {
-					dst.KEK = nil
+					dst.Kek = nil
 				}
 			}
 		case "home_net_id":
@@ -626,19 +684,19 @@ func (dst *ApplicationActivationSettings) SetFields(src *ApplicationActivationSe
 				return fmt.Errorf("'home_net_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.HomeNetID = src.HomeNetID
+				dst.HomeNetId = src.HomeNetId
 			} else {
-				dst.HomeNetID = nil
+				dst.HomeNetId = nil
 			}
 		case "application_server_id":
 			if len(subs) > 0 {
 				return fmt.Errorf("'application_server_id' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.ApplicationServerID = src.ApplicationServerID
+				dst.ApplicationServerId = src.ApplicationServerId
 			} else {
 				var zero string
-				dst.ApplicationServerID = zero
+				dst.ApplicationServerId = zero
 			}
 
 		default:
@@ -654,19 +712,26 @@ func (dst *GetApplicationActivationSettingsRequest) SetFields(src *GetApplicatio
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "field_mask":
@@ -676,8 +741,7 @@ func (dst *GetApplicationActivationSettingsRequest) SetFields(src *GetApplicatio
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -693,37 +757,51 @@ func (dst *SetApplicationActivationSettingsRequest) SetFields(src *SetApplicatio
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 		case "settings":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationActivationSettings
-				if src != nil {
-					newSrc = &src.ApplicationActivationSettings
+				if (src == nil || src.Settings == nil) && dst.Settings == nil {
+					continue
 				}
-				newDst = &dst.ApplicationActivationSettings
+				if src != nil {
+					newSrc = src.Settings
+				}
+				if dst.Settings != nil {
+					newDst = dst.Settings
+				} else {
+					newDst = &ApplicationActivationSettings{}
+					dst.Settings = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationActivationSettings = src.ApplicationActivationSettings
+					dst.Settings = src.Settings
 				} else {
-					var zero ApplicationActivationSettings
-					dst.ApplicationActivationSettings = zero
+					dst.Settings = nil
 				}
 			}
 		case "field_mask":
@@ -733,8 +811,7 @@ func (dst *SetApplicationActivationSettingsRequest) SetFields(src *SetApplicatio
 			if src != nil {
 				dst.FieldMask = src.FieldMask
 			} else {
-				var zero types.FieldMask
-				dst.FieldMask = zero
+				dst.FieldMask = nil
 			}
 
 		default:
@@ -750,19 +827,26 @@ func (dst *DeleteApplicationActivationSettingsRequest) SetFields(src *DeleteAppl
 		case "application_ids":
 			if len(subs) > 0 {
 				var newDst, newSrc *ApplicationIdentifiers
-				if src != nil {
-					newSrc = &src.ApplicationIdentifiers
+				if (src == nil || src.ApplicationIds == nil) && dst.ApplicationIds == nil {
+					continue
 				}
-				newDst = &dst.ApplicationIdentifiers
+				if src != nil {
+					newSrc = src.ApplicationIds
+				}
+				if dst.ApplicationIds != nil {
+					newDst = dst.ApplicationIds
+				} else {
+					newDst = &ApplicationIdentifiers{}
+					dst.ApplicationIds = newDst
+				}
 				if err := newDst.SetFields(newSrc, subs...); err != nil {
 					return err
 				}
 			} else {
 				if src != nil {
-					dst.ApplicationIdentifiers = src.ApplicationIdentifiers
+					dst.ApplicationIds = src.ApplicationIds
 				} else {
-					var zero ApplicationIdentifiers
-					dst.ApplicationIdentifiers = zero
+					dst.ApplicationIds = nil
 				}
 			}
 
@@ -781,10 +865,9 @@ func (dst *JoinEUIPrefix) SetFields(src *JoinEUIPrefix, paths ...string) error {
 				return fmt.Errorf("'join_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.JoinEUI = src.JoinEUI
+				dst.JoinEui = src.JoinEui
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.EUI64
-				dst.JoinEUI = zero
+				dst.JoinEui = nil
 			}
 		case "length":
 			if len(subs) > 0 {
@@ -824,6 +907,26 @@ func (dst *JoinEUIPrefixes) SetFields(src *JoinEUIPrefixes, paths ...string) err
 	return nil
 }
 
+func (dst *GetDefaultJoinEUIResponse) SetFields(src *GetDefaultJoinEUIResponse, paths ...string) error {
+	for name, subs := range _processPaths(paths) {
+		switch name {
+		case "join_eui":
+			if len(subs) > 0 {
+				return fmt.Errorf("'join_eui' has no subfields, but %s were specified", subs)
+			}
+			if src != nil {
+				dst.JoinEui = src.JoinEui
+			} else {
+				dst.JoinEui = nil
+			}
+
+		default:
+			return fmt.Errorf("invalid field: '%s'", name)
+		}
+	}
+	return nil
+}
+
 func (dst *ProvisionEndDevicesRequest_IdentifiersList) SetFields(src *ProvisionEndDevicesRequest_IdentifiersList, paths ...string) error {
 	for name, subs := range _processPaths(paths) {
 		switch name {
@@ -832,18 +935,18 @@ func (dst *ProvisionEndDevicesRequest_IdentifiersList) SetFields(src *ProvisionE
 				return fmt.Errorf("'join_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.JoinEUI = src.JoinEUI
+				dst.JoinEui = src.JoinEui
 			} else {
-				dst.JoinEUI = nil
+				dst.JoinEui = nil
 			}
 		case "end_device_ids":
 			if len(subs) > 0 {
 				return fmt.Errorf("'end_device_ids' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.EndDeviceIDs = src.EndDeviceIDs
+				dst.EndDeviceIds = src.EndDeviceIds
 			} else {
-				dst.EndDeviceIDs = nil
+				dst.EndDeviceIds = nil
 			}
 
 		default:
@@ -861,19 +964,18 @@ func (dst *ProvisionEndDevicesRequest_IdentifiersRange) SetFields(src *Provision
 				return fmt.Errorf("'join_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.JoinEUI = src.JoinEUI
+				dst.JoinEui = src.JoinEui
 			} else {
-				dst.JoinEUI = nil
+				dst.JoinEui = nil
 			}
 		case "start_dev_eui":
 			if len(subs) > 0 {
 				return fmt.Errorf("'start_dev_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.StartDevEUI = src.StartDevEUI
+				dst.StartDevEui = src.StartDevEui
 			} else {
-				var zero go_thethings_network_lorawan_stack_v3_pkg_types.EUI64
-				dst.StartDevEUI = zero
+				dst.StartDevEui = nil
 			}
 
 		default:
@@ -891,9 +993,9 @@ func (dst *ProvisionEndDevicesRequest_IdentifiersFromData) SetFields(src *Provis
 				return fmt.Errorf("'join_eui' has no subfields, but %s were specified", subs)
 			}
 			if src != nil {
-				dst.JoinEUI = src.JoinEUI
+				dst.JoinEui = src.JoinEui
 			} else {
-				dst.JoinEUI = nil
+				dst.JoinEui = nil
 			}
 
 		default:

@@ -57,11 +57,10 @@ export const mapNatsFormValues = nats => {
   }
 }
 
-export const mapMqttFormValues = mqtt => {
-  return merge({}, mqttBlankValues, mqtt, {
+export const mapMqttFormValues = mqtt =>
+  merge({}, mqttBlankValues, mqtt, {
     _use_credentials: Boolean(mqtt.username || mqtt.password),
   })
-}
 
 const mapPubsubMessageTypeToFormValue = messageType =>
   (messageType && { enabled: true, value: messageType.topic }) || { enabled: false, value: '' }
@@ -94,6 +93,7 @@ export const mapPubsubToFormValues = pubsub => {
     location_solved: mapPubsubMessageTypeToFormValue(pubsub.location_solved),
     service_data: mapPubsubMessageTypeToFormValue(pubsub.service_data),
     uplink_message: mapPubsubMessageTypeToFormValue(pubsub.uplink_message),
+    uplink_normalized: mapPubsubMessageTypeToFormValue(pubsub.uplink_normalized),
   }
 
   return result
@@ -138,6 +138,7 @@ export const mapFormValuesToPubsub = (values, appId) => {
     location_solved: mapMessageTypeFormValueToPubsubMessageType(values.location_solved),
     service_data: mapMessageTypeFormValueToPubsubMessageType(values.service_data),
     uplink_message: mapMessageTypeFormValueToPubsubMessageType(values.uplink_message),
+    uplink_normalized: mapMessageTypeFormValueToPubsubMessageType(values.uplink_normalized),
   }
 
   switch (values._provider) {
@@ -157,7 +158,7 @@ export const mapFormValuesToPubsub = (values, appId) => {
 export const blankValues = {
   pub_sub_id: '',
   base_topic: '',
-  format: '',
+  format: 'json',
   _provider: providers.NATS,
   nats: natsBlankValues,
   mqtt: mqttBlankValues,
@@ -173,4 +174,5 @@ export const blankValues = {
   location_solved: { enabled: false, value: '' },
   service_data: { enabled: false, value: '' },
   uplink_message: { enabled: false, value: '' },
+  uplink_normalized: { enabled: false, value: '' },
 }

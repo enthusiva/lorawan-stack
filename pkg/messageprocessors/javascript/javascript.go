@@ -18,31 +18,34 @@ package javascript
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"runtime/trace"
 	"strings"
 
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
-	"go.thethings.network/lorawan-stack/v3/pkg/gogoproto"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/messageprocessors"
+	"go.thethings.network/lorawan-stack/v3/pkg/messageprocessors/normalizedpayload"
 	"go.thethings.network/lorawan-stack/v3/pkg/scripting"
 	js "go.thethings.network/lorawan-stack/v3/pkg/scripting/javascript"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type host struct {
-	engine scripting.Engine
+	engine scripting.AheadOfTimeEngine
 }
 
 // New creates and returns a new Javascript payload encoder and decoder.
-func New() messageprocessors.PayloadEncodeDecoder {
+func New() messageprocessors.CompilablePayloadEncoderDecoder {
 	return &host{
 		engine: js.New(scripting.DefaultOptions),
 	}
 }
 
 type encodeDownlinkInput struct {
-	Data  map[string]interface{} `json:"data"`
-	FPort *uint8                 `json:"fPort"`
+	Data  map[string]any `json:"data"`
+	FPort *uint8         `json:"fPort"`
 }
 
 type encodeDownlinkOutput struct {
@@ -58,15 +61,79 @@ var (
 	errOutputErrors = errors.DefineAborted("output_errors", "{errors}")
 )
 
+func wrapDownlinkEncoderScript(script string) string {
+	// Fallback to Encoder() for backwards compatibility with The Things Network Stack V2 payload functions.
+	return fmt.Sprintf(`
+		%s
+
+		function main(input) {
+			const { data, fPort } = input;
+			if (typeof encodeDownlink === 'function') {
+				return encodeDownlink({ data, fPort });
+			}
+			return {
+				bytes: Encoder(data, fPort),
+				fPort: input.fPort
+			}
+		}
+	`, script)
+}
+
+// CompileDownlinkEncoder generates a downlink encoder from the provided script.
+func (h *host) CompileDownlinkEncoder(
+	ctx context.Context, script string,
+) (
+	func(
+		context.Context,
+		*ttnpb.EndDeviceIdentifiers,
+		*ttnpb.EndDeviceVersionIdentifiers,
+		*ttnpb.ApplicationDownlink,
+	) error,
+	error,
+) {
+	defer trace.StartRegion(ctx, "compile downlink encoder").End()
+
+	run, err := h.engine.Compile(ctx, wrapDownlinkEncoderScript(script))
+	if err != nil {
+		return nil, err
+	}
+
+	return func(
+		ctx context.Context,
+		ids *ttnpb.EndDeviceIdentifiers,
+		version *ttnpb.EndDeviceVersionIdentifiers,
+		msg *ttnpb.ApplicationDownlink,
+	) error {
+		return h.encodeDownlink(ctx, msg, run)
+	}, nil
+}
+
 // EncodeDownlink encodes the message's DecodedPayload to FRMPayload using the given script.
-func (h *host) EncodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationDownlink, script string) error {
+func (h *host) EncodeDownlink(
+	ctx context.Context,
+	_ *ttnpb.EndDeviceIdentifiers,
+	_ *ttnpb.EndDeviceVersionIdentifiers,
+	msg *ttnpb.ApplicationDownlink,
+	script string,
+) error {
+	run := func(ctx context.Context, fn string, params ...any) (func(any) error, error) {
+		return h.engine.Run(ctx, wrapDownlinkEncoderScript(script), fn, params...)
+	}
+	return h.encodeDownlink(ctx, msg, run)
+}
+
+func (*host) encodeDownlink(
+	ctx context.Context,
+	msg *ttnpb.ApplicationDownlink,
+	run func(context.Context, string, ...any) (func(any) error, error),
+) error {
 	defer trace.StartRegion(ctx, "encode downlink message").End()
 
 	decoded := msg.DecodedPayload
 	if decoded == nil {
 		return nil
 	}
-	data, err := gogoproto.Map(decoded)
+	data, err := goproto.Map(decoded)
 	if err != nil {
 		return errInput.WithCause(err)
 	}
@@ -76,21 +143,7 @@ func (h *host) EncodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifier
 		FPort: &fPort,
 	}
 
-	// Fallback to legacy Encoder() function for backwards compatibility with The Things Network Stack V2 payload functions.
-	script = fmt.Sprintf(`
-		%s
-
-		function main(input) {
-			if (typeof encodeDownlink === 'function') {
-				return encodeDownlink(input);
-			}
-			return {
-				bytes: Encoder(input.data, input.fPort),
-				fPort: input.fPort
-			}
-		}
-	`, script)
-	valueAs, err := h.engine.Run(ctx, script, "main", input)
+	valueAs, err := run(ctx, "main", input)
 	if err != nil {
 		return err
 	}
@@ -104,7 +157,7 @@ func (h *host) EncodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifier
 		return errOutputErrors.WithAttributes("errors", strings.Join(output.Errors, ", "))
 	}
 
-	msg.FRMPayload = output.Bytes
+	msg.FrmPayload = output.Bytes
 	msg.DecodedPayloadWarnings = output.Warnings
 	if output.FPort != nil {
 		fPort := *output.FPort
@@ -121,57 +174,220 @@ type decodeUplinkInput struct {
 }
 
 type decodeUplinkOutput struct {
-	Data     map[string]interface{} `json:"data"`
-	Warnings []string               `json:"warnings"`
-	Errors   []string               `json:"errors"`
+	Data     map[string]any `json:"data"`
+	Warnings []string       `json:"warnings"`
+	Errors   []string       `json:"errors"`
 }
 
-// DecodeUplink decodes the message's FRMPayload to DecodedPayload using the given script.
-func (h *host) DecodeUplink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationUplink, script string) error {
-	defer trace.StartRegion(ctx, "decode uplink message").End()
+type normalizeUplinkOutput struct {
+	Data     any      `json:"data"`
+	Warnings []string `json:"warnings"`
+	Errors   []string `json:"errors"`
+}
 
-	input := decodeUplinkInput{
-		Bytes: msg.FRMPayload,
-		FPort: uint8(msg.FPort),
-	}
+type uplinkDecoderOutput struct {
+	Decoded    decodeUplinkOutput     `json:"decoded"`
+	Normalized *normalizeUplinkOutput `json:"normalized"`
+}
 
-	// Fallback to legacy Decoder() function for backwards compatibility with The Things Network Stack V2 payload functions.
-	script = fmt.Sprintf(`
+func wrapUplinkDecoderScript(script string) string {
+	// This wrapper executes decodeUplink() if it is defined. Then, it executes normalizeUplink() if it is defined too,
+	// and if the output of decodeUplink() didn't return errors.
+	// Fallback to Decoder() for backwards compatibility with The Things Network Stack V2 payload functions.
+	return fmt.Sprintf(`
 		%s
 
 		function main(input) {
-			input = {
-				bytes: input.bytes.slice(),
-				fPort: input.fPort,
-			}
+			const bytes = input.bytes.slice();
+			const { fPort } = input;
 			if (typeof decodeUplink === 'function') {
-				return decodeUplink(input);
+				const decoded = decodeUplink({ bytes, fPort });
+				let normalized;
+				const { data, errors } = decoded;
+				if ((!errors || !errors.length) && data && typeof normalizeUplink === 'function') {
+					normalized = normalizeUplink({ data });
+				}
+				return { decoded, normalized };
 			}
 			return {
-				data: Decoder(input.bytes, input.fPort)
+				decoded: {
+					data: Decoder(bytes, fPort)
+				}
 			}
 		}
 	`, script)
-	valueAs, err := h.engine.Run(ctx, script, "main", input)
+}
+
+// CompileUplinkDecoder generates an uplink decoder from the provided script.
+func (h *host) CompileUplinkDecoder(
+	ctx context.Context, script string,
+) (
+	func(
+		context.Context,
+		*ttnpb.EndDeviceIdentifiers,
+		*ttnpb.EndDeviceVersionIdentifiers,
+		*ttnpb.ApplicationUplink,
+	) error,
+	error,
+) {
+	defer trace.StartRegion(ctx, "compile uplink decoder").End()
+
+	run, err := h.engine.Compile(ctx, wrapUplinkDecoderScript(script))
+	if err != nil {
+		return nil, err
+	}
+
+	return func(
+		ctx context.Context,
+		ids *ttnpb.EndDeviceIdentifiers,
+		version *ttnpb.EndDeviceVersionIdentifiers,
+		msg *ttnpb.ApplicationUplink,
+	) error {
+		return h.decodeUplink(ctx, msg, run)
+	}, nil
+}
+
+// DecodeUplink decodes the message's FRMPayload to DecodedPayload using the given script.
+func (h *host) DecodeUplink(
+	ctx context.Context,
+	_ *ttnpb.EndDeviceIdentifiers,
+	_ *ttnpb.EndDeviceVersionIdentifiers,
+	msg *ttnpb.ApplicationUplink,
+	script string,
+) error {
+	run := func(ctx context.Context, fn string, params ...any) (func(any) error, error) {
+		return h.engine.Run(ctx, wrapUplinkDecoderScript(script), fn, params...)
+	}
+	return h.decodeUplink(ctx, msg, run)
+}
+
+func appendValidationErrors(dst []string, measurements []normalizedpayload.ParsedMeasurement) []string {
+	for i, m := range measurements {
+		for _, err := range m.ValidationErrors {
+			var (
+				errString string
+				ttnErr    *errors.Error
+			)
+			if errors.As(err, &ttnErr) {
+				errString = ttnErr.FormatMessage(ttnErr.PublicAttributes())
+			} else {
+				errString = err.Error()
+			}
+			dst = append(dst, fmt.Sprintf("measurement %d: %s", i+1, errString))
+		}
+	}
+	return dst
+}
+
+func (*host) decodeUplink(
+	ctx context.Context,
+	msg *ttnpb.ApplicationUplink,
+	run func(context.Context, string, ...any) (func(any) error, error),
+) error {
+	defer trace.StartRegion(ctx, "decode uplink message").End()
+
+	input := decodeUplinkInput{
+		Bytes: msg.FrmPayload,
+		FPort: uint8(msg.FPort),
+	}
+
+	valueAs, err := run(ctx, "main", input)
 	if err != nil {
 		return err
 	}
 
-	var output decodeUplinkOutput
+	var output uplinkDecoderOutput
 	err = valueAs(&output)
 	if err != nil {
 		return errOutput.WithCause(err)
 	}
-	if len(output.Errors) > 0 {
-		return errOutputErrors.WithAttributes("errors", strings.Join(output.Errors, ", "))
-	}
 
-	s, err := gogoproto.Struct(output.Data)
+	if errs := output.Decoded.Errors; len(errs) > 0 {
+		return errOutputErrors.WithAttributes("errors", strings.Join(errs, ", "))
+	}
+	decodedPayload, err := goproto.Struct(output.Decoded.Data)
 	if err != nil {
 		return errOutput.WithCause(err)
 	}
-	msg.DecodedPayload = s
-	msg.DecodedPayloadWarnings = output.Warnings
+	msg.DecodedPayload, msg.DecodedPayloadWarnings = decodedPayload, output.Decoded.Warnings
+	msg.NormalizedPayload, msg.NormalizedPayloadWarnings = nil, nil
+
+	if normalized := output.Normalized; normalized != nil {
+		if errs := normalized.Errors; len(errs) > 0 {
+			return errOutputErrors.WithAttributes("errors", strings.Join(errs, ", "))
+		}
+		if normalized.Data == nil {
+			return nil
+		}
+		// The returned data can be an array of measurements or a single measurement object.
+		var measurements []map[string]any
+		if val := reflect.ValueOf(normalized.Data); val.Kind() == reflect.Slice {
+			measurements = make([]map[string]any, val.Len())
+			for i := 0; i < val.Len(); i++ {
+				measurement, ok := val.Index(i).Interface().(map[string]any)
+				if !ok {
+					return errOutput.New()
+				}
+				measurements[i] = measurement
+			}
+		} else {
+			measurement, ok := normalized.Data.(map[string]any)
+			if !ok {
+				return errOutput.New()
+			}
+			measurements = []map[string]any{measurement}
+		}
+		normalizedPayload := make([]*structpb.Struct, len(measurements))
+		for i := range measurements {
+			pb, err := goproto.Struct(measurements[i])
+			if err != nil {
+				return errOutput.WithCause(err)
+			}
+			normalizedPayload[i] = pb
+		}
+		// Validate the normalized payload.
+		normalizedMeasurements, err := normalizedpayload.Parse(normalizedPayload)
+		if err != nil {
+			return errOutput.WithCause(err)
+		}
+		msg.NormalizedPayload = make([]*structpb.Struct, 0, len(normalizedMeasurements))
+		for _, measurement := range normalizedMeasurements {
+			if len(measurement.Valid.GetFields()) == 0 {
+				continue
+			}
+			msg.NormalizedPayload = append(msg.NormalizedPayload, measurement.Valid)
+		}
+		msg.NormalizedPayloadWarnings = make([]string, 0, len(normalized.Warnings))
+		msg.NormalizedPayloadWarnings = append(msg.NormalizedPayloadWarnings, normalized.Warnings...)
+		msg.NormalizedPayloadWarnings = appendValidationErrors(msg.NormalizedPayloadWarnings, normalizedMeasurements)
+	} else {
+		// If the normalizer is not set, the decoder may return already normalized payload.
+		// This is a best effort attempt to parse the decoded payload as normalized payload.
+		// If that does not return an error, the decoded payload is assumed to be normalized.
+		normalizedPayload := []*structpb.Struct{
+			decodedPayload,
+		}
+		normalizedMeasurements, err := normalizedpayload.Parse(normalizedPayload)
+		if err == nil {
+			msg.NormalizedPayload = make([]*structpb.Struct, 0, len(normalizedMeasurements))
+			for _, measurement := range normalizedMeasurements {
+				if len(measurement.Valid.GetFields()) == 0 {
+					continue
+				}
+				msg.NormalizedPayload = append(msg.NormalizedPayload, measurement.Valid)
+			}
+			msg.NormalizedPayloadWarnings = appendValidationErrors(msg.NormalizedPayloadWarnings, normalizedMeasurements)
+		}
+	}
+
+	// Roundtrip the message in order to convert special number values such as NaN and Infinity to their string form.
+	// TODO: Clean up the message and emit warning (https://github.com/TheThingsNetwork/lorawan-stack/issues/6128).
+	msg.DecodedPayload, err = structpb.NewStruct(decodedPayload.AsMap())
+	if err != nil {
+		return errOutput.WithCause(err)
+	}
+	msg.DecodedPayloadWarnings = append(msg.DecodedPayloadWarnings, goproto.ValidateStruct(decodedPayload)...)
+
 	return nil
 }
 
@@ -181,32 +397,79 @@ type decodeDownlinkInput struct {
 }
 
 type decodeDownlinkOutput struct {
-	Data     map[string]interface{} `json:"data"`
-	Warnings []string               `json:"warnings"`
-	Errors   []string               `json:"errors"`
+	Data     map[string]any `json:"data"`
+	Warnings []string       `json:"warnings"`
+	Errors   []string       `json:"errors"`
 }
 
-// DecodeUplink decodes the message's FRMPayload to DecodedPayload using the given script.
-func (h *host) DecodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifiers, version *ttnpb.EndDeviceVersionIdentifiers, msg *ttnpb.ApplicationDownlink, script string) error {
-	defer trace.StartRegion(ctx, "decode downlink message").End()
-
-	input := decodeDownlinkInput{
-		Bytes: msg.FRMPayload,
-		FPort: uint8(msg.FPort),
-	}
-
-	script = fmt.Sprintf(`
+func wrapDownlinkDecoderScript(script string) string {
+	return fmt.Sprintf(`
 		%s
 
 		function main(input) {
-			input = {
-				bytes: input.bytes.slice(),
-				fPort: input.fPort,
-			}
-			return decodeDownlink(input);
+			const bytes = input.bytes.slice();
+			const { fPort } = input;
+			return decodeDownlink({ bytes, fPort });
 		}
 	`, script)
-	valueAs, err := h.engine.Run(ctx, script, "main", input)
+}
+
+// CompileDownlinkDecoder generates a downlink decoder from the provided script.
+func (h *host) CompileDownlinkDecoder(
+	ctx context.Context, script string,
+) (
+	func(
+		context.Context,
+		*ttnpb.EndDeviceIdentifiers,
+		*ttnpb.EndDeviceVersionIdentifiers,
+		*ttnpb.ApplicationDownlink,
+	) error,
+	error,
+) {
+	defer trace.StartRegion(ctx, "compile downlink decoder").End()
+
+	run, err := h.engine.Compile(ctx, wrapDownlinkDecoderScript(script))
+	if err != nil {
+		return nil, err
+	}
+
+	return func(
+		ctx context.Context,
+		ids *ttnpb.EndDeviceIdentifiers,
+		version *ttnpb.EndDeviceVersionIdentifiers,
+		msg *ttnpb.ApplicationDownlink,
+	) error {
+		return h.decodeDownlink(ctx, msg, run)
+	}, nil
+}
+
+// DecodeUplink decodes the message's FRMPayload to DecodedPayload using the given script.
+func (h *host) DecodeDownlink(
+	ctx context.Context,
+	_ *ttnpb.EndDeviceIdentifiers,
+	_ *ttnpb.EndDeviceVersionIdentifiers,
+	msg *ttnpb.ApplicationDownlink,
+	script string,
+) error {
+	run := func(ctx context.Context, fn string, params ...any) (func(any) error, error) {
+		return h.engine.Run(ctx, wrapDownlinkDecoderScript(script), fn, params...)
+	}
+	return h.decodeDownlink(ctx, msg, run)
+}
+
+func (*host) decodeDownlink(
+	ctx context.Context,
+	msg *ttnpb.ApplicationDownlink,
+	run func(context.Context, string, ...any) (func(any) error, error),
+) error {
+	defer trace.StartRegion(ctx, "decode downlink message").End()
+
+	input := decodeDownlinkInput{
+		Bytes: msg.FrmPayload,
+		FPort: uint8(msg.FPort),
+	}
+
+	valueAs, err := run(ctx, "main", input)
 	if err != nil {
 		return err
 	}
@@ -220,11 +483,20 @@ func (h *host) DecodeDownlink(ctx context.Context, ids ttnpb.EndDeviceIdentifier
 		return errOutputErrors.WithAttributes("errors", strings.Join(output.Errors, ", "))
 	}
 
-	s, err := gogoproto.Struct(output.Data)
+	s, err := goproto.Struct(output.Data)
 	if err != nil {
 		return errOutput.WithCause(err)
 	}
 	msg.DecodedPayload = s
 	msg.DecodedPayloadWarnings = output.Warnings
+
+	// Roundtrip the message in order to convert special number values such as NaN and Infinity to their string form.
+	// TODO: Clean up the message and emit warning (https://github.com/TheThingsNetwork/lorawan-stack/issues/6128).
+	msg.DecodedPayload, err = structpb.NewStruct(s.AsMap())
+	if err != nil {
+		return errOutput.WithCause(err)
+	}
+	msg.DecodedPayloadWarnings = append(msg.DecodedPayloadWarnings, goproto.ValidateStruct(s)...)
+
 	return nil
 }

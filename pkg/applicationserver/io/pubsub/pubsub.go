@@ -26,6 +26,7 @@ import (
 	"go.thethings.network/lorawan-stack/v3/pkg/errorcontext"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/unique"
 	"gocloud.dev/pubsub"
@@ -33,7 +34,7 @@ import (
 
 // PubSub is an pub/sub frontend that exposes ttnpb.ApplicationPubSubRegistryServer.
 type PubSub struct {
-	ttnpb.ApplicationPubSubRegistryServer
+	ttnpb.UnimplementedApplicationPubSubRegistryServer
 
 	*component.Component
 	ctx      context.Context
@@ -46,7 +47,12 @@ type PubSub struct {
 }
 
 // New creates a new pusub frontend.
-func New(c *component.Component, server io.Server, registry Registry, providerStatuses ProviderStatuses) (*PubSub, error) {
+func New(
+	c *component.Component,
+	server io.Server,
+	registry Registry,
+	providerStatuses ProviderStatuses,
+) (*PubSub, error) {
 	ctx := log.NewContextWithField(c.Context(), "namespace", "applicationserver/io/pubsub")
 	ps := &PubSub{
 		Component: c,
@@ -56,31 +62,31 @@ func New(c *component.Component, server io.Server, registry Registry, providerSt
 
 		providerStatuses: providerStatuses,
 	}
-	ps.RegisterTask(&component.TaskConfig{
+	ps.RegisterTask(&task.Config{
 		Context: ctx,
 		ID:      "pubsubs_start_all",
 		Func:    ps.startAll,
-		Restart: component.TaskRestartOnFailure,
-		Backoff: component.DefaultTaskBackoffConfig,
+		Restart: task.RestartOnFailure,
+		Backoff: task.DefaultBackoffConfig,
 	})
 	return ps, nil
 }
 
 func (ps *PubSub) startAll(ctx context.Context) error {
 	return ps.registry.Range(ctx, []string{"ids"},
-		func(ctx context.Context, _ ttnpb.ApplicationIdentifiers, pb *ttnpb.ApplicationPubSub) bool {
-			ps.startTask(ctx, pb.ApplicationPubSubIdentifiers)
+		func(ctx context.Context, _ *ttnpb.ApplicationIdentifiers, pb *ttnpb.ApplicationPubSub) bool {
+			ps.startTask(ctx, pb.Ids)
 			return true
 		},
 	)
 }
 
-func (ps *PubSub) startTask(ctx context.Context, ids ttnpb.ApplicationPubSubIdentifiers) {
+func (ps *PubSub) startTask(ctx context.Context, ids *ttnpb.ApplicationPubSubIdentifiers) {
 	ctx = log.NewContextWithFields(ctx, log.Fields(
-		"application_uid", unique.ID(ctx, ids.ApplicationIdentifiers),
-		"pub_sub_id", ids.PubSubID,
+		"application_uid", unique.ID(ctx, ids.ApplicationIds),
+		"pub_sub_id", ids.PubSubId,
 	))
-	ps.StartTask(&component.TaskConfig{
+	ps.StartTask(&task.Config{
 		Context: ctx,
 		ID:      "pubsub",
 		Func: func(ctx context.Context) error {
@@ -99,13 +105,13 @@ func (ps *PubSub) startTask(ctx context.Context, ids ttnpb.ApplicationPubSubIden
 
 			return ps.start(ctx, target)
 		},
-		Restart: component.TaskRestartOnFailure,
+		Restart: task.RestartOnFailure,
 		Backoff: io.DialTaskBackoffConfig,
 	})
 }
 
 type integration struct {
-	ttnpb.ApplicationPubSub
+	*ttnpb.ApplicationPubSub
 	ctx    context.Context
 	cancel errorcontext.CancelFunc
 	closed chan struct{}
@@ -129,6 +135,8 @@ func (i *integration) handleUp(ctx context.Context) {
 			switch up.ApplicationUp.Up.(type) {
 			case *ttnpb.ApplicationUp_UplinkMessage:
 				topic = i.conn.Topics.UplinkMessage
+			case *ttnpb.ApplicationUp_UplinkNormalized:
+				topic = i.conn.Topics.UplinkNormalized
 			case *ttnpb.ApplicationUp_JoinAccept:
 				topic = i.conn.Topics.JoinAccept
 			case *ttnpb.ApplicationUp_DownlinkAck:
@@ -169,7 +177,11 @@ func (i *integration) handleUp(ctx context.Context) {
 	}
 }
 
-func (i *integration) handleDown(ctx context.Context, op func(io.Server, context.Context, ttnpb.EndDeviceIdentifiers, []*ttnpb.ApplicationDownlink) error, subscription *pubsub.Subscription) {
+func (i *integration) handleDown(
+	ctx context.Context,
+	op func(io.Server, context.Context, *ttnpb.EndDeviceIdentifiers, []*ttnpb.ApplicationDownlink) error,
+	subscription *pubsub.Subscription,
+) {
 	logger := log.FromContext(ctx)
 	for {
 		select {
@@ -189,15 +201,19 @@ func (i *integration) handleDown(ctx context.Context, op func(io.Server, context
 			logger.WithError(err).Warn("Failed to decode downlink queue operation")
 			continue
 		}
-		if err := operation.EndDeviceIdentifiers.ValidateContext(ctx); err != nil {
+		if err := operation.ValidateFields(); err != nil {
+			logger.WithError(err).Warn("Failed to validate downlink queue operation")
+			continue
+		}
+		if err := operation.EndDeviceIds.ValidateContext(ctx); err != nil {
 			logger.WithError(err).Warn("Failed to validate downlink queue operation")
 			continue
 		}
 		logger.WithFields(log.Fields(
-			"device_uid", unique.ID(ctx, operation.EndDeviceIdentifiers),
+			"device_uid", unique.ID(ctx, operation.EndDeviceIds),
 			"count", len(operation.Downlinks),
 		)).Debug("Handle downlink messages")
-		if err := op(i.server, ctx, operation.EndDeviceIdentifiers, operation.Downlinks); err != nil {
+		if err := op(i.server, ctx, operation.EndDeviceIds, operation.Downlinks); err != nil {
 			logger.WithError(err).Warn("Failed to handle downlink messages")
 		}
 	}
@@ -206,7 +222,7 @@ func (i *integration) handleDown(ctx context.Context, op func(io.Server, context
 func (i *integration) startHandleDown(ctx context.Context) {
 	for _, downlink := range []struct {
 		name         string
-		op           func(io.Server, context.Context, ttnpb.EndDeviceIdentifiers, []*ttnpb.ApplicationDownlink) error
+		op           func(io.Server, context.Context, *ttnpb.EndDeviceIdentifiers, []*ttnpb.ApplicationDownlink) error
 		subscription *pubsub.Subscription
 	}{
 		{
@@ -228,12 +244,12 @@ func (i *integration) startHandleDown(ctx context.Context) {
 }
 
 func (ps *PubSub) start(ctx context.Context, pb *ttnpb.ApplicationPubSub) (err error) {
-	appUID := unique.ID(ctx, pb.ApplicationIdentifiers)
-	psUID := PubSubUID(appUID, pb.PubSubID)
+	appUID := unique.ID(ctx, pb.Ids.ApplicationIds)
+	psUID := PubSubUID(appUID, pb.Ids.PubSubId)
 
 	ctx = log.NewContextWithFields(ctx, log.Fields(
 		"application_uid", appUID,
-		"pub_sub_id", pb.PubSubID,
+		"pub_sub_id", pb.Ids.PubSubId,
 		"provider", fmt.Sprintf("%T", pb.Provider),
 	))
 	logger := log.FromContext(ctx)
@@ -243,7 +259,7 @@ func (ps *PubSub) start(ctx context.Context, pb *ttnpb.ApplicationPubSub) (err e
 	}()
 
 	i := &integration{
-		ApplicationPubSub: *pb,
+		ApplicationPubSub: pb,
 		ctx:               ctx,
 		cancel:            cancel,
 		closed:            make(chan struct{}),
@@ -263,14 +279,14 @@ func (ps *PubSub) start(ctx context.Context, pb *ttnpb.ApplicationPubSub) (err e
 		}
 	}()
 
-	provider, err := provider.GetProvider(pb)
+	p, err := provider.GetProvider(pb)
 	if err != nil {
 		return err
 	}
 	if err := ps.providerStatuses.Enabled(ctx, pb.GetProvider()); err != nil {
 		return err
 	}
-	i.conn, err = provider.OpenConnection(ctx, pb, ps.providerStatuses)
+	i.conn, err = p.OpenConnection(ctx, pb, ps.providerStatuses)
 	if err != nil {
 		return err
 	}
@@ -281,7 +297,7 @@ func (ps *PubSub) start(ctx context.Context, pb *ttnpb.ApplicationPubSub) (err e
 			logger.Debug("Shutdown pub/sub connection success")
 		}
 	}()
-	i.sub, err = ps.server.Subscribe(ctx, "pubsub", &pb.ApplicationIdentifiers, false)
+	i.sub, err = ps.server.Subscribe(ctx, "pubsub", pb.Ids.ApplicationIds, false)
 	if err != nil {
 		return err
 	}
@@ -312,9 +328,9 @@ func (ps *PubSub) start(ctx context.Context, pb *ttnpb.ApplicationPubSub) (err e
 	return ctx.Err()
 }
 
-func (ps *PubSub) stop(ctx context.Context, ids ttnpb.ApplicationPubSubIdentifiers) error {
-	appUID := unique.ID(ctx, ids.ApplicationIdentifiers)
-	psUID := PubSubUID(appUID, ids.PubSubID)
+func (ps *PubSub) stop(ctx context.Context, ids *ttnpb.ApplicationPubSubIdentifiers) error {
+	appUID := unique.ID(ctx, ids.ApplicationIds)
+	psUID := PubSubUID(appUID, ids.PubSubId)
 	if val, ok := ps.integrations.Load(psUID); ok {
 		i := val.(*integration)
 		i.cancel(context.Canceled)

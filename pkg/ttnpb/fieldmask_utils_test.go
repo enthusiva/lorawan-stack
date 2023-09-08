@@ -17,7 +17,7 @@ package ttnpb_test
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	. "go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 )
@@ -29,8 +29,9 @@ func TestTopLevelFields(t *testing.T) {
 		"b",
 		"b.c",
 		"b.c.d",
+		"c.d",
 	}
-	a.So(TopLevelFields(paths), should.Resemble, []string{"a", "b"})
+	a.So(TopLevelFields(paths), should.Resemble, []string{"a", "b", "c"})
 }
 
 func TestBottomLevelFields(t *testing.T) {
@@ -111,8 +112,10 @@ func TestFlattenPaths(t *testing.T) {
 		"a.b.c",
 		"a.b.c.d",
 		"e.f",
+		"x.y",
+		"x.y.z",
 	}
-	a.So(FlattenPaths(paths, []string{"a.b"}), should.Resemble, []string{"a", "a.b", "e.f"})
+	a.So(FlattenPaths(paths, []string{"a.b", "x", "notfound"}), should.Resemble, []string{"a", "a.b", "e.f", "x"})
 }
 
 func TestContainsField(t *testing.T) {
@@ -130,7 +133,9 @@ func TestAllowedFields(t *testing.T) {
 	allowedPaths := []string{
 		"a",
 		"a.b",
+		"c",
 		"c.d",
+		"c.d.e",
 	}
 	a.So(AllowedFields(paths, allowedPaths), should.Resemble, []string{"c.d"})
 }
@@ -208,4 +213,197 @@ func TestAllFields(t *testing.T) {
 		"e",
 		"f",
 	})
+}
+
+func TestIncludeFields(t *testing.T) {
+	t.Parallel()
+
+	a := assertions.New(t)
+	paths := []string{
+		"a.b.c",
+		"b",
+		"c.d",
+		"c.d.e",
+		"c.e",
+		"c.e.f",
+	}
+	a.So(IncludeFields(paths, "c.d"), should.Resemble, []string{"c.d", "c.d.e"})
+	a.So(IncludeFields(paths, "c.d", "c.e.f"), should.Resemble, []string{"c.d", "c.d.e", "c.e.f"})
+	a.So(IncludeFields(paths, "a", "b", "c"), should.Resemble, paths)
+	a.So(IncludeFields(paths, "c.e.g"), should.Resemble, []string{})
+}
+
+func TestFieldsWithoutWrappers(t *testing.T) {
+	t.Parallel()
+
+	a := assertions.New(t)
+	paths := []string{
+		"a",
+		"a.b.value",
+		"a.c.value",
+		"a.c.d",
+	}
+	a.So(FieldsWithoutWrappers(paths), should.Resemble, []string{"a", "a.c.value", "a.c.d"})
+}
+
+func TestFieldMaskPathsSet(t *testing.T) {
+	t.Parallel()
+
+	a := assertions.New(t)
+	testCases := []struct {
+		Name   string
+		Paths  []string
+		Result map[string]struct{}
+	}{
+		{
+			Name:   "Empty",
+			Paths:  []string{},
+			Result: map[string]struct{}{},
+		},
+		{
+			Name:   "Nil",
+			Paths:  nil,
+			Result: map[string]struct{}{},
+		},
+		{
+			Name: "Valid",
+			Paths: []string{
+				"a",
+				"a.b.value",
+				"a.c.value",
+				"a.c.d",
+			},
+			Result: map[string]struct{}{
+				"a":         {},
+				"a.b.value": {},
+				"a.c.value": {},
+				"a.c.d":     {},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
+			actual := FieldMaskPathsSet(tc.Paths)
+			a.So(actual, should.Resemble, tc.Result)
+		})
+	}
+}
+
+func TestFieldMaskPathsSetContainsAll(t *testing.T) {
+	t.Parallel()
+
+	testSet := map[string]struct{}{
+		"a":         {},
+		"a.b.value": {},
+		"a.c.value": {},
+	}
+
+	a := assertions.New(t)
+	testCases := []struct {
+		Name                string
+		Set                 map[string]struct{}
+		Subset              []string
+		ExpectedContainsAll bool
+		ExpectedMissing     string
+	}{
+		{
+			Name:                "Empty",
+			Set:                 map[string]struct{}{},
+			Subset:              []string{},
+			ExpectedContainsAll: true,
+			ExpectedMissing:     "",
+		},
+		{
+			Name:                "EmptySet",
+			Set:                 map[string]struct{}{},
+			Subset:              []string{"a"},
+			ExpectedContainsAll: false,
+			ExpectedMissing:     "a",
+		},
+		{
+			Name:                "EmptySubset",
+			Set:                 testSet,
+			Subset:              []string{},
+			ExpectedContainsAll: true,
+			ExpectedMissing:     "",
+		},
+		{
+			Name:                "Nil",
+			Set:                 nil,
+			Subset:              nil,
+			ExpectedContainsAll: true,
+			ExpectedMissing:     "",
+		},
+		{
+			Name:                "NilSet",
+			Set:                 nil,
+			Subset:              []string{"a"},
+			ExpectedContainsAll: false,
+			ExpectedMissing:     "a",
+		},
+		{
+			Name:                "NilSubset",
+			Set:                 testSet,
+			Subset:              nil,
+			ExpectedContainsAll: true,
+			ExpectedMissing:     "",
+		},
+		{
+			Name: "MissingSingle",
+			Set:  testSet,
+			Subset: []string{
+				"a",
+				"a.b.value",
+				"a.c.value",
+				"a.c.d",
+			},
+			ExpectedContainsAll: false,
+			ExpectedMissing:     "a.c.d",
+		},
+		{
+			Name: "MissingMultiple",
+			Set:  testSet,
+			Subset: []string{
+				"a",
+				"a.b.value",
+				"a.c.value",
+				"a.c.d",
+				"a.c.e",
+			},
+			ExpectedContainsAll: false,
+			ExpectedMissing:     "a.c.d",
+		},
+		{
+			Name: "All",
+			Set:  testSet,
+			Subset: []string{
+				"a",
+				"a.b.value",
+				"a.c.value",
+			},
+			ExpectedContainsAll: true,
+			ExpectedMissing:     "",
+		},
+		{
+			Name: "Subset",
+			Set:  testSet,
+			Subset: []string{
+				"a",
+				"a.b.value",
+			},
+			ExpectedContainsAll: true,
+			ExpectedMissing:     "",
+		},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
+			actualContainsAll, actualMissing := FieldMaskPathsSetContainsAll(tc.Set, tc.Subset...)
+			a.So(actualContainsAll, should.Equal, tc.ExpectedContainsAll)
+			a.So(actualMissing, should.Equal, tc.ExpectedMissing)
+		})
+	}
 }

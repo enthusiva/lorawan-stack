@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+import autoBind from 'auto-bind'
 
 import Marshaler from '../util/marshaler'
 
@@ -27,6 +29,7 @@ class Organizations {
         list: 'organization_ids.organization_id',
         create: 'organization_ids.organization_id',
         update: 'organization_ids.organization_id',
+        delete: 'organization_ids.organization_id',
       },
     })
     this.Collaborators = new Collaborators(api.OrganizationAccess, {
@@ -34,8 +37,10 @@ class Organizations {
         get: 'organization_ids.organization_id',
         list: 'organization_ids.organization_id',
         set: 'organization_ids.organization_id',
+        delete: 'organization_ids.organization_id',
       },
     })
+    autoBind(this)
   }
 
   // Retrieval.
@@ -85,7 +90,14 @@ class Organizations {
 
   // Update.
 
-  async updateById(id, patch, mask = Marshaler.fieldMaskFromPatch(patch)) {
+  async updateById(
+    id,
+    patch,
+    mask = Marshaler.fieldMaskFromPatch(
+      patch,
+      this._api.OrganizationRegistry.UpdateAllowedFieldMaskPaths,
+    ),
+  ) {
     const response = await this._api.OrganizationRegistry.Update(
       {
         routeParams: {
@@ -101,6 +113,16 @@ class Organizations {
     return Marshaler.payloadSingleResponse(response)
   }
 
+  async restoreById(id) {
+    const response = await this._api.OrganizationRegistry.Restore({
+      routeParams: {
+        organization_id: id,
+      },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
   // Deletion.
 
   async deleteById(organizationId) {
@@ -110,6 +132,16 @@ class Organizations {
 
     return Marshaler.payloadSingleResponse(response)
   }
+
+  async purgeById(organizationId) {
+    const response = await this._api.OrganizationRegistry.Purge({
+      routeParams: { organization_id: organizationId },
+    })
+
+    return Marshaler.payloadSingleResponse(response)
+  }
+
+  // Miscellaneous.
 
   async getRightsById(organizationId) {
     const result = await this._api.OrganizationAccess.ListRights({
@@ -121,11 +153,12 @@ class Organizations {
 
   // Events stream.
 
-  async openStream(identifiers, tail, after) {
+  async openStream(identifiers, names, tail, after) {
     const payload = {
       identifiers: identifiers.map(id => ({
         organization_ids: { organization_id: id },
       })),
+      names,
       tail,
       after,
     }

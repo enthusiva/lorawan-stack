@@ -182,6 +182,7 @@ var UpdateUserPasswordRequestFieldPathsTopLevel = []string{
 }
 var ListUserAPIKeysRequestFieldPathsNested = []string{
 	"limit",
+	"order",
 	"page",
 	"user_ids",
 	"user_ids.email",
@@ -190,6 +191,7 @@ var ListUserAPIKeysRequestFieldPathsNested = []string{
 
 var ListUserAPIKeysRequestFieldPathsTopLevel = []string{
 	"limit",
+	"order",
 	"page",
 	"user_ids",
 }
@@ -205,6 +207,7 @@ var GetUserAPIKeyRequestFieldPathsTopLevel = []string{
 	"user_ids",
 }
 var CreateUserAPIKeyRequestFieldPathsNested = []string{
+	"expires_at",
 	"name",
 	"rights",
 	"user_ids",
@@ -213,6 +216,7 @@ var CreateUserAPIKeyRequestFieldPathsNested = []string{
 }
 
 var CreateUserAPIKeyRequestFieldPathsTopLevel = []string{
+	"expires_at",
 	"name",
 	"rights",
 	"user_ids",
@@ -220,11 +224,13 @@ var CreateUserAPIKeyRequestFieldPathsTopLevel = []string{
 var UpdateUserAPIKeyRequestFieldPathsNested = []string{
 	"api_key",
 	"api_key.created_at",
+	"api_key.expires_at",
 	"api_key.id",
 	"api_key.key",
 	"api_key.name",
 	"api_key.rights",
 	"api_key.updated_at",
+	"field_mask",
 	"user_ids",
 	"user_ids.email",
 	"user_ids.user_id",
@@ -232,6 +238,18 @@ var UpdateUserAPIKeyRequestFieldPathsNested = []string{
 
 var UpdateUserAPIKeyRequestFieldPathsTopLevel = []string{
 	"api_key",
+	"field_mask",
+	"user_ids",
+}
+var DeleteUserAPIKeyRequestFieldPathsNested = []string{
+	"key_id",
+	"user_ids",
+	"user_ids.email",
+	"user_ids.user_id",
+}
+
+var DeleteUserAPIKeyRequestFieldPathsTopLevel = []string{
+	"key_id",
 	"user_ids",
 }
 var InvitationFieldPathsNested = []string{

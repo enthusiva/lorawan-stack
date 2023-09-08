@@ -1,4 +1,4 @@
-// Copyright © 2020 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
 
 import React, { useCallback, useState } from 'react'
 import { defineMessages } from 'react-intl'
-import { push } from 'connected-react-router'
-import { useDispatch } from 'react-redux'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import tts from '@account/api/tts'
 
@@ -23,6 +22,7 @@ import Button from '@ttn-lw/components/button'
 import Form from '@ttn-lw/components/form'
 import Input from '@ttn-lw/components/input'
 import SubmitButton from '@ttn-lw/components/submit-button'
+import ButtonGroup from '@ttn-lw/components/button/group'
 
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
 import Message from '@ttn-lw/lib/components/message'
@@ -31,9 +31,8 @@ import style from '@account/views/front/front.styl'
 
 import Yup from '@ttn-lw/lib/yup'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import { id as userRegexp } from '@ttn-lw/lib/regexp'
+import { userId as userIdRegexp } from '@ttn-lw/lib/regexp'
 import { selectApplicationSiteName } from '@ttn-lw/lib/selectors/env'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
 const m = defineMessages({
   forgotPassword: 'Forgot password',
@@ -46,9 +45,9 @@ const m = defineMessages({
 
 const validationSchema = Yup.object().shape({
   user_id: Yup.string()
-    .min(3, Yup.passValues(sharedMessages.validateTooShort))
+    .min(2, Yup.passValues(sharedMessages.validateTooShort))
     .max(36, Yup.passValues(sharedMessages.validateTooLong))
-    .matches(userRegexp, Yup.passValues(sharedMessages.validateIdFormat))
+    .matches(userIdRegexp, Yup.passValues(sharedMessages.validateIdFormat))
     .required(sharedMessages.validateRequired),
 })
 
@@ -56,26 +55,27 @@ const initialValues = { user_id: '' }
 
 const siteName = selectApplicationSiteName()
 
-const ForgotPassword = ({ location }) => {
-  const dispatch = useDispatch()
+const ForgotPassword = () => {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [error, setError] = useState(undefined)
 
   const handleSubmit = useCallback(
-    async (values, { resetForm, setSubmitting }) => {
+    async (values, { setSubmitting }) => {
       try {
         setError(undefined)
         await tts.Users.createTemporaryPassword(values.user_id)
-        dispatch(
-          push(`/login${location.search}`, {
+        navigate(`/login?${searchParams.toString()}`, {
+          state: {
             info: m.passwordRequested,
-          }),
-        )
+          },
+        })
       } catch (error) {
         setSubmitting(false)
         setError(error)
       }
     },
-    [dispatch, location],
+    [navigate, searchParams],
   )
 
   return (
@@ -101,20 +101,17 @@ const ForgotPassword = ({ location }) => {
           autoFocus
           required
         />
-        <Form.Submit component={SubmitButton} message={m.send} className={style.submitButton} />
-        <Button.Link
-          naked
-          secondary
-          message={sharedMessages.cancel}
-          to={`/login${location.search}`}
-        />
+        <ButtonGroup>
+          <Form.Submit component={SubmitButton} message={m.send} className={style.submitButton} />
+          <Button.Link
+            naked
+            message={sharedMessages.cancel}
+            to={`/login?${searchParams.toString()}`}
+          />
+        </ButtonGroup>
       </Form>
     </div>
   )
-}
-
-ForgotPassword.propTypes = {
-  location: PropTypes.location.isRequired,
 }
 
 export default ForgotPassword

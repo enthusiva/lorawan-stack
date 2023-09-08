@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2023 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,67 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react'
+import React, { useCallback } from 'react'
 import { Container, Row, Col } from 'react-grid-system'
-import bind from 'autobind-decorator'
-
-import PAGE_SIZES from '@ttn-lw/constants/page-sizes'
+import { useParams } from 'react-router-dom'
+import { createSelector } from 'reselect'
 
 import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
 
 import ApiKeysTable from '@console/containers/api-keys-table'
 
 import sharedMessages from '@ttn-lw/lib/shared-messages'
-import PropTypes from '@ttn-lw/lib/prop-types'
 
 import { getApiKeysList } from '@console/store/actions/api-keys'
 
-import {
-  selectApiKeys,
-  selectApiKeysTotalCount,
-  selectApiKeysFetching,
-  selectApiKeysError,
-} from '@console/store/selectors/api-keys'
+import { selectApiKeys, selectApiKeysTotalCount } from '@console/store/selectors/api-keys'
 
-export default class ApplicationApiKeys extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+const ApplicationApiKeysList = () => {
+  const { appId } = useParams()
 
-  constructor(props) {
-    super(props)
+  const getApiKeys = React.useCallback(
+    filters => getApiKeysList('application', appId, filters),
+    [appId],
+  )
 
-    const { appId } = props.match.params
-    this.getApiKeysList = filters => getApiKeysList('application', appId, filters)
-  }
+  const baseDataSelectors = createSelector(
+    [selectApiKeys, selectApiKeysTotalCount],
+    (keys, totalCount) => ({
+      keys,
+      totalCount,
+    }),
+  )
 
-  @bind
-  baseDataSelector(state) {
-    const { appId } = this.props.match.params
+  const baseDataSelector = useCallback(
+    state => baseDataSelectors(state, appId),
+    [appId, baseDataSelectors],
+  )
 
-    const id = { id: appId }
-    return {
-      keys: selectApiKeys(state, id),
-      totalCount: selectApiKeysTotalCount(state, id),
-      fetching: selectApiKeysFetching(state),
-      error: selectApiKeysError(state),
-    }
-  }
-
-  render() {
-    return (
-      <Container>
-        <Row>
-          <IntlHelmet title={sharedMessages.apiKeys} />
-          <Col>
-            <ApiKeysTable
-              pageSize={PAGE_SIZES.REGULAR}
-              baseDataSelector={this.baseDataSelector}
-              getItemsAction={this.getApiKeysList}
-            />
-          </Col>
-        </Row>
-      </Container>
-    )
-  }
+  return (
+    <Container>
+      <Row>
+        <IntlHelmet title={sharedMessages.apiKeys} />
+        <Col>
+          <ApiKeysTable baseDataSelector={baseDataSelector} getItemsAction={getApiKeys} />
+        </Col>
+      </Row>
+    </Container>
+  )
 }
+
+export default ApplicationApiKeysList

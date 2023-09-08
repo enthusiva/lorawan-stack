@@ -17,14 +17,16 @@ package remote_test
 import (
 	"testing"
 
-	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/devicerepository/store"
 	"go.thethings.network/lorawan-stack/v3/pkg/devicerepository/store/remote"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
+	"go.thethings.network/lorawan-stack/v3/pkg/goproto"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestRemoteStore(t *testing.T) {
@@ -43,7 +45,7 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Brands, should.Resemble, []*ttnpb.EndDeviceBrand{
 				{
-					BrandID: "foo-vendor",
+					BrandId: "foo-vendor",
 					Name:    "Foo Vendor",
 				},
 			})
@@ -61,7 +63,7 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Brands, should.Resemble, []*ttnpb.EndDeviceBrand{
 				{
-					BrandID: "full-vendor",
+					BrandId: "full-vendor",
 					Name:    "Full Vendor",
 				},
 			})
@@ -74,14 +76,14 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Brands, should.Resemble, []*ttnpb.EndDeviceBrand{
 				{
-					BrandID:              "foo-vendor",
+					BrandId:              "foo-vendor",
 					Name:                 "Foo Vendor",
-					LoRaAllianceVendorID: 42,
+					LoraAllianceVendorId: 42,
 				},
 				{
-					BrandID:                       "full-vendor",
+					BrandId:                       "full-vendor",
 					Name:                          "Full Vendor",
-					LoRaAllianceVendorID:          44,
+					LoraAllianceVendorId:          44,
 					Email:                         "mail@example.com",
 					Website:                       "example.org",
 					PrivateEnterpriseNumber:       42,
@@ -104,18 +106,18 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Models, should.Resemble, []*ttnpb.EndDeviceModel{
 				{
-					BrandID: "foo-vendor",
-					ModelID: "dev1",
+					BrandId: "foo-vendor",
+					ModelId: "dev1",
 					Name:    "Device 1",
 				},
 				{
-					BrandID: "foo-vendor",
-					ModelID: "dev2",
+					BrandId: "foo-vendor",
+					ModelId: "dev2",
 					Name:    "Device 2",
 				},
 				{
-					BrandID: "full-vendor",
-					ModelID: "full-device",
+					BrandId: "full-vendor",
+					ModelId: "full-device",
 					Name:    "Full Device",
 				},
 			})
@@ -134,8 +136,8 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Models, should.Resemble, []*ttnpb.EndDeviceModel{
 				{
-					BrandID: "foo-vendor",
-					ModelID: "dev1",
+					BrandId: "foo-vendor",
+					ModelId: "dev1",
 					Name:    "Device 1",
 				},
 			})
@@ -155,8 +157,8 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Models, should.Resemble, []*ttnpb.EndDeviceModel{
 				{
-					BrandID: "foo-vendor",
-					ModelID: "dev2",
+					BrandId: "foo-vendor",
+					ModelId: "dev2",
 					Name:    "Device 2",
 				},
 			})
@@ -170,8 +172,8 @@ func TestRemoteStore(t *testing.T) {
 			a.So(err, should.BeNil)
 			a.So(list.Models, should.Resemble, []*ttnpb.EndDeviceModel{
 				{
-					BrandID:     "foo-vendor",
-					ModelID:     "dev1",
+					BrandId:     "foo-vendor",
+					ModelId:     "dev1",
 					Name:        "Device 1",
 					Description: "My Description",
 					HardwareVersions: []*ttnpb.EndDeviceModel_HardwareVersion{
@@ -187,21 +189,21 @@ func TestRemoteStore(t *testing.T) {
 							SupportedHardwareVersions: []string{"1.0"},
 							Profiles: map[string]*ttnpb.EndDeviceModel_FirmwareVersion_Profile{
 								"EU_863_870": {
-									ProfileID:        "profile1",
-									LoRaWANCertified: true,
+									ProfileId:        "profile1",
+									LorawanCertified: true,
 								},
 								"US_902_928": {
-									CodecID:          "foo-codec",
-									ProfileID:        "profile2",
-									LoRaWANCertified: true,
+									CodecId:          "foo-codec",
+									ProfileId:        "profile2",
+									LorawanCertified: true,
 								},
 							},
 						},
 					},
 				},
 				{
-					BrandID:     "foo-vendor",
-					ModelID:     "dev2",
+					BrandId:     "foo-vendor",
+					ModelId:     "dev2",
 					Name:        "Device 2",
 					Description: "My Description 2",
 					HardwareVersions: []*ttnpb.EndDeviceModel_HardwareVersion{
@@ -217,9 +219,9 @@ func TestRemoteStore(t *testing.T) {
 							SupportedHardwareVersions: []string{"2.0"},
 							Profiles: map[string]*ttnpb.EndDeviceModel_FirmwareVersion_Profile{
 								"EU_433": {
-									CodecID:          "foo-codec",
-									ProfileID:        "profile2",
-									LoRaWANCertified: true,
+									CodecId:          "foo-codec",
+									ProfileId:        "profile2",
+									LorawanCertified: true,
 								},
 							},
 						},
@@ -237,8 +239,8 @@ func TestRemoteStore(t *testing.T) {
 			})
 			a.So(err, should.BeNil)
 			a.So(list.Models[0], should.Resemble, &ttnpb.EndDeviceModel{
-				BrandID:     "full-vendor",
-				ModelID:     "full-device",
+				BrandId:     "full-vendor",
+				ModelId:     "full-device",
 				Name:        "Full Device",
 				Description: "A description",
 				HardwareVersions: []*ttnpb.EndDeviceModel_HardwareVersion{
@@ -259,41 +261,42 @@ func TestRemoteStore(t *testing.T) {
 						SupportedHardwareVersions: []string{"0.1", "0.2"},
 						Profiles: map[string]*ttnpb.EndDeviceModel_FirmwareVersion_Profile{
 							"EU_863_870": {
-								CodecID:   "",
-								ProfileID: "full-profile2",
+								VendorId:  "module-maker",
+								ProfileId: "module-profile",
+								CodecId:   "",
 							},
 							"US_902_928": {
-								CodecID:   "codec",
-								ProfileID: "full-profile",
+								ProfileId: "full-profile",
+								CodecId:   "codec",
 							},
 						},
 					},
 				},
 				Sensors: []string{"temperature", "gas"},
 				Dimensions: &ttnpb.EndDeviceModel_Dimensions{
-					Width:    &pbtypes.FloatValue{Value: 1},
-					Height:   &pbtypes.FloatValue{Value: 2},
-					Diameter: &pbtypes.FloatValue{Value: 3},
-					Length:   &pbtypes.FloatValue{Value: 4},
+					Width:    &wrapperspb.FloatValue{Value: 1},
+					Height:   &wrapperspb.FloatValue{Value: 2},
+					Diameter: &wrapperspb.FloatValue{Value: 3},
+					Length:   &wrapperspb.FloatValue{Value: 4},
 				},
-				Weight: &pbtypes.FloatValue{Value: 5},
+				Weight: &wrapperspb.FloatValue{Value: 5},
 				Battery: &ttnpb.EndDeviceModel_Battery{
-					Replaceable: &pbtypes.BoolValue{Value: true},
+					Replaceable: &wrapperspb.BoolValue{Value: true},
 					Type:        "AAA",
 				},
 				OperatingConditions: &ttnpb.EndDeviceModel_OperatingConditions{
 					Temperature: &ttnpb.EndDeviceModel_OperatingConditions_Limits{
-						Min: &pbtypes.FloatValue{Value: 1},
-						Max: &pbtypes.FloatValue{Value: 2},
+						Min: &wrapperspb.FloatValue{Value: 1},
+						Max: &wrapperspb.FloatValue{Value: 2},
 					},
 					RelativeHumidity: &ttnpb.EndDeviceModel_OperatingConditions_Limits{
-						Min: &pbtypes.FloatValue{Value: 3},
-						Max: &pbtypes.FloatValue{Value: 4},
+						Min: &wrapperspb.FloatValue{Value: 3},
+						Max: &wrapperspb.FloatValue{Value: 4},
 					},
 				},
-				IPCode:          "IP67",
-				KeyProvisioning: []ttnpb.KeyProvisioning{ttnpb.KEY_PROVISIONING_CUSTOM},
-				KeySecurity:     ttnpb.KEY_SECURITY_READ_PROTECTED,
+				IpCode:          "IP67",
+				KeyProvisioning: []ttnpb.KeyProvisioning{ttnpb.KeyProvisioning_KEY_PROVISIONING_CUSTOM},
+				KeySecurity:     ttnpb.KeySecurity_KEY_SECURITY_READ_PROTECTED,
 				Photos: &ttnpb.EndDeviceModel_Photos{
 					Main:  "a.jpg",
 					Other: []string{"b.jpg", "c.jpg"},
@@ -302,18 +305,18 @@ func TestRemoteStore(t *testing.T) {
 					Main:  "a.mp4",
 					Other: []string{"b.mp4", "https://youtube.com/watch?v=c.mp4"},
 				},
-				ProductURL:   "https://product.vendor.io",
-				DatasheetURL: "https://production.vendor.io/datasheet.pdf",
+				ProductUrl:   "https://product.vendor.io",
+				DatasheetUrl: "https://production.vendor.io/datasheet.pdf",
 				Resellers: []*ttnpb.EndDeviceModel_Reseller{
 					{
 						Name:   "Reseller 1",
 						Region: []string{"European Union"},
-						URL:    "https://example.com/eu",
+						Url:    "https://example.com/eu",
 					},
 					{
 						Name:   "Reseller 2",
 						Region: []string{"United States", "Canada"},
-						URL:    "https://example.com/na",
+						Url:    "https://example.com/na",
 					},
 				},
 				Compliances: &ttnpb.EndDeviceModel_Compliances{
@@ -349,116 +352,269 @@ func TestRemoteStore(t *testing.T) {
 		})
 	})
 
+	t.Run("TestGetTemplate", func(t *testing.T) {
+		t.Run("ByEndDeviceVersionIdentifiers", func(t *testing.T) {
+			template, err := s.GetTemplate(&ttnpb.GetTemplateRequest{
+				VersionIds: &ttnpb.EndDeviceVersionIdentifiers{
+					BrandId:         "foo-vendor",
+					ModelId:         "dev1",
+					FirmwareVersion: "1.0",
+					BandId:          "EU_863_870",
+				},
+			}, nil)
+			a.So(err, should.BeNil)
+			a.So(template, should.Resemble, &ttnpb.EndDeviceTemplate{
+				EndDevice: &ttnpb.EndDevice{
+					VersionIds: &ttnpb.EndDeviceVersionIdentifiers{
+						BrandId:         "foo-vendor",
+						ModelId:         "dev1",
+						FirmwareVersion: "1.0",
+						BandId:          "EU_863_870",
+					},
+					LorawanPhyVersion: ttnpb.PHYVersion_PHY_V1_0_3_REV_A,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					SupportsJoin:      true,
+					MacSettings: &ttnpb.MACSettings{
+						Supports_32BitFCnt: &ttnpb.BoolValue{
+							Value: true,
+						},
+					},
+				},
+				FieldMask: ttnpb.FieldMask(
+					"version_ids",
+					"supports_join",
+					"supports_class_b",
+					"supports_class_c",
+					"lorawan_version",
+					"lorawan_phy_version",
+					"mac_settings.supports_32_bit_f_cnt",
+				),
+			})
+		})
+
+		t.Run("ByProfile", func(t *testing.T) {
+			template, err := s.GetTemplate(&ttnpb.GetTemplateRequest{
+				VersionIds: &ttnpb.EndDeviceVersionIdentifiers{
+					BrandId: "foo-vendor",
+				},
+				EndDeviceProfileIds: &ttnpb.GetTemplateRequest_EndDeviceProfileIdentifiers{
+					VendorId:        42,
+					VendorProfileId: 0,
+				},
+			}, &store.EndDeviceProfile{
+				VendorProfileID:           0,
+				RegionalParametersVersion: "RP001-1.0.3-RevA",
+				MACVersion:                ttnpb.MACVersion_MAC_V1_0_3,
+				SupportsJoin:              true,
+				Supports32BitFCnt:         true,
+			})
+			a.So(err, should.BeNil)
+			a.So(template, should.Resemble, &ttnpb.EndDeviceTemplate{
+				EndDevice: &ttnpb.EndDevice{
+					VersionIds: &ttnpb.EndDeviceVersionIdentifiers{
+						BrandId: "foo-vendor",
+					},
+					LorawanPhyVersion: ttnpb.PHYVersion_PHY_V1_0_3_REV_A,
+					LorawanVersion:    ttnpb.MACVersion_MAC_V1_0_3,
+					SupportsJoin:      true,
+					MacSettings: &ttnpb.MACSettings{
+						Supports_32BitFCnt: &ttnpb.BoolValue{
+							Value: true,
+						},
+					},
+				},
+				FieldMask: ttnpb.FieldMask(
+					"version_ids",
+					"supports_join",
+					"supports_class_b",
+					"supports_class_c",
+					"lorawan_version",
+					"lorawan_phy_version",
+					"mac_settings.supports_32_bit_f_cnt",
+				),
+			})
+		})
+	})
+
 	t.Run("TestGetCodecs", func(t *testing.T) {
 		t.Run("Missing", func(t *testing.T) {
 			a := assertions.New(t)
 
-			for _, ids := range []ttnpb.EndDeviceVersionIdentifiers{
+			for _, ids := range []*ttnpb.EndDeviceVersionIdentifiers{
 				{
-					BrandID: "unknown-vendor",
+					BrandId: "unknown-vendor",
 				},
 				{
-					BrandID: "foo-vendor",
-					ModelID: "unknown-model",
+					BrandId: "foo-vendor",
+					ModelId: "unknown-model",
 				},
 				{
-					BrandID:         "foo-vendor",
-					ModelID:         "dev1",
+					BrandId:         "foo-vendor",
+					ModelId:         "dev1",
 					FirmwareVersion: "unknown-version",
 				},
 				{
-					BrandID:         "foo-vendor",
-					ModelID:         "dev1",
+					BrandId:         "foo-vendor",
+					ModelId:         "dev1",
 					FirmwareVersion: "1.0",
-					BandID:          "unknown-band",
+					BandId:          "unknown-band",
 				},
 			} {
-				codec, err := s.GetDownlinkDecoder(&ids)
+				codec, err := s.GetDownlinkDecoder(&ttnpb.GetPayloadFormatterRequest{VersionIds: ids})
 				a.So(errors.IsNotFound(err), should.BeTrue)
-				a.So(codec, should.Equal, nil)
+				a.So(codec, should.BeNil)
 			}
 		})
 		for _, tc := range []struct {
 			name  string
-			f     func(*ttnpb.EndDeviceVersionIdentifiers) (*ttnpb.MessagePayloadFormatter, error)
-			codec string
+			f     func(store.GetCodecRequest) (any, error)
+			codec any
 		}{
 			{
-				name:  "UplinkDecoder",
-				f:     s.GetUplinkDecoder,
-				codec: "// uplink decoder\n",
+				name: "UplinkDecoder",
+				f:    func(req store.GetCodecRequest) (any, error) { return s.GetUplinkDecoder(req) },
+				codec: &ttnpb.MessagePayloadDecoder{
+					Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
+					FormatterParameter: "// uplink decoder\n",
+				},
 			},
 			{
-				name:  "DownlinkDecoder",
-				f:     s.GetDownlinkDecoder,
-				codec: "// downlink decoder\n",
+				name: "DownlinkDecoder",
+				f:    func(req store.GetCodecRequest) (any, error) { return s.GetDownlinkDecoder(req) },
+				codec: &ttnpb.MessagePayloadDecoder{
+					Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
+					FormatterParameter: "// downlink decoder\n",
+				},
 			},
 			{
-				name:  "DownlinkEncoder",
-				f:     s.GetDownlinkEncoder,
-				codec: "// downlink encoder\n",
+				name: "DownlinkEncoder",
+				f:    func(req store.GetCodecRequest) (any, error) { return s.GetDownlinkEncoder(req) },
+				codec: &ttnpb.MessagePayloadEncoder{
+					Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
+					FormatterParameter: "// downlink encoder\n",
+				},
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				a := assertions.New(t)
 
 				versionIDs := &ttnpb.EndDeviceVersionIdentifiers{
-					BrandID:         "foo-vendor",
-					ModelID:         "dev2",
+					BrandId:         "foo-vendor",
+					ModelId:         "dev2",
 					FirmwareVersion: "1.1",
-					BandID:          "EU_433",
+					BandId:          "EU_433",
 				}
-				codec, err := tc.f(versionIDs)
+				codec, err := tc.f(&ttnpb.GetPayloadFormatterRequest{VersionIds: versionIDs})
 				a.So(err, should.BeNil)
-				a.So(codec, should.Resemble, &ttnpb.MessagePayloadFormatter{
-					Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
-					FormatterParameter: tc.codec,
-				})
+				a.So(codec, should.Resemble, tc.codec)
 			})
 		}
-	})
 
-	t.Run("GetTemplate", func(t *testing.T) {
-		t.Run("Missing", func(t *testing.T) {
-			a := assertions.New(t)
-
-			for _, ids := range []ttnpb.EndDeviceVersionIdentifiers{
+		t.Run("Examples", func(t *testing.T) {
+			for _, tc := range []struct {
+				name  string
+				f     func(store.GetCodecRequest) (any, error)
+				codec any
+			}{
 				{
-					BrandID: "unknown-vendor",
+					name: "UplinkDecoder",
+					f:    func(req store.GetCodecRequest) (any, error) { return s.GetUplinkDecoder(req) },
+					codec: &ttnpb.MessagePayloadDecoder{
+						Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
+						FormatterParameter: "// uplink decoder\n",
+						Examples: []*ttnpb.MessagePayloadDecoder_Example{{
+							Description: "dummy example",
+							Input: &ttnpb.EncodedMessagePayload{
+								FPort:      10,
+								FrmPayload: []byte{1, 1, 100},
+							},
+							Output: &ttnpb.DecodedMessagePayload{
+								Data: mustStruct(map[string]any{
+									"type":  "BATTERY_STATUS",
+									"value": 100,
+									"nested": map[string]any{
+										"key":  "value",
+										"list": []int{1, 2, 3},
+									},
+								}),
+								Warnings: []string{"warn1"},
+								Errors:   []string{"err1"},
+							},
+						}},
+					},
 				},
 				{
-					BrandID: "foo-vendor",
-					ModelID: "unknown-model",
+					name: "DownlinkDecoder",
+					f:    func(req store.GetCodecRequest) (any, error) { return s.GetDownlinkDecoder(req) },
+					codec: &ttnpb.MessagePayloadDecoder{
+						Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
+						FormatterParameter: "// downlink decoder\n",
+						Examples: []*ttnpb.MessagePayloadDecoder_Example{{
+							Description: "downlink decode example",
+							Input: &ttnpb.EncodedMessagePayload{
+								FPort:      20,
+								FrmPayload: []byte{1, 5},
+							},
+							Output: &ttnpb.DecodedMessagePayload{
+								Data: mustStruct(map[string]any{
+									"action": "DIM",
+									"value":  5,
+								}),
+								Warnings: []string{"warn1"},
+								Errors:   []string{"err1"},
+							},
+						}},
+					},
 				},
 				{
-					BrandID:         "foo-vendor",
-					ModelID:         "dev1",
-					FirmwareVersion: "unknown-version",
-				},
-				{
-					BrandID:         "foo-vendor",
-					ModelID:         "dev1",
-					FirmwareVersion: "1.0",
-					BandID:          "unknown-band",
+					name: "DownlinkEncoder",
+					f:    func(req store.GetCodecRequest) (any, error) { return s.GetDownlinkEncoder(req) },
+					codec: &ttnpb.MessagePayloadEncoder{
+						Formatter:          ttnpb.PayloadFormatter_FORMATTER_JAVASCRIPT,
+						FormatterParameter: "// downlink encoder\n",
+						Examples: []*ttnpb.MessagePayloadEncoder_Example{{
+							Description: "downlink encode example",
+							Input: &ttnpb.DecodedMessagePayload{
+								Data: mustStruct(map[string]any{
+									"action": "DIM",
+									"value":  5,
+								}),
+							},
+							Output: &ttnpb.EncodedMessagePayload{
+								FPort:      20,
+								FrmPayload: []byte{1, 5},
+								Warnings:   []string{"warn1"},
+								Errors:     []string{"err1"},
+							},
+						}},
+					},
 				},
 			} {
-				tmpl, err := s.GetTemplate(&ids)
-				a.So(errors.IsNotFound(err), should.BeTrue)
-				a.So(tmpl, should.BeNil)
+				t.Run(tc.name, func(t *testing.T) {
+					a := assertions.New(t)
+
+					versionIDs := &ttnpb.EndDeviceVersionIdentifiers{
+						BrandId:         "foo-vendor",
+						ModelId:         "dev2",
+						FirmwareVersion: "1.1",
+						BandId:          "EU_433",
+					}
+					codec, err := tc.f(&ttnpb.GetPayloadFormatterRequest{
+						VersionIds: versionIDs,
+						FieldMask:  ttnpb.FieldMask("examples"),
+					})
+					a.So(err, should.BeNil)
+					a.So(codec, should.Resemble, tc.codec)
+				})
 			}
 		})
-
-		t.Run("Success", func(t *testing.T) {
-			a := assertions.New(t)
-			tmpl, err := s.GetTemplate(&ttnpb.EndDeviceVersionIdentifiers{
-				BrandID:         "foo-vendor",
-				ModelID:         "dev2",
-				FirmwareVersion: "1.1",
-				HardwareVersion: "2.0",
-				BandID:          "EU_433",
-			})
-			a.So(err, should.BeNil)
-			a.So(tmpl, should.NotBeNil)
-		})
 	})
+}
+
+func mustStruct(d map[string]any) *structpb.Struct {
+	v, err := goproto.Struct(d)
+	if err != nil {
+		panic(err)
+	}
+	return v
 }

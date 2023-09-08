@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package cups implements the CUPS protocol.
 package cups
 
 import (
@@ -25,9 +26,9 @@ import (
 
 // ServerConfig is the configuration of the CUPS server.
 type ServerConfig struct {
-	ExplicitEnable  bool `name:"require-explicit-enable" description:"Require gateways to explicitly enable CUPS. This option is ineffective"`
+	ExplicitEnable  bool `name:"require-explicit-enable" description:"Require gateways to explicitly enable CUPS. This option is ineffective"` //nolint:lll
 	RegisterUnknown struct {
-		Type   string `name:"account-type" description:"Type of account to register unknown gateways to (user|organization)"`
+		Type   string `name:"account-type" description:"Type of account to register unknown gateways to (user|organization)"` //nolint:lll
 		ID     string `name:"id" description:"ID of the account to register unknown gateways to"`
 		APIKey string `name:"api-key" description:"API Key to use for unknown gateway registration"`
 	} `name:"owner-for-unknown"`
@@ -46,9 +47,13 @@ func (conf ServerConfig) NewServer(c *component.Component, customOpts ...Option)
 	var registerUnknownTo *ttnpb.OrganizationOrUserIdentifiers
 	switch conf.RegisterUnknown.Type {
 	case "user":
-		registerUnknownTo = ttnpb.UserIdentifiers{UserID: conf.RegisterUnknown.ID}.OrganizationOrUserIdentifiers()
+		registerUnknownTo = (&ttnpb.UserIdentifiers{
+			UserId: conf.RegisterUnknown.ID,
+		}).GetOrganizationOrUserIdentifiers()
 	case "organization":
-		registerUnknownTo = ttnpb.OrganizationIdentifiers{OrganizationID: conf.RegisterUnknown.ID}.OrganizationOrUserIdentifiers()
+		registerUnknownTo = (&ttnpb.OrganizationIdentifiers{
+			OrganizationId: conf.RegisterUnknown.ID,
+		}).GetOrganizationOrUserIdentifiers()
 	}
 	if registerUnknownTo != nil && conf.RegisterUnknown.APIKey != "" {
 		opts = append(opts,
@@ -61,7 +66,9 @@ func (conf ServerConfig) NewServer(c *component.Component, customOpts ...Option)
 			}),
 		)
 	}
-	if tlsConfig, err := c.GetTLSServerConfig(c.Context()); err == nil {
+	// The Server.tlsConfig is used when dialing a CUPS or an LNS server to query its certificate chain.
+	// When dialing servers with self-signed certs, the Root CA of target server must either be trusted by the system or added explicitly via the `--tls.root-ca` option.
+	if tlsConfig, err := c.GetTLSClientConfig(c.Context()); err == nil {
 		opts = append(opts, WithTLSConfig(tlsConfig))
 	}
 	s := NewServer(c, append(opts, customOpts...)...)

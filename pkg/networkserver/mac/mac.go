@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2022 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,10 +50,15 @@ func enqueueMACCommand(cid ttnpb.MACCommandIdentifier, maxDownLen, maxUpLen uint
 
 // handleMACResponse searches for first command in cmds with CID equal to cid and calls f with found value as argument.
 // handleMACResponse returns cmds with first MAC command with CID equal to cid removed or
-// cmds passed and error if f returned non-nil error or if command with CID cid is not found in cmds.
-func handleMACResponse(cid ttnpb.MACCommandIdentifier, f func(*ttnpb.MACCommand) error, cmds ...*ttnpb.MACCommand) ([]*ttnpb.MACCommand, error) {
+// cmds passed and error if f returned non-nil error or if command with CID cid is not found in cmds
+// and allowMissing is false.
+func handleMACResponse(
+	cid ttnpb.MACCommandIdentifier,
+	allowMissing bool,
+	f func(*ttnpb.MACCommand) error, cmds ...*ttnpb.MACCommand,
+) ([]*ttnpb.MACCommand, error) {
 	for i, cmd := range cmds {
-		if cmd.CID != cid {
+		if cmd.Cid != cid {
 			continue
 		}
 		if err := f(cmd); err != nil {
@@ -61,13 +66,22 @@ func handleMACResponse(cid ttnpb.MACCommandIdentifier, f func(*ttnpb.MACCommand)
 		}
 		return append(cmds[:i], cmds[i+1:]...), nil
 	}
-	return cmds, ErrRequestNotFound.New()
+	if allowMissing {
+		return cmds, nil
+	}
+	return cmds, ErrRequestNotFound.WithAttributes("cid", cid)
 }
 
 // handleMACResponse searches for first MAC command block in cmds with CID equal to cid and calls f for each found value as argument.
 // handleMACResponse returns cmds with first MAC command block with CID equal to cid removed or
-// cmds passed and error if f returned non-nil error or if command with CID cid is not found in cmds.
-func handleMACResponseBlock(cid ttnpb.MACCommandIdentifier, f func(*ttnpb.MACCommand) error, cmds ...*ttnpb.MACCommand) ([]*ttnpb.MACCommand, error) {
+// cmds passed and error if f returned non-nil error or if command with CID cid is not found in cmds
+// and allowMissing is false.
+func handleMACResponseBlock(
+	cid ttnpb.MACCommandIdentifier,
+	allowMissing bool,
+	f func(*ttnpb.MACCommand) error,
+	cmds ...*ttnpb.MACCommand,
+) ([]*ttnpb.MACCommand, error) {
 	first := -1
 	last := -1
 
@@ -76,22 +90,27 @@ outer:
 		last = i
 
 		switch {
-		case first >= 0 && cmd.CID != cid:
+		case first >= 0 && cmd.Cid != cid:
+			last--
 			break outer
-		case first < 0 && cmd.CID != cid:
+		case first < 0 && cmd.Cid != cid:
 			continue
 		case first < 0:
 			first = i
 		}
+
 		if err := f(cmd); err != nil {
 			return cmds, err
 		}
 	}
-
-	if first < 0 {
-		return cmds, ErrRequestNotFound.New()
+	switch {
+	case first < 0 && allowMissing:
+		return cmds, nil
+	case first < 0 && !allowMissing:
+		return cmds, ErrRequestNotFound.WithAttributes("cid", cid)
+	default:
+		return append(cmds[:first], cmds[last+1:]...), nil
 	}
-	return append(cmds[:first], cmds[last+1:]...), nil
 }
 
 func searchDataRateIndex(v ttnpb.DataRateIndex, vs ...ttnpb.DataRateIndex) int {
@@ -107,22 +126,22 @@ func searchUint64(v uint64, vs ...uint64) int {
 }
 
 func deviceRejectedADRDataRateIndex(dev *ttnpb.EndDevice, idx ttnpb.DataRateIndex) bool {
-	i := searchDataRateIndex(idx, dev.MACState.RejectedADRDataRateIndexes...)
-	return i < len(dev.MACState.RejectedADRDataRateIndexes) && dev.MACState.RejectedADRDataRateIndexes[i] == idx
+	i := searchDataRateIndex(idx, dev.MacState.RejectedAdrDataRateIndexes...)
+	return i < len(dev.MacState.RejectedAdrDataRateIndexes) && dev.MacState.RejectedAdrDataRateIndexes[i] == idx
 }
 
 func deviceRejectedADRTXPowerIndex(dev *ttnpb.EndDevice, idx uint32) bool {
-	i := searchUint32(idx, dev.MACState.RejectedADRTxPowerIndexes...)
-	return i < len(dev.MACState.RejectedADRTxPowerIndexes) && dev.MACState.RejectedADRTxPowerIndexes[i] == idx
+	i := searchUint32(idx, dev.MacState.RejectedAdrTxPowerIndexes...)
+	return i < len(dev.MacState.RejectedAdrTxPowerIndexes) && dev.MacState.RejectedAdrTxPowerIndexes[i] == idx
 }
 
 func deviceRejectedFrequency(dev *ttnpb.EndDevice, freq uint64) bool {
-	i := searchUint64(freq, dev.MACState.RejectedFrequencies...)
-	return i < len(dev.MACState.RejectedFrequencies) && dev.MACState.RejectedFrequencies[i] == freq
+	i := searchUint64(freq, dev.MacState.RejectedFrequencies...)
+	return i < len(dev.MacState.RejectedFrequencies) && dev.MacState.RejectedFrequencies[i] == freq
 }
 
 func deviceRejectedDataRateRange(dev *ttnpb.EndDevice, freq uint64, min, max ttnpb.DataRateIndex) bool {
-	for _, r := range dev.MACState.RejectedDataRateRanges[freq].GetRanges() {
+	for _, r := range dev.MacState.RejectedDataRateRanges[freq].GetRanges() {
 		if r.MinDataRateIndex == min && r.MaxDataRateIndex == max {
 			return true
 		}

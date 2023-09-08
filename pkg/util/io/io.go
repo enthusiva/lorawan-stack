@@ -16,69 +16,121 @@ package io
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
+	"encoding/base64"
+	"encoding/hex"
 	"io"
+	"strings"
 
+	jsoniter "github.com/json-iterator/go"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/jsonpb"
 )
 
 // Decoder is the interface for the functionality that reads and decodes entities
 // from an io.Reader, typically os.Stdin.
 type Decoder interface {
-	Decode(data interface{}) (paths []string, err error)
+	Decode(msg any) error
 }
 
 type jsonDecoder struct {
-	rd  *bufio.Reader
-	dec *json.Decoder
+	inArray bool
+	it      *jsoniter.Iterator
 }
 
 // NewJSONDecoder returns a new Decoder on top of r, and that uses the common JSON
 // format used in The Things Stack.
 func NewJSONDecoder(r io.Reader) Decoder {
-	rd := bufio.NewReader(r)
 	return &jsonDecoder{
-		rd:  rd,
-		dec: json.NewDecoder(rd),
+		it: jsoniter.Parse(jsoniter.ConfigCompatibleWithStandardLibrary, r, 1024),
 	}
 }
 
-func (r *jsonDecoder) Decode(data interface{}) (paths []string, err error) {
-	t, err := r.rd.ReadByte()
+var errJSONToken = errors.DefineInvalidArgument("json_token", "invalid JSON token")
+
+func readJSONNext(it *jsoniter.Iterator) (jsoniter.ValueType, error) {
+	next := it.WhatIsNext()
+	if err := it.Error; err != nil {
+		return jsoniter.InvalidValue, errJSONToken.WithCause(err)
+	}
+	return next, nil
+}
+
+func readJSONValue(it *jsoniter.Iterator, msg any) error {
+	var buffer jsoniter.RawMessage
+	it.ReadVal(&buffer)
+	if err := it.Error; err != nil {
+		return errJSONToken.WithCause(err)
+	}
+	return jsonpb.TTN().Unmarshal(buffer, msg)
+}
+
+func readJSONArray(it *jsoniter.Iterator) error {
+	_ = it.ReadArray()
+	if err := it.Error; err != nil {
+		return errJSONToken.WithCause(err)
+	}
+	return nil
+}
+
+func (r *jsonDecoder) Decode(msg any) error {
+	next, err := readJSONNext(r.it)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if t == '{' {
-		if err := r.rd.UnreadByte(); err != nil {
-			return nil, err
+	switch next {
+	case jsoniter.ArrayValue:
+		if r.inArray {
+			return errJSONToken.New()
 		}
+		r.inArray = true
+		if err := readJSONArray(r.it); err != nil {
+			return err
+		}
+		fallthrough
+	case jsoniter.ObjectValue:
+		if err := readJSONValue(r.it, msg); err != nil {
+			return err
+		}
+	default:
+		return errJSONToken.New()
 	}
-	var obj json.RawMessage
-	if err = r.dec.Decode(&obj); err != nil {
-		return nil, err
+	if r.inArray {
+		return readJSONArray(r.it)
 	}
-	var m map[string]interface{}
-	if err = json.Unmarshal(obj, &m); err != nil {
-		return nil, err
-	}
-	paths = fieldPaths(m, "")
-	b := bytes.NewBuffer(obj)
-	if err = jsonpb.TTN().NewDecoder(b).Decode(data); err != nil {
-		return nil, err
-	}
-	r.rd = bufio.NewReader(io.MultiReader(r.dec.Buffered(), r.rd))
-	r.dec = json.NewDecoder(r.rd)
-	return paths, nil
+	return nil
 }
 
-func fieldPaths(m map[string]interface{}, prefix string) (paths []string) {
-	for path, sub := range m {
-		if m, ok := sub.(map[string]interface{}); ok {
-			paths = append(paths, fieldPaths(m, prefix+path+".")...)
-		} else {
-			paths = append(paths, prefix+path)
-		}
+type bytesDecoder struct {
+	s       *bufio.Scanner
+	decoder func(string) ([]byte, error)
+}
+
+func (d *bytesDecoder) Decode(i any) error {
+	buf, ok := i.(*[]byte)
+	if !ok {
+		panic("bytes decoder only supports *[]byte")
 	}
-	return paths
+	if !d.s.Scan() {
+		return io.EOF
+	}
+	var err error
+	*buf, err = d.decoder(strings.TrimSpace(d.s.Text()))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewBase64Decoder(r io.Reader) Decoder {
+	return &bytesDecoder{
+		s:       bufio.NewScanner(r),
+		decoder: base64.StdEncoding.DecodeString,
+	}
+}
+
+func NewHexDecoder(r io.Reader) Decoder {
+	return &bytesDecoder{
+		s:       bufio.NewScanner(r),
+		decoder: hex.DecodeString,
+	}
 }

@@ -1,4 +1,4 @@
-// Copyright © 2019 The Things Network Foundation, The Things Industries B.V.
+// Copyright © 2021 The Things Network Foundation, The Things Industries B.V.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,51 +13,58 @@
 // limitations under the License.
 
 import React from 'react'
-import { connect } from 'react-redux'
-import { Switch, Route } from 'react-router'
+import { Routes, Route, useParams } from 'react-router-dom'
 
 import Breadcrumb from '@ttn-lw/components/breadcrumbs/breadcrumb'
-import { withBreadcrumb } from '@ttn-lw/components/breadcrumbs/context'
+import { useBreadcrumbs } from '@ttn-lw/components/breadcrumbs/context'
 
 import ErrorView from '@ttn-lw/lib/components/error-view'
+import ValidateRouteParam from '@ttn-lw/lib/components/validate-route-param'
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
 
-import withFeatureRequirement from '@console/lib/components/with-feature-requirement'
+import Require from '@console/lib/components/require'
 
 import GatewayApiKeyEdit from '@console/views/gateway-api-key-edit'
 import GatewayApiKeyAdd from '@console/views/gateway-api-key-add'
 import GatewayApiKeysList from '@console/views/gateway-api-keys-list'
 import SubViewError from '@console/views/sub-view-error'
 
-import PropTypes from '@ttn-lw/lib/prop-types'
 import sharedMessages from '@ttn-lw/lib/shared-messages'
 
+import { apiKeyPath as apiKeyPathRegexp } from '@console/lib/regexp'
 import { mayViewOrEditGatewayApiKeys } from '@console/lib/feature-checks'
 
-import { selectSelectedGatewayId } from '@console/store/selectors/gateways'
+const GatewayApiKeys = () => {
+  const { gtwId } = useParams()
 
-@connect(state => ({ gtwId: selectSelectedGatewayId(state) }))
-@withFeatureRequirement(mayViewOrEditGatewayApiKeys, {
-  redirect: ({ gtwId }) => `/gateways/${gtwId}`,
-})
-@withBreadcrumb('gateways.single.api-keys', ({ gtwId }) => (
-  <Breadcrumb path={`/gateways/${gtwId}/api-keys`} content={sharedMessages.apiKeys} />
-))
-export default class GatewayApiKeys extends React.Component {
-  static propTypes = {
-    match: PropTypes.match.isRequired,
-  }
+  useBreadcrumbs(
+    'gtws.single.api-keys',
+    <Breadcrumb path={`/gateways/${gtwId}/api-keys`} content={sharedMessages.apiKeys} />,
+  )
 
-  render() {
-    const { match } = this.props
-
-    return (
-      <ErrorView ErrorComponent={SubViewError}>
-        <Switch>
-          <Route exact path={`${match.path}`} component={GatewayApiKeysList} />
-          <Route exact path={`${match.path}/add`} component={GatewayApiKeyAdd} />
-          <Route path={`${match.path}/:apiKeyId`} component={GatewayApiKeyEdit} />
-        </Switch>
+  return (
+    <Require
+      featureCheck={mayViewOrEditGatewayApiKeys}
+      otherwise={{ redirect: `/gateways/${gtwId}` }}
+    >
+      <ErrorView errorRender={SubViewError}>
+        <Routes>
+          <Route index Component={GatewayApiKeysList} />
+          <Route path="add" Component={GatewayApiKeyAdd} />
+          <Route
+            path=":apiKeyId/*"
+            element={
+              <ValidateRouteParam
+                check={{ apiKeyId: apiKeyPathRegexp }}
+                Component={GatewayApiKeyEdit}
+              />
+            }
+          />
+          <Route path="*" Component={GenericNotFound} />
+        </Routes>
       </ErrorView>
-    )
-  }
+    </Require>
+  )
 }
+
+export default GatewayApiKeys

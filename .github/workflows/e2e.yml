@@ -1,79 +1,287 @@
 name: End-to-end Tests
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
 on:
   pull_request:
     paths:
-      - '*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'pkg/**'
-      - 'tools/**'
-      - 'config/**'
-      - '!config/stack/ttn-lw-stack.yml'
-      - 'package.json'
-      - 'pkg/webui/**'
-      - 'sdk/js/**'
-      - 'yarn.lock'
-      - 'cypress/**'
-      - 'docker-compose.yml'
-
+      - "*.go"
+      - "go.mod"
+      - "go.sum"
+      - "pkg/**"
+      - "tools/**"
+      - "config/**"
+      - "!config/stack/ttn-lw-stack.yml"
+      - "package.json"
+      - "pkg/webui/**"
+      - "sdk/js/**"
+      - "yarn.lock"
+      - "cypress/**"
+      - "docker-compose.yml"
+      - ".github/workflows/e2e.yml"
+env:
+  TTN_LW_LOG_LEVEL: debug
+  TTN_LW_IS_EMAIL_PROVIDER: dir
+  TTN_LW_IS_EMAIL_DIR: .dev/email
+  TTN_LW_EXPERIMENTAL_FEATURES: is.bunstore
+  CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+  CYPRESS_FAIL_FAST: true
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 jobs:
-  end-to-end:
-    name: Frontend based (cypress)
-    runs-on: ubuntu-18.04
-    env:
-      TTN_LW_LOG_LEVEL: debug
+  determine-if-required:
+    name: Determine if run is required
+    runs-on: ubuntu-22.04
+    outputs:
+      needs-to-run: ${{ steps.check-result.outputs.passed != 'true' }}
+      hash: ${{ steps.get-hash.outputs.hash }}
+    timeout-minutes: 5
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Get hash of code files
+        id: get-hash
+        run: echo "hash=${{ hashFiles('.github/workflows/e2e.yml', '*.go', 'go.mod', 'go.sum', 'pkg/**', 'tools/**', 'config/**', 'package.json', 'pkg/webui/**', 'sdk/js/**', 'yarn.lock', 'cypress/**', 'docker-compose.yml') }}" >> $GITHUB_OUTPUT
+      - name: Get the cached result
+        id: run-cache
+        uses: actions/cache@v3
+        with:
+          path: .cache/passed
+          key: run-cache-${{ steps.get-hash.outputs.hash }}-${{ github.run_id }}
+          restore-keys: |
+            run-cache-${{ steps.get-hash.outputs.hash }}
+      - name: Check cached result connected to the hashed files (if any)
+        id: check-result
+        continue-on-error: true
+        run: test -f .cache/passed && echo "passed=$(cat .cache/passed)" >> $GITHUB_OUTPUT
+  preparation:
+    name: Run preparations
+    runs-on: ubuntu-22.04
+    needs: determine-if-required
+    if: needs.determine-if-required.outputs.needs-to-run == 'true'
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
           submodules: true
-      - name: Initialize public folder cache
-        id: public-cache
-        uses: actions/cache@v2
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - name: Initialize SQL dump cache
+        id: db-cache
+        uses: actions/cache@v3
         with:
-          path: public
-          key: public-cache-${{ hashFiles('pkg/webui/**') }}-${{ hashFiles('sdk/js/**/*.js', 'sdk/js/generated/*.json') }}-${{ hashFiles('config/webpack.config.babel.js') }}-${{ hashFiles('yarn.lock', 'sdk/js/yarn.lock')}}
-      - name: Set up Go
-        uses: actions/setup-go@v2
+          path: |
+            .env/cache/database.pgdump
+            .env/admin_api_key.txt
+          key: db-cache-${{ hashFiles('pkg/identityserver/store/**/*.go', 'cmd/ttn-lw-stack/commands/is-db.go', '.github/workflows/e2e.yml', 'docker-compose.yml') }}
+      - name: Initialize device repository index cache
+        id: dr-index-cache
+        uses: actions/cache@v3
         with:
-          go-version: '~1.16'
-      - name: Initialize Go module cache
-        uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Download Go tool dependencies
-        run: |
-          cd tools
-          go mod download
-      - name: Initialize tool binary cache
-        uses: actions/cache@v2
-        with:
-          path: tools/bin
-          key: ${{ runner.os }}-tools-${{ hashFiles('tools/**') }}
-      - name: Make Mage
-        run: make tools/bin/mage
-      - name: Initialize stack environment
-        run: tools/bin/mage init
+          path: data/lorawan-devices-index
+          key: dr-index-cache-${{ hashFiles('data/lorawan-devices') }}
+      - name: Create device repository index
+        run: tools/bin/mage dev:initDeviceRepo
+        if: steps.dr-index-cache.outputs.cache-hit != 'true'
       - name: Run test preparations
+        if: steps.db-cache.outputs.cache-hit != 'true'
         run: tools/bin/mage -v dev:dbStop dev:dbErase dev:dbStart dev:initStack dev:sqlDump
-      - name: Build frontend
-        if: steps.public-cache.outputs.cache-hit != 'true'
-        run: tools/bin/mage js:build
+      - name: Build Frontend
+        uses: ./.github/actions/build-frontend
+      - name: Initialize build cache
+        id: build-cache
+        uses: actions/cache@v3
+        with:
+          path: ttn-lw-stack
+          key: build-cache-${{ hashFiles('go.mod', 'go.sum', 'pkg/**',  'config/**', 'cmd/**') }}
+      - name: Build TTS
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: go build ./cmd/ttn-lw-stack
+      - name: Zip build artifacts
+        run: zip -r build.zip .env/cache/database.pgdump .env/admin_api_key.txt data/lorawan-devices-index public ttn-lw-stack tools/bin/mage
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-files
+          path: build.zip
+  end-to-end:
+    name: Main frontend end-to-end tests (Chrome)
+    runs-on: ubuntu-22.04
+    env:
+      NODE_ENV: development
+      CYPRESS_MACHINE_NUMBER: ${{ matrix.machines }}
+    strategy:
+      matrix:
+        machines: [1, 2, 3, 4]
+    needs: [determine-if-required, preparation]
+    if: needs.determine-if-required.outputs.needs-to-run == 'true'
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - name: Upgrade Google Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get --only-upgrade install google-chrome-stable
+          google-chrome --version
+      - uses: actions/download-artifact@v3
+        name: Download build artifacts
+        with:
+          name: "build-files"
+      - name: Download last failed spec
+        uses: dawidd6/action-download-artifact@v2
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: e2e.yml
+          branch: ${{ github.head_ref }}
+          workflow_conclusion: completed
+          name: cypress-failed-test-spec
+          search_artifacts: true
+      - name: Read failed spec file
+        id: get-failed-spec
+        continue-on-error: true
+        run: |
+          sed -i 's/\.\.\///g' .failed-specs-*.txt
+          sed -i 's|/integration/|/e2e/|' .failed-specs-*.txt
+          echo "failed-test=$(paste -d , .failed-specs-*.txt)" >> $GITHUB_OUTPUT
+          echo "neg-failed-test=!$(paste -d ',!' .failed-specs-*.txt)" >> $GITHUB_OUTPUT
+      - name: Unzip build artifacts
+        run: unzip -o build.zip
+      - name: Generate certs
+        run: tools/bin/mage dev:certificates
+      - name: Restore initialized sql db
+        run: tools/bin/mage -v dev:dbStart dev:sqlRestore
+      - name: Run stack
+        run: tools/bin/mage dev:startDevStack &
+      - name: Run previously failed test first
+        uses: cypress-io/github-action@v5
+        if: steps.get-failed-spec.outputs.failed-test != ''
+        with:
+          config-file: config/cypress.config.js
+          config: baseUrl=https://localhost:8885
+          record: true
+          parallel: true
+          browser: chrome
+          group: previously-failed-${{ needs.determine-if-required.outputs.hash }}
+          spec: ${{ steps.get-failed-spec.outputs.failed-test }}
       - name: Run frontend end-to-end tests
-        run: tools/bin/mage dev:startDevStack & tools/bin/mage -v js:cypressHeadless
+        uses: cypress-io/github-action@v5
+        with:
+          config-file: config/cypress.config.js
+          config: baseUrl=https://localhost:8885
+          record: true
+          parallel: true
+          browser: chrome
+          group: main-${{ needs.determine-if-required.outputs.hash }}
+          spec: |
+            **/*
+            !cypress/e2e/smoke/smoke.spec.js
+            ${{ steps.get-failed-spec.outputs.neg-failed-test }}
       - name: Upload logs
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: logs
           path: .cache/devStack.log
       - name: Upload screenshots for failed tests
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cypress-screenshots
           path: cypress/screenshots
+      - name: Upload name of failing test
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: cypress-failed-test-spec
+          path: .cache/.failed-specs-*.txt
+  cross-browser-smoke:
+    name: Cross-browser smoke tests (Firefox 102.3.0 ESR)
+    runs-on: ubuntu-22.04
+    env:
+      NODE_ENV: development
+    needs: [determine-if-required, preparation]
+    if: needs.determine-if-required.outputs.needs-to-run == 'true'
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - uses: actions/download-artifact@v3
+        name: Download build artifacts
+        with:
+          name: "build-files"
+      - name: Unzip build artifacts
+        run: unzip -o build.zip
+      - name: Install FF 102.3.0 ESR
+        run: |
+          wget --no-verbose -O /tmp/firefox.tar.bz2 https://download-installer.cdn.mozilla.net/pub/firefox/releases/102.3.0esr/linux-x86_64/en-US/firefox-102.3.0esr.tar.bz2
+          tar -C /opt -xjf /tmp/firefox.tar.bz2
+          rm /tmp/firefox.tar.bz2
+          sudo ln -fs /opt/firefox/firefox /usr/bin/firefox
+      - name: Generate certs
+        run: tools/bin/mage dev:certificates
+      - name: Restore initialized sql db
+        run: tools/bin/mage dev:dbStart dev:sqlRestore
+      - name: Run stack
+        run: tools/bin/mage dev:startDevStack &
+      - name: Run end-to-end smoke tests (Firefox)
+        uses: cypress-io/github-action@v5
+        with:
+          config-file: config/cypress.config.js
+          config: baseUrl=https://localhost:8885
+          browser: firefox
+          record: true
+          spec: cypress/e2e/smoke/smoke.spec.js
+      - name: Upload logs
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: logs
+          path: .cache/devStack.log
+      - name: Upload screenshots for failed tests
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: cypress-screenshots
+          path: cypress/screenshots
+  cache-result:
+    name: Write result cache
+    runs-on: ubuntu-22.04
+    needs: [preparation, end-to-end, cross-browser-smoke, determine-if-required]
+    timeout-minutes: 5
+    steps:
+      - name: Setup result cache to skip redundant runs
+        id: run-cache
+        uses: actions/cache@v3
+        with:
+          path: .cache/passed
+          key: run-cache-${{ needs.determine-if-required.outputs.hash }}
+      - name: Create result file for caching
+        run: mkdir -p .cache && echo true > .cache/passed

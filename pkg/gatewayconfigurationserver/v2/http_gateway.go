@@ -15,14 +15,12 @@
 package gatewayconfigurationserver
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/rpcmetadata"
@@ -69,14 +67,14 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := gatewayIDFromContext(ctx)
 
-	registry, err := s.getRegistry(ctx, &id)
+	registry, err := s.getRegistry(ctx, id)
 	if err != nil {
 		webhandlers.Error(w, r, err)
 		return
 	}
 	gateway, err := registry.Get(ctx, &ttnpb.GetGatewayRequest{
-		GatewayIdentifiers: id,
-		FieldMask: types.FieldMask{Paths: []string{
+		GatewayIds: id,
+		FieldMask: ttnpb.FieldMask(
 			"description",
 			"attributes",
 			"frequency_plan_id",
@@ -84,7 +82,7 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 			"update_channel",
 			"antennas",
 			"gateway_server_address",
-		}},
+		),
 	}, s.getAuth(ctx))
 	if err != nil {
 		webhandlers.Error(w, r, err)
@@ -94,7 +92,7 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 	md := rpcmetadata.FromIncomingContext(ctx)
 	switch md.AuthType {
 	case "bearer":
-		if err := rights.RequireGateway(ctx, id, ttnpb.RIGHT_GATEWAY_INFO); err != nil {
+		if err := rights.RequireGateway(ctx, id, ttnpb.Right_RIGHT_GATEWAY_INFO); err != nil {
 			webhandlers.Error(w, r, err)
 			return
 		}
@@ -108,7 +106,7 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 		gateway = gateway.PublicSafe()
 	}
 
-	freqPlanURL := s.inferServerAddress(r) + "/api/v2/frequency-plans/" + gateway.FrequencyPlanID
+	freqPlanURL := s.inferServerAddress(r) + "/api/v2/frequency-plans/" + gateway.FrequencyPlanId
 
 	var rtr *router
 	if gateway.GatewayServerAddress != "" {
@@ -123,7 +121,7 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := &gatewayInfoResponse{
-		FrequencyPlan:    gateway.FrequencyPlanID,
+		FrequencyPlan:    gateway.FrequencyPlanId,
 		FrequencyPlanURL: freqPlanURL,
 		AutoUpdate:       gateway.AutoUpdate,
 	}
@@ -137,7 +135,7 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	default:
-		res.ID = gateway.GatewayID
+		res.ID = gateway.GetIds().GetGatewayId()
 		if rtr != nil {
 			res.Router = rtr
 			res.FallbackRouters = []*router{rtr}
@@ -149,10 +147,12 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(gateway.Antennas) > 0 {
 			loc := gateway.Antennas[0].Location
-			res.AntennaLocation = &antennaLocation{
-				Latitude:  loc.Latitude,
-				Longitude: loc.Longitude,
-				Altitude:  loc.Altitude,
+			if loc != nil {
+				res.AntennaLocation = &antennaLocation{
+					Latitude:  loc.Latitude,
+					Longitude: loc.Longitude,
+					Altitude:  loc.Altitude,
+				}
 			}
 		}
 		if token, ok := gateway.Attributes["token"]; ok {
@@ -168,9 +168,7 @@ func (s *Server) handleGetGateway(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(res)
+	webhandlers.JSON(w, r, res)
 }
 
 func (s *Server) ttkgFirmwareURL(updateChannel string) string {
@@ -185,7 +183,7 @@ func (s *Server) ttkgFirmwareURL(updateChannel string) string {
 	}
 	firmwareBaseURL := s.ttgConfig.Default.FirmwareURL
 	if firmwareBaseURL == "" {
-		firmwareBaseURL = "https://thethingsproducts.blob.core.windows.net/the-things-gateway/v1"
+		firmwareBaseURL = "https://ttkg-fw.thethingsindustries.com/v1"
 	}
 	return fmt.Sprintf("%s/%s", firmwareBaseURL, updateChannel)
 }

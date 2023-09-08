@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import api from '@console/api'
+import tts from '@console/api/tts'
 
 import createRequestLogic from '@ttn-lw/lib/store/logics/create-request-logic'
 
@@ -20,35 +20,51 @@ import * as users from '@console/store/actions/users'
 
 const getUserLogic = createRequestLogic({
   type: users.GET_USER,
-  process: ({ action }, dispatch) => {
+  process: async ({ action }) => {
     const {
       payload: { id },
       meta: { selector },
     } = action
 
-    return api.users.get(id, selector)
+    return await tts.Users.getById(id, selector)
   },
 })
 
 const updateUserLogic = createRequestLogic({
   type: users.UPDATE_USER,
-  process: ({ action }, dispatch) => {
+  process: ({ action }) => {
     const {
       payload: { id, patch },
     } = action
 
-    return api.users.update(id, patch)
+    return tts.Users.updateById(id, patch)
   },
 })
 
 const deleteUserLogic = createRequestLogic({
   type: users.DELETE_USER,
-  process: async ({ action }, dispatch) => {
+  process: async ({ action }) => {
     const {
       payload: { id },
+      meta: { options },
     } = action
 
-    await api.users.delete(id)
+    if (options.purge) {
+      await tts.Users.purgeById(id)
+    } else {
+      await tts.Users.deleteById(id)
+    }
+
+    return { id }
+  },
+})
+
+const restoreUserLogic = createRequestLogic({
+  type: users.RESTORE_USER,
+  process: async ({ action }) => {
+    const { id } = action.payload
+
+    await tts.Users.restoreById(id)
 
     return { id }
   },
@@ -58,21 +74,22 @@ const getUsersLogic = createRequestLogic({
   type: users.GET_USERS_LIST,
   process: async ({ action }) => {
     const {
-      params: { page, limit, query, order },
+      params: { page, limit, query, order, deleted },
     } = action.payload
-    const { selectors } = action.meta
+    const { selectors, options } = action.meta
 
-    const data = query
-      ? await api.users.search(
+    const data = options.isSearch
+      ? await tts.Users.search(
           {
             page,
             limit,
-            id_contains: query,
+            query,
             order,
+            deleted,
           },
           selectors,
         )
-      : await api.users.list({ page, limit, order }, selectors)
+      : await tts.Users.getAll({ page, limit, order }, selectors)
 
     return { entities: data.users, totalCount: data.totalCount }
   },
@@ -80,12 +97,12 @@ const getUsersLogic = createRequestLogic({
 
 const createUserLogic = createRequestLogic({
   type: users.CREATE_USER,
-  process: ({ action }, dispatch) => {
+  process: async ({ action }) => {
     const {
       payload: { user },
     } = action
 
-    return api.users.create(user)
+    return await tts.Users.create(user)
   },
 })
 
@@ -93,9 +110,39 @@ const getUsersRightsLogic = createRequestLogic({
   type: users.GET_USER_RIGHTS_LIST,
   process: async ({ action }) => {
     const { id } = action.payload
-    const result = await api.rights.users(id)
+    const result = await tts.Users.getRightsById(id)
 
     return result.rights.sort()
+  },
+})
+
+const getUserInvitationsLogic = createRequestLogic({
+  type: users.GET_USER_INVITATIONS,
+  process: async ({ action }) => {
+    const {
+      params: { page, limit },
+    } = action.payload
+    const { selectors } = action.meta
+
+    return await tts.Users.getAllInvitations({ page, limit }, selectors)
+  },
+})
+
+const sendInviteLogic = createRequestLogic({
+  type: users.SEND_INVITE,
+  process: async ({ action }) => {
+    const { email } = action.payload
+
+    return await tts.Users.sendInvite(email)
+  },
+})
+
+const deleteInviteLogic = createRequestLogic({
+  type: users.DELETE_INVITE,
+  process: async ({ action }) => {
+    const { email } = action.payload
+
+    return await tts.Users.deleteInvite(email)
   },
 })
 
@@ -104,6 +151,10 @@ export default [
   getUsersLogic,
   updateUserLogic,
   deleteUserLogic,
+  restoreUserLogic,
   createUserLogic,
   getUsersRightsLogic,
+  getUserInvitationsLogic,
+  sendInviteLogic,
+  deleteInviteLogic,
 ]

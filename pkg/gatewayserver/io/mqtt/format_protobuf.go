@@ -19,38 +19,39 @@ import (
 
 	"go.thethings.network/lorawan-stack/v3/pkg/gatewayserver/io/mqtt/topics"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type protobuf struct {
 	topics.Layout
 }
 
-func (protobuf) FromDownlink(down *ttnpb.DownlinkMessage, _ ttnpb.GatewayIdentifiers) ([]byte, error) {
+func (protobuf) FromDownlink(down *ttnpb.DownlinkMessage, _ *ttnpb.GatewayIdentifiers) ([]byte, error) {
 	gwDown := &ttnpb.GatewayDown{
 		DownlinkMessage: down,
 	}
-	return gwDown.Marshal()
+	return proto.Marshal(gwDown)
 }
 
-func (protobuf) ToUplink(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.UplinkMessage, error) {
+func (protobuf) ToUplink(message []byte, _ *ttnpb.GatewayIdentifiers) (*ttnpb.UplinkMessage, error) {
 	uplink := &ttnpb.UplinkMessage{}
-	if err := uplink.Unmarshal(message); err != nil {
+	if err := proto.Unmarshal(message, uplink); err != nil {
 		return nil, err
 	}
 	return uplink, nil
 }
 
-func (protobuf) ToStatus(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.GatewayStatus, error) {
+func (protobuf) ToStatus(message []byte, _ *ttnpb.GatewayIdentifiers) (*ttnpb.GatewayStatus, error) {
 	status := &ttnpb.GatewayStatus{}
-	if err := status.Unmarshal(message); err != nil {
+	if err := proto.Unmarshal(message, status); err != nil {
 		return nil, err
 	}
 	return status, nil
 }
 
-func (protobuf) ToTxAck(message []byte, _ ttnpb.GatewayIdentifiers) (*ttnpb.TxAcknowledgment, error) {
+func (protobuf) ToTxAck(message []byte, _ *ttnpb.GatewayIdentifiers) (*ttnpb.TxAcknowledgment, error) {
 	ack := &ttnpb.TxAcknowledgment{}
-	if err := ack.Unmarshal(message); err != nil {
+	if err := proto.Unmarshal(message, ack); err != nil {
 		return nil, err
 	}
 	return ack, nil

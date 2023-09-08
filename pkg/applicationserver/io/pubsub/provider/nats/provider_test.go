@@ -22,7 +22,7 @@ import (
 	nats_server "github.com/nats-io/nats-server/v2/server"
 	nats_test_server "github.com/nats-io/nats-server/v2/test"
 	nats_client "github.com/nats-io/nats.go"
-	"github.com/smartystreets/assertions"
+	"github.com/smarty/assertions"
 	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/pubsub/provider"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
@@ -32,8 +32,7 @@ import (
 
 var timeout = (1 << 8) * test.Delay
 
-type allEnabled struct {
-}
+type allEnabled struct{}
 
 // Enabled implements provider.Enabler.
 func (e *allEnabled) Enabled(context.Context, ttnpb.ApplicationPubSub_Provider) error {
@@ -59,14 +58,14 @@ func TestOpenConnection(t *testing.T) {
 	defer natsClient.Close()
 
 	pb := &ttnpb.ApplicationPubSub{
-		ApplicationPubSubIdentifiers: ttnpb.ApplicationPubSubIdentifiers{
-			ApplicationIdentifiers: ttnpb.ApplicationIdentifiers{
-				ApplicationID: "app1",
+		Ids: &ttnpb.ApplicationPubSubIdentifiers{
+			ApplicationIds: &ttnpb.ApplicationIdentifiers{
+				ApplicationId: "app1",
 			},
-			PubSubID: "ps1",
+			PubSubId: "ps1",
 		},
-		Provider: &ttnpb.ApplicationPubSub_NATS{
-			NATS: &ttnpb.ApplicationPubSub_NATSProvider{},
+		Provider: &ttnpb.ApplicationPubSub_Nats{
+			Nats: &ttnpb.ApplicationPubSub_NATSProvider{},
 		},
 		BaseTopic: "app1.ps1",
 		DownlinkPush: &ttnpb.ApplicationPubSub_Message{
@@ -77,6 +76,9 @@ func TestOpenConnection(t *testing.T) {
 		},
 		UplinkMessage: &ttnpb.ApplicationPubSub_Message{
 			Topic: "uplink.message",
+		},
+		UplinkNormalized: &ttnpb.ApplicationPubSub_Message{
+			Topic: "uplink.normalized",
 		},
 		JoinAccept: &ttnpb.ApplicationPubSub_Message{
 			Topic: "join.accept",
@@ -108,9 +110,9 @@ func TestOpenConnection(t *testing.T) {
 	}
 
 	impl, err := provider.GetProvider(&ttnpb.ApplicationPubSub{
-		Provider: &ttnpb.ApplicationPubSub_NATS{
-			NATS: &ttnpb.ApplicationPubSub_NATSProvider{
-				ServerURL: "nats://invalid.local:4222",
+		Provider: &ttnpb.ApplicationPubSub_Nats{
+			Nats: &ttnpb.ApplicationPubSub_NATSProvider{
+				ServerUrl: "nats://invalid.local:4222",
 			},
 		},
 	})
@@ -124,9 +126,9 @@ func TestOpenConnection(t *testing.T) {
 		a.So(err, should.NotBeNil)
 	}
 
-	pb.Provider = &ttnpb.ApplicationPubSub_NATS{
-		NATS: &ttnpb.ApplicationPubSub_NATSProvider{
-			ServerURL: "nats://localhost:4123",
+	pb.Provider = &ttnpb.ApplicationPubSub_Nats{
+		Nats: &ttnpb.ApplicationPubSub_NATSProvider{
+			ServerUrl: "nats://localhost:4123",
 		},
 	}
 
@@ -204,6 +206,11 @@ func TestOpenConnection(t *testing.T) {
 					name:    "ValidUplink",
 					subject: "app1.ps1.uplink.message",
 					topic:   conn.Topics.UplinkMessage,
+				},
+				{
+					name:    "ValidNormalizedUplink",
+					subject: "app1.ps1.uplink.normalized",
+					topic:   conn.Topics.UplinkNormalized,
 				},
 				{
 					name:    "ValidJoinAccept",

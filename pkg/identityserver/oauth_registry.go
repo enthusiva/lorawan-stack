@@ -17,16 +17,15 @@ package identityserver
 import (
 	"context"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/jinzhu/gorm"
 	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
 	"go.thethings.network/lorawan-stack/v3/pkg/errors"
 	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (is *IdentityServer) listOAuthClientAuthorizations(ctx context.Context, req *ttnpb.ListOAuthClientAuthorizationsRequest) (authorizations *ttnpb.OAuthClientAuthorizations, err error) {
-	if err := rights.RequireUser(ctx, req.UserIdentifiers, ttnpb.RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
+	if err := rights.RequireUser(ctx, req.UserIds, ttnpb.Right_RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
 		return nil, err
 	}
 	ctx = store.WithOrder(ctx, req.Order)
@@ -38,8 +37,8 @@ func (is *IdentityServer) listOAuthClientAuthorizations(ctx context.Context, req
 		}
 	}()
 	authorizations = &ttnpb.OAuthClientAuthorizations{}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		authorizations.Authorizations, err = store.GetOAuthStore(db).ListAuthorizations(ctx, &req.UserIdentifiers)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		authorizations.Authorizations, err = st.ListAuthorizations(ctx, req.UserIds)
 		return err
 	})
 	if err != nil {
@@ -53,9 +52,9 @@ func (is *IdentityServer) listOAuthAccessTokens(ctx context.Context, req *ttnpb.
 	if err != nil {
 		return nil, err
 	}
-	accessToken := authInfo.GetOAuthAccessToken()
-	if accessToken == nil || accessToken.UserIDs.UserID != req.UserIDs.UserID || accessToken.ClientIDs.ClientID != req.ClientIDs.ClientID {
-		if err := rights.RequireUser(ctx, req.UserIDs, ttnpb.RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
+	accessToken := authInfo.GetOauthAccessToken()
+	if accessToken == nil || accessToken.UserIds.GetUserId() != req.UserIds.GetUserId() || accessToken.ClientIds.ClientId != req.ClientIds.ClientId {
+		if err := rights.RequireUser(ctx, req.UserIds, ttnpb.Right_RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
 			return nil, err
 		}
 	}
@@ -68,8 +67,8 @@ func (is *IdentityServer) listOAuthAccessTokens(ctx context.Context, req *ttnpb.
 		}
 	}()
 	tokens = &ttnpb.OAuthAccessTokens{}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		tokens.Tokens, err = store.GetOAuthStore(db).ListAccessTokens(ctx, &req.UserIDs, &req.ClientIDs)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		tokens.Tokens, err = st.ListAccessTokens(ctx, req.UserIds, req.ClientIds)
 		return err
 	})
 	for _, token := range tokens.Tokens {
@@ -81,12 +80,12 @@ func (is *IdentityServer) listOAuthAccessTokens(ctx context.Context, req *ttnpb.
 	return tokens, nil
 }
 
-func (is *IdentityServer) deleteOAuthAuthorization(ctx context.Context, req *ttnpb.OAuthClientAuthorizationIdentifiers) (*types.Empty, error) {
-	if err := rights.RequireUser(ctx, req.UserIDs, ttnpb.RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
+func (is *IdentityServer) deleteOAuthAuthorization(ctx context.Context, req *ttnpb.OAuthClientAuthorizationIdentifiers) (*emptypb.Empty, error) {
+	if err := rights.RequireUser(ctx, req.UserIds, ttnpb.Right_RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
 		return nil, err
 	}
-	err := is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		return store.GetOAuthStore(db).DeleteAuthorization(ctx, &req.UserIDs, &req.ClientIDs)
+	err := is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		return st.DeleteAuthorization(ctx, req.UserIds, req.ClientIds)
 	})
 	if err != nil {
 		return nil, err
@@ -96,29 +95,28 @@ func (is *IdentityServer) deleteOAuthAuthorization(ctx context.Context, req *ttn
 
 var errAccessTokenMismatch = errors.DefineInvalidArgument("access_token_mismatch", "access token ID did not match user or client identifiers")
 
-func (is *IdentityServer) deleteOAuthAccessToken(ctx context.Context, req *ttnpb.OAuthAccessTokenIdentifiers) (*types.Empty, error) {
+func (is *IdentityServer) deleteOAuthAccessToken(ctx context.Context, req *ttnpb.OAuthAccessTokenIdentifiers) (*emptypb.Empty, error) {
 	authInfo, err := is.authInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	accessToken := authInfo.GetOAuthAccessToken()
-	if accessToken == nil || accessToken.UserIDs.UserID != req.UserIDs.UserID || accessToken.ClientIDs.ClientID != req.ClientIDs.ClientID {
-		if err := rights.RequireUser(ctx, req.UserIDs, ttnpb.RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
+	accessToken := authInfo.GetOauthAccessToken()
+	if accessToken == nil || accessToken.UserIds.GetUserId() != req.UserIds.GetUserId() || accessToken.ClientIds.ClientId != req.ClientIds.ClientId {
+		if err := rights.RequireUser(ctx, req.UserIds, ttnpb.Right_RIGHT_USER_AUTHORIZED_CLIENTS); err != nil {
 			return nil, err
 		}
 	}
-	err = is.withDatabase(ctx, func(db *gorm.DB) (err error) {
-		oauthStore := store.GetOAuthStore(db)
-		if accessToken != nil && accessToken.ID != req.ID {
-			accessToken, err := oauthStore.GetAccessToken(ctx, req.ID)
+	err = is.store.Transact(ctx, func(ctx context.Context, st store.Store) (err error) {
+		if accessToken != nil && accessToken.Id != req.Id {
+			accessToken, err := st.GetAccessToken(ctx, req.Id)
 			if err != nil {
 				return err
 			}
-			if accessToken.UserIDs.UserID != req.UserIDs.UserID || accessToken.ClientIDs.ClientID != req.ClientIDs.ClientID {
+			if accessToken.UserIds.GetUserId() != req.UserIds.GetUserId() || accessToken.ClientIds.ClientId != req.ClientIds.ClientId {
 				return errAccessTokenMismatch.New()
 			}
 		}
-		return oauthStore.DeleteAccessToken(ctx, req.ID)
+		return st.DeleteAccessToken(ctx, req.Id)
 	})
 	if err != nil {
 		return nil, err
@@ -127,6 +125,8 @@ func (is *IdentityServer) deleteOAuthAccessToken(ctx context.Context, req *ttnpb
 }
 
 type oauthRegistry struct {
+	ttnpb.UnimplementedOAuthAuthorizationRegistryServer
+
 	*IdentityServer
 }
 
@@ -138,10 +138,10 @@ func (or *oauthRegistry) ListTokens(ctx context.Context, req *ttnpb.ListOAuthAcc
 	return or.listOAuthAccessTokens(ctx, req)
 }
 
-func (or *oauthRegistry) Delete(ctx context.Context, req *ttnpb.OAuthClientAuthorizationIdentifiers) (*types.Empty, error) {
+func (or *oauthRegistry) Delete(ctx context.Context, req *ttnpb.OAuthClientAuthorizationIdentifiers) (*emptypb.Empty, error) {
 	return or.deleteOAuthAuthorization(ctx, req)
 }
 
-func (or *oauthRegistry) DeleteToken(ctx context.Context, req *ttnpb.OAuthAccessTokenIdentifiers) (*types.Empty, error) {
+func (or *oauthRegistry) DeleteToken(ctx context.Context, req *ttnpb.OAuthAccessTokenIdentifiers) (*emptypb.Empty, error) {
 	return or.deleteOAuthAccessToken(ctx, req)
 }

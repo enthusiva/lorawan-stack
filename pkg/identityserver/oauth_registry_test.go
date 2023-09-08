@@ -17,99 +17,94 @@ package identityserver
 import (
 	"testing"
 
-	"github.com/smartystreets/assertions"
-	"github.com/smartystreets/assertions/should"
-	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
+	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/storetest"
 	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
 	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
 	"google.golang.org/grpc"
 )
 
 func TestOAuthRegistry(t *testing.T) {
-	ctx := test.Context()
-	a := assertions.New(t)
+	t.Parallel()
+
+	p := &storetest.Population{}
+
+	usr := p.NewUser()
+	usrKey, _ := p.NewAPIKey(usr.GetEntityIdentifiers(), ttnpb.Right_RIGHT_ALL)
+	usrCreds := rpcCreds(usrKey)
+
+	cli := p.NewClient(nil)
+	cli.Rights = []ttnpb.Right{ttnpb.Right_RIGHT_APPLICATION_ALL}
+
+	a, ctx := test.New(t)
 
 	testWithIdentityServer(t, func(is *IdentityServer, cc *grpc.ClientConn) {
-		oauthStore := store.GetOAuthStore(is.db)
-		user, creds := defaultUser, userCreds(defaultUserIdx)
-		client := population.Clients[0]
-
-		_, err := oauthStore.Authorize(ctx, &ttnpb.OAuthClientAuthorization{
-			UserIDs:   user.UserIdentifiers,
-			ClientIDs: client.ClientIdentifiers,
-			Rights:    client.Rights,
+		_, err := is.store.Authorize(ctx, &ttnpb.OAuthClientAuthorization{
+			UserIds:   usr.GetIds(),
+			ClientIds: cli.GetIds(),
+			Rights:    cli.GetRights(),
 		})
-		if err != nil {
-			panic(err)
+		if !a.So(err, should.BeNil) {
+			t.FailNow()
 		}
 
-		err = oauthStore.CreateAccessToken(ctx, &ttnpb.OAuthAccessToken{
-			UserIDs:       user.UserIdentifiers,
-			ClientIDs:     client.ClientIdentifiers,
-			UserSessionID: "12345678-1234-5678-1234-567812345678",
-			ID:            "access_token_id",
-			Rights:        client.Rights,
+		_, err = is.store.CreateAccessToken(ctx, &ttnpb.OAuthAccessToken{
+			UserIds:       usr.GetIds(),
+			ClientIds:     cli.GetIds(),
+			UserSessionId: "12345678-1234-5678-1234-567812345678",
+			Id:            "access_token_id",
+			Rights:        cli.GetRights(),
 			AccessToken:   "access_token",
 			RefreshToken:  "refresh_token",
 		}, "")
-		if err != nil {
-			panic(err)
+		if !a.So(err, should.BeNil) {
+			t.FailNow()
 		}
 
 		reg := ttnpb.NewOAuthAuthorizationRegistryClient(cc)
 
 		authorizations, err := reg.List(ctx, &ttnpb.ListOAuthClientAuthorizationsRequest{
-			UserIdentifiers: user.UserIdentifiers,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(authorizations, should.NotBeNil) && a.So(authorizations.Authorizations, should.HaveLength, 1) {
-			a.So(authorizations.Authorizations[0].ClientIDs.ClientID, should.Equal, client.ClientID)
+			UserIds: usr.GetIds(),
+		}, usrCreds)
+		if a.So(err, should.BeNil) && a.So(authorizations, should.NotBeNil) && a.So(authorizations.Authorizations, should.HaveLength, 1) {
+			a.So(authorizations.Authorizations[0].GetClientIds().GetClientId(), should.Equal, cli.GetIds().GetClientId())
 		}
 
 		tokens, err := reg.ListTokens(ctx, &ttnpb.ListOAuthAccessTokensRequest{
-			UserIDs:   user.UserIdentifiers,
-			ClientIDs: client.ClientIdentifiers,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(tokens, should.NotBeNil) && a.So(tokens.Tokens, should.HaveLength, 1) {
-			a.So(tokens.Tokens[0].ID, should.Equal, "access_token_id")
-			a.So(tokens.Tokens[0].UserSessionID, should.Equal, "12345678-1234-5678-1234-567812345678")
+			UserIds:   usr.GetIds(),
+			ClientIds: cli.GetIds(),
+		}, usrCreds)
+		if a.So(err, should.BeNil) && a.So(tokens, should.NotBeNil) && a.So(tokens.Tokens, should.HaveLength, 1) {
+			a.So(tokens.Tokens[0].Id, should.Equal, "access_token_id")
+			a.So(tokens.Tokens[0].UserSessionId, should.Equal, "12345678-1234-5678-1234-567812345678")
 		}
 
 		_, err = reg.DeleteToken(ctx, &ttnpb.OAuthAccessTokenIdentifiers{
-			UserIDs:   user.UserIdentifiers,
-			ClientIDs: client.ClientIdentifiers,
-			ID:        "access_token_id",
-		}, creds)
-
+			UserIds:   usr.GetIds(),
+			ClientIds: cli.GetIds(),
+			Id:        "access_token_id",
+		}, usrCreds)
 		a.So(err, should.BeNil)
 
 		tokens, err = reg.ListTokens(ctx, &ttnpb.ListOAuthAccessTokensRequest{
-			UserIDs:   user.UserIdentifiers,
-			ClientIDs: client.ClientIdentifiers,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(tokens, should.NotBeNil) {
+			UserIds:   usr.GetIds(),
+			ClientIds: cli.GetIds(),
+		}, usrCreds)
+		if a.So(err, should.BeNil) && a.So(tokens, should.NotBeNil) {
 			a.So(tokens.Tokens, should.BeEmpty)
 		}
 
 		_, err = reg.Delete(ctx, &ttnpb.OAuthClientAuthorizationIdentifiers{
-			UserIDs:   user.UserIdentifiers,
-			ClientIDs: client.ClientIdentifiers,
-		}, creds)
-
+			UserIds:   usr.GetIds(),
+			ClientIds: cli.GetIds(),
+		}, usrCreds)
 		a.So(err, should.BeNil)
 
 		authorizations, err = reg.List(ctx, &ttnpb.ListOAuthClientAuthorizationsRequest{
-			UserIdentifiers: user.UserIdentifiers,
-		}, creds)
-
-		a.So(err, should.BeNil)
-		if a.So(authorizations, should.NotBeNil) {
+			UserIds: usr.GetIds(),
+		}, usrCreds)
+		if a.So(err, should.BeNil) && a.So(authorizations, should.NotBeNil) {
 			a.So(authorizations.Authorizations, should.BeEmpty)
 		}
-	})
+	}, withPrivateTestDatabase(p))
 }
